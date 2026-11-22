@@ -80,6 +80,20 @@ def _python_architecture(python: str) -> str:
         return ""
 
 
+def _has_pyinstaller(python: str) -> bool:
+    """Whether an interpreter can run PyInstaller."""
+    try:
+        import subprocess
+
+        out = subprocess.run(
+            [python, "-c", "import PyInstaller; print('yes')"],
+            capture_output=True, text=True, timeout=60,
+        )
+        return out.returncode == 0
+    except Exception:
+        return False
+
+
 def find_python_for_arch(arch: str) -> str:
     """Find an interpreter for the given architecture.
 
@@ -103,13 +117,19 @@ def find_python_for_arch(arch: str) -> str:
         print(f"[build] {chosen} is {found}, not {wanted}; looking further")
 
     candidates: list[str] = []
-    # The interpreters the runner keeps in its tool cache.
-    for base in Path("/Users/runner/hostedtoolcache/Python").glob("*/*/bin/python*"):
+    # The project's own environment, which is where the dependencies are
+    # installed.
+    for own in (ROOT / ".venv" / "bin" / "python",
+                ROOT / ".venv" / "Scripts" / "python.exe"):
+        if own.exists():
+            candidates.append(str(own))
+    # The interpreters the runner keeps in its tool cache.  These are the
+    # ones the workflow installed, so they are the ones with the build
+    # tools in them.
+    for base in sorted(Path("/Users/runner/hostedtoolcache/Python").glob(
+            "*/*/bin/python*"), reverse=True):
         if "python3" in base.name:
             candidates.append(str(base))
-    # The framework directory the system Python lives in.
-    for base in Path("/Library/Frameworks/Python.framework/Versions").glob("*/bin/python3*"):
-        candidates.append(str(base))
     # Everything on the path.
     for name in ("python3.11", "python3", "python"):
         found = shutil.which(name)
@@ -117,6 +137,27 @@ def find_python_for_arch(arch: str) -> str:
             candidates.append(found)
     candidates.append(sys.executable)
 
+    # An interpreter that cannot build anything is no use, so the ones
+    # that have PyInstaller in them are preferred.
+    for candidate in candidates:
+        try:
+            if not Path(candidate).exists():
+                continue
+        except OSError:
+            continue
+        found = _python_architecture(candidate)
+        if not found or wanted not in found:
+            continue
+        if not _has_pyinstaller(candidate):
+            print(f"[build] {candidate} has no PyInstaller in it; skipping it")
+            continue
+        print(f"[build] using {candidate} for {wanted}")
+        return candidate
+
+    # Nothing with the right architecture has PyInstaller in it.  An
+    # interpreter of the right architecture is still better than one of
+    # the wrong one, because the build then fails with a clear message
+    # about the architecture rather than a confusing one.
     for candidate in candidates:
         try:
             if not Path(candidate).exists():
