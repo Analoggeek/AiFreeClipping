@@ -20,6 +20,10 @@ on:
         required: false
         default: ""
 
+permissions:
+  contents: read
+  issues: write        # so a build failure can report itself
+
 jobs:
   windows:
     name: Windows installer
