@@ -383,6 +383,62 @@ class TestBuildPipeline(unittest.TestCase):
         self.assertIn("scripts/build.py macos", text)
         self.assertIn("innosetup", text.lower())
 
+    def test_the_inno_setup_version_is_pinned(self):
+        """The Inno Setup package on Chocolatey has moved between 5.x and
+        6.x over the years.  Inno 5 does not understand the
+        ``ArchitecturesAllowed`` directive at all, so the version has to be
+        pinned or the installer script is rejected.
+        """
+        for name in ("build-installers.yml", "release.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                "choco install innosetup --version=", text,
+                f"{name} does not pin the Inno Setup version",
+            )
+
+
+class TestFailureReporting(unittest.TestCase):
+    """A packaging failure has to say what went wrong.
+
+    The job summary is not always readable from outside, and the build
+    logs are stored on a host that cannot always be reached, so the
+    failure has to be written into ``build/build-error.log`` as well.
+    """
+
+    def test_a_failure_is_written_to_the_build_error_log(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import installer_windows
+
+        log = ROOT / "build" / "build-error.log"
+        before = log.read_text(encoding="utf-8") if log.exists() else ""
+        try:
+            installer_windows._write_summary("Test failure", "the details")
+            after = log.read_text(encoding="utf-8")
+        finally:
+            if log.exists():
+                log.write_text(before, encoding="utf-8")
+        self.assertIn("Test failure", after)
+        self.assertIn("the details", after)
+
+    def test_the_inno_report_contains_the_compiler_output(self):
+        text = (ROOT / "scripts" / "installer_windows.py").read_text(
+            encoding="utf-8"
+        )
+        # The report has to carry what the compiler actually said, not just
+        # the exit code.
+        self.assertIn("--- stdout ---", text)
+        self.assertIn("--- stderr ---", text)
+        # And the compiler's own log, which names the file it could not open.
+        self.assertIn("Setup Log.txt", text)
+
+    def test_the_nsis_failure_is_reported_too(self):
+        text = (ROOT / "scripts" / "installer_windows.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"NSIS failed"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

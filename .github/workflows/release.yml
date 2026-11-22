@@ -80,7 +80,18 @@ jobs:
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then
-            choco install innosetup --no-progress -y
+            # Pinned: the "latest" package has moved between Inno 5 and 6
+            # over the years, and Inno 5 does not understand the
+            # ArchitecturesAllowed directive at all.
+            choco install innosetup --version=6.4.0 --no-progress -y --allow-downgrade
+            # Chocolatey does not always refresh PATH for the current
+            # session, so the compiler is put on PATH explicitly.
+            for d in "/c/Program Files (x86)/Inno Setup 6" "/c/Program Files/Inno Setup 6"; do
+              if [ -d "$d" ]; then
+                echo "$d" >> "$GITHUB_PATH"
+                break
+              fi
+            done
           elif [ "$RUNNER_OS" = "Linux" ]; then
             sudo apt-get update
             sudo apt-get install -y libpython3.11

@@ -39,18 +39,28 @@ VERSION_DOTTED = "1.0.0.0"
 
 
 def _write_summary(title: str, body: str) -> None:
-    """Append a section to the GitHub Actions job summary.
+    """Record a failure in every place a human or a bot will look for it.
 
-    The summary is the one part of a CI run that is always readable, even
-    when the log storage is not reachable, so it is where a packaging
-    failure explains itself.
+    The GitHub Actions job summary is the one part of a CI run that is
+    always readable, even when the log storage is not reachable.  The
+    ``build/build-error.log`` file is uploaded as an artifact and picked
+    up by the diagnostic reporter.  Both get the message, because a
+    failure that is only reported in one place is a failure that is
+    usually not seen at all.
     """
     path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not path:
-        return
+    if path:
+        try:
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(f"### {title}\n\n```\n{body}\n```\n\n")
+        except OSError:
+            pass
+
     try:
-        with open(path, "a", encoding="utf-8") as handle:
-            handle.write(f"### {title}\n\n```\n{body}\n```\n\n")
+        log = ROOT / "build" / "build-error.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as handle:
+            handle.write(f"### {title}\n\n{body}\n\n")
     except OSError:
         pass
 
@@ -401,6 +411,12 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
         iss = build_dir / "clipos.iss"
         iss.write_text(inno_script(staged.name, staged), encoding="utf-8")
         print(f"[win] using Inno Setup: {iscc}")
+        # The compiler version matters: the architecture directives and the
+        # compression behaviour both changed between the 6.x releases.
+        version = subprocess.run(
+            [iscc, "/Qp"], cwd=ROOT, capture_output=True, text=True
+        )
+        print(f"[win] Inno Setup version: {version.stdout.strip()}")
         proc = subprocess.run(
             [iscc, str(iss)], cwd=ROOT, capture_output=True, text=True
         )
@@ -410,11 +426,24 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
             shutil.copy2(produced, target)
             shutil.rmtree(staging_dir(), ignore_errors=True)
             return target
+        # Inno Setup writes its own log next to the script when it fails.
+        # It names the exact file it could not open, which is the one
+        # piece of information needed to fix the packaging.
+        inno_log = ""
+        for candidate in (build_dir / "clipos.iss.log", build_dir / "Setup Log.txt"):
+            if candidate.exists():
+                inno_log = (
+                    f"\n\n--- {candidate.name} ---\n"
+                    f"{candidate.read_text(encoding='utf-8', errors='replace')[-6000:]}"
+                )
+                break
         report = (
             "Inno Setup failed with exit code "
-            f"{proc.returncode}\n\n--- stdout ---\n{proc.stdout[-4000:]}\n\n"
+            f"{proc.returncode}\n\n--- version ---\n{version.stdout.strip()}\n\n"
+            f"--- stdout ---\n{proc.stdout[-4000:]}\n\n"
             f"--- stderr ---\n{proc.stderr[-4000:]}\n\n--- script ---\n"
             f"{iss.read_text(encoding='utf-8', errors='replace')[:4000]}"
+            f"{inno_log}"
         )
         print("[win] Inno Setup failed:")
         print(proc.stdout[-4000:])
@@ -439,6 +468,13 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
         print("[win] NSIS failed:")
         print(proc.stdout[-4000:])
         print(proc.stderr[-4000:], file=sys.stderr)
+        _write_summary(
+            "NSIS failed",
+            "NSIS failed with exit code "
+            f"{proc.returncode}\n\n--- stdout ---\n{proc.stdout[-4000:]}\n\n"
+            f"--- stderr ---\n{proc.stderr[-4000:]}\n\n--- script ---\n"
+            f"{nsi.read_text(encoding='utf-8', errors='replace')[:4000]}",
+        )
         print("[win] Trying the next installer back-end.")
 
     # The self-extracting launcher needs nothing but a C cross compiler, so
