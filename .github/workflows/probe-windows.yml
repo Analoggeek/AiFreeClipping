@@ -29,4 +29,13 @@ jobs:
           python -m pip install --retries 5 --timeout 60 "pillow>=10.0"
           echo "--- install the heavy ones ---"
           python -m pip install --retries 5 --timeout 60 "numpy>=1.24" "PySide6>=6.6,<6.9"
+          echo "--- the exact CLIPOS set ---"
+          python -m pip install --retries 5 --timeout 60 \
+            "opencv-python-headless>=4.8,<5"
+          python -m pip install --retries 5 --timeout 60 \
+            "PySide6>=6.6,<6.9" "numpy>=1.24" "pillow>=10.0" "requests>=2.31" \
+            "huggingface-hub>=0.23" "faster-whisper>=1.0,<2" \
+            "onnxruntime>=1.16" "scenedetect>=0.6.3" "pyinstaller>=6.6"
+          echo "--- the compiler ---"
+          python -m pip install --retries 5 --timeout 60 "ziglang>=0.11"
           echo "--- done ---"
