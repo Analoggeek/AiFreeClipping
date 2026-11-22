@@ -40,13 +40,20 @@ VERSION_DOTTED = "1.0.0.0"
 # --------------------------------------------------------------------------
 # Inno Setup
 # --------------------------------------------------------------------------
-def inno_script(app_dir_name: str = APP_NAME) -> str:
+def inno_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> str:
     """The Inno Setup script.
 
     ``PrivilegesRequired=lowest`` lets the installer fall back to a per-user
     install when the user is not an administrator, which is what most people
     running a creator tool actually do.
+
+    Inno resolves relative paths against the *script's own directory*, not
+    against the working directory the compiler was started in.  The script is
+    written into ``build/``, so every path here has to be absolute or it
+    would point at ``build/dist/...`` instead of the real application.
     """
+    source = (app_dir or (ROOT / "dist" / app_dir_name)).resolve()
+    output = (ROOT / "build" / "dist").resolve()
     return f"""[Setup]
 AppId={{{BUNDLE_ID_UPPER}}}
 AppName={APP_NAME}
@@ -55,7 +62,7 @@ AppVerName={APP_NAME} {VERSION}
 DefaultDirName={{autopf}}\\{APP_NAME}
 DefaultGroupName={APP_NAME}
 OutputBaseFilename={APP_NAME}-Setup
-OutputDir=..\\build\\dist
+OutputDir={output}
 Compression=lzma2
 SolidCompression=yes
 LZMANumBlockThreads=8
@@ -83,7 +90,7 @@ SetupLogging=yes
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-Source: "dist\\{app_dir_name}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{source}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{{group}}\\{APP_NAME}"; Filename: "{{app}}\\{APP_NAME}.exe"
@@ -110,17 +117,24 @@ end;
 # --------------------------------------------------------------------------
 # NSIS
 # --------------------------------------------------------------------------
-def nsis_script(app_dir_name: str = APP_NAME) -> str:
+def nsis_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> str:
     """The NSIS script — the fallback back-end.
 
     ``RequestExecutionLevel admin`` is deliberately *not* used: the installer
     writes to ``$LOCALAPPDATA\\Programs`` when it is not elevated, so it works
     for a standard user without a UAC prompt.
+
+    Like Inno, NSIS resolves relative paths against the script's own
+    directory, so the paths here are absolute.
     """
+    source = (app_dir or (ROOT / "dist" / app_dir_name)).resolve()
+    output = (ROOT / "build" / "dist" / f"{APP_NAME}-Setup.exe").resolve()
+    icon = (ROOT / "resources" / "icons" / "app_icon.ico").resolve()
+    icon_line = f'!define MUI_ICON "{icon}"' if icon.exists() else ""
     return f""";!NSIS v3.0
 Unicode true
 Name "{APP_NAME}"
-OutFile "..\\build\\dist\\{APP_NAME}-Setup.exe"
+OutFile "{output}"
 InstallDir "$LOCALAPPDATA\\Programs\\{APP_NAME}"
 InstallDirRegKey HKCU "Software\\{APP_NAME}" "InstallDir"
 RequestExecutionLevel user
@@ -133,7 +147,7 @@ SetCompressorDictSize 32
 
 !define MUI_ABORTWARNING
 !define MUI_FINISHPAGE_RUN "$INSTDIR\\{APP_NAME}.exe"
-!define MUI_ICON "dist\\app_icon.ico"
+{icon_line}
 
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
@@ -147,7 +161,7 @@ SetCompressorDictSize 32
 
 Section "Install"
   SetOutPath "$INSTDIR"
-  File /r "dist\\{app_dir_name}\\*"
+  File /r "{source}\\*"
 
   WriteRegStr HKCU "Software\\{APP_NAME}" "InstallDir" "$INSTDIR"
 
@@ -288,7 +302,7 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
     iscc = shutil.which("iscc") or shutil.which("ISCC.exe")
     if iscc:
         iss = build_dir / "clipos.iss"
-        iss.write_text(inno_script(app_dir.name), encoding="utf-8")
+        iss.write_text(inno_script(app_dir.name, app_dir), encoding="utf-8")
         print(f"[win] using Inno Setup: {iscc}")
         proc = subprocess.run([iscc, str(iss)], cwd=ROOT, capture_output=True, text=True)
         if proc.returncode != 0:
@@ -303,7 +317,7 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
     makensis = shutil.which("makensis") or shutil.which("makensis.exe")
     if makensis:
         nsi = build_dir / "clipos.nsi"
-        nsi.write_text(nsis_script(app_dir.name), encoding="utf-8")
+        nsi.write_text(nsis_script(app_dir.name, app_dir), encoding="utf-8")
         print(f"[win] using NSIS: {makensis}")
         proc = subprocess.run([makensis, str(nsi)], cwd=ROOT, capture_output=True, text=True)
         if proc.returncode != 0:
