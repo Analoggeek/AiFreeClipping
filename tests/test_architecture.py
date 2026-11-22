@@ -268,6 +268,53 @@ class TestWorkflows(unittest.TestCase):
             )
 
 
+class TestBundleLayout(unittest.TestCase):
+    """The bundle check has to understand a macOS application bundle.
+
+    A macOS application keeps its files under ``Contents``, and the
+    one-folder build on the other platforms keeps them under
+    ``_internal``.  The check used to understand only the second one, so
+    it failed on every macOS bundle.
+    """
+
+    def _make_app(self, tmp: Path, name: str = "CLIPOS-intel.app") -> Path:
+        app = tmp / name
+        (app / "Contents" / "MacOS").mkdir(parents=True)
+        (app / "Contents" / "Frameworks" / "PySide6").mkdir(parents=True)
+        (app / "Contents" / "Resources").mkdir(parents=True)
+        (app / "Contents" / "Frameworks" / "base_library.zip").write_bytes(b"x")
+        (app / "Contents" / "MacOS" / "CLIPOS").write_bytes(b"\xcf\xfa\xed\xfe")
+        return app
+
+    def test_an_application_bundle_is_recognised(self):
+        import verify_bundle
+
+        with tempfile.TemporaryDirectory() as td:
+            app = self._make_app(Path(td))
+            self.assertTrue(verify_bundle.is_app_bundle(app))
+
+    def test_the_files_of_a_bundle_are_found(self):
+        import verify_bundle
+
+        with tempfile.TemporaryDirectory() as td:
+            app = self._make_app(Path(td))
+            self.assertEqual(verify_bundle.find_bundle(app), app)
+            self.assertEqual(
+                verify_bundle.internal_dir(app), app / "Contents"
+            )
+
+    def test_the_application_binary_is_found_in_a_bundle(self):
+        import verify_bundle
+
+        with tempfile.TemporaryDirectory() as td:
+            app = self._make_app(Path(td))
+            found = verify_bundle.find_bundle(app)
+            binary = (
+                found / "Contents" / "MacOS" / "CLIPOS"
+            )
+            self.assertTrue(binary.exists())
+
+
 class TestRuntimeGuard(unittest.TestCase):
     """The application should notice a binary that cannot run here."""
 
