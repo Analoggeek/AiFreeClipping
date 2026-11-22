@@ -116,6 +116,40 @@ FFMPEG: str | None = _find_binary("ffmpeg")
 FFPROBE: str | None = _find_binary("ffprobe")
 
 
+def _running_architecture() -> str:
+    """The architecture of the machine the application is running on."""
+    from .binary_arch import running_architecture
+
+    return running_architecture()
+
+
+def binary_architecture(path: str | None) -> str | None:
+    """The architecture of a binary, whichever format it is in.
+
+    An Intel binary on an Apple Silicon machine only runs under Rosetta,
+    and not at all when Rosetta is not installed.  That is worth knowing
+    about, so it is worth checking.
+    """
+    if not path:
+        return None
+    from .binary_arch import binary_arch
+
+    return binary_arch(Path(path))
+
+
+def bundled_binary_matches_machine(path: str | None) -> bool:
+    """True when a bundled binary can run on this machine.
+
+    A machine that can run both kinds of binary -- Apple Silicon with
+    Rosetta installed -- counts as a match, because the binary will run.
+    """
+    if not path:
+        return True
+    from .binary_arch import can_run
+
+    return can_run(path)
+
+
 def ffmpeg_available() -> bool:
     return bool(FFMPEG)
 

@@ -67,6 +67,16 @@ def run(cmd: list[str], **kwargs) -> None:
 
 
 def venv_python() -> str:
+    """The Python that does the freezing.
+
+    CLIPOS_BUILD_PYTHON points at a different interpreter when one is
+    needed -- an Intel build on an Apple Silicon machine needs an Intel
+    Python, because the extension modules have to be compiled for the
+    machine the application is meant to run on.
+    """
+    chosen = os.environ.get("CLIPOS_BUILD_PYTHON", "").strip()
+    if chosen and Path(chosen).exists():
+        return chosen
     py = ROOT / ".venv" / "bin" / "python"
     if py.exists():
         return str(py)
@@ -163,7 +173,7 @@ def check_python_runtime() -> None:
         )
 
 
-def freeze(target: str) -> None:
+def freeze(target: str, target_arch: str = "") -> None:
     """Run PyInstaller, keeping its output in a file for diagnosis.
 
     PyInstaller prints thousands of lines and the interesting part is
@@ -171,7 +181,7 @@ def freeze(target: str) -> None:
     """
     BUILD.mkdir(parents=True, exist_ok=True)
     log_path = BUILD / "pyinstaller.log"
-    args = pyinstaller_args(target)
+    args = pyinstaller_args(target, target_arch)
     print(f"\n$ {' '.join(args)}")
     with open(log_path, "w", encoding="utf-8", errors="replace") as log:
         result = subprocess.run(args, cwd=ROOT, stdout=log,
@@ -201,7 +211,7 @@ def freeze(target: str) -> None:
     print(f"[build] PyInstaller finished; log at {log_path}")
 
 
-def pyinstaller_args(target: str) -> list[str]:
+def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
     sep = ";" if target == "windows" else ":"
     # The source path may be absolute, but the destination must be relative to
     # the bundle root so the files land in the right place inside the app.
@@ -220,6 +230,12 @@ def pyinstaller_args(target: str) -> list[str]:
         "--name", APP_NAME,
         "--osx-bundle-identifier", BUNDLE_ID,
     ]
+    if target_arch:
+        # PyInstaller uses this to pick the bootloader and to check every
+        # collected binary for the right architecture slice.  Without it
+        # the bundle keeps the architecture of the machine that built it,
+        # whatever ARCHFLAGS says.
+        args += ["--target-architecture", target_arch]
     for src, dest in bundles:
         args += ["--add-data", f"{ROOT / src}{sep}{dest}"]
     args += [
@@ -293,11 +309,22 @@ def build_windows() -> Path:
 
 
 def build_macos(target_arch: str = "") -> Path:
+    """Build the macOS application and its disk image.
+
+    ``target_arch`` is the architecture the application is built for:
+    ``arm64``, ``x86_64`` or ``universal2``.  It is handed to PyInstaller,
+    which then uses the right bootloader and checks every collected binary
+    for the right slice -- without it the bundle silently keeps the
+    architecture of the machine that built it.
+
+    ARCHFLAGS is set as well, because it is what the compiler and the
+    linker use to pick the right slice for the extension modules.
+    """
     print("[build] freezing for macOS ...")
     if target_arch:
         print(f"[build] targeting {target_arch}")
         os.environ["ARCHFLAGS"] = f"-arch {target_arch}"
-    freeze("macos")
+    freeze("macos", target_arch)
 
     app = DIST / f"{APP_NAME}.app"
     if not app.exists():
