@@ -52,6 +52,11 @@ FORBIDDEN = ["opencv-python"]
 # Build-time extras.
 BUILD = ["pyinstaller>=6.6"]
 
+# ziglang carries an LLVM toolchain with a Windows target, so a native .exe
+# installer can be cross-compiled from any host.  It is only needed to build
+# the installer, never to run the application.
+ZIG = "ziglang>=0.11"
+
 
 def run(cmd: list[str], what: str) -> None:
     print(f"\n=== {what} ===")
@@ -93,6 +98,10 @@ def main() -> int:
     packages = list(CORE)
     if args.build:
         packages += BUILD
+        # The Windows installer needs a cross compiler.  On Windows itself
+        # Inno Setup is used instead, but the fallback is still worth having.
+        if sys.platform != "win32":
+            packages.append(ZIG)
     run(pip("install", *packages), "installing the core packages")
 
     if not args.no_opencv:

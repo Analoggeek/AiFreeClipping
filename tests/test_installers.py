@@ -39,7 +39,10 @@ class TestInnoSetupScript(unittest.TestCase):
             self.assertIn(section, self.script, f"missing {section}")
 
     def test_installs_the_frozen_application(self):
-        self.assertIn('Source: "dist\\CLIPOS\\*"', self.script)
+        # Inno resolves relative paths against the script's own directory,
+        # and the script lives in build/, so the source has to be absolute.
+        source = (ROOT / "dist" / "CLIPOS").resolve()
+        self.assertIn(f'Source: "{source}\\*"', self.script)
         self.assertIn('DestDir: "{app}"', self.script)
 
     def test_creates_a_start_menu_shortcut(self):
@@ -69,6 +72,19 @@ class TestInnoSetupScript(unittest.TestCase):
         self.assertTrue(value.startswith("{") and value.endswith("}"))
         self.assertEqual(len(value.strip("{}")), 32)
 
+    def test_the_output_directory_is_absolute(self):
+        # The script is written into build/, so a relative OutputDir would
+        # put the installer somewhere nobody looks for it.
+        output = (ROOT / "build" / "dist").resolve()
+        self.assertIn(f"OutputDir={output}", self.script)
+
+    def test_the_source_directory_is_absolute(self):
+        source = (ROOT / "dist" / "CLIPOS").resolve()
+        # Inno wants a backslash before the wildcard.
+        self.assertIn(r'Source: "%s\*"' % source, self.script)
+        # A relative path would silently point at build/dist/CLIPOS.
+        self.assertNotIn('Source: "dist', self.script)
+
     def test_version_is_stamped_into_the_installer(self):
         self.assertIn(f"AppVersion={VERSION}", self.script)
         self.assertIn(f"OutputBaseFilename={APP_NAME}-Setup", self.script)
@@ -93,8 +109,15 @@ class TestNsisScript(unittest.TestCase):
             self.assertIn(section, self.script)
 
     def test_installs_the_frozen_application(self):
-        self.assertIn('File /r "dist\\CLIPOS\\*"', self.script)
+        # NSIS resolves relative paths against the script's own directory
+        # too, so the source has to be absolute.
+        source = (ROOT / "dist" / "CLIPOS").resolve()
+        self.assertIn(f'File /r "{source}\\*"', self.script)
         self.assertIn('SetOutPath "$INSTDIR"', self.script)
+
+    def test_writes_the_installer_to_an_absolute_path(self):
+        output = (ROOT / "build" / "dist" / "CLIPOS-Setup.exe").resolve()
+        self.assertIn(f'OutFile "{output}"', self.script)
 
     def test_creates_shortcuts_and_an_uninstaller(self):
         self.assertIn('CreateShortcut "$SMPROGRAMS\\CLIPOS\\CLIPOS.lnk"', self.script)
