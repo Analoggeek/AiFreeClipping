@@ -85,6 +85,10 @@ The application has eleven sections, all reachable from the left sidebar:
 
 ## Install
 
+CLIPOS ships as a **native offline installer** for each platform. Installing
+it needs no internet connection: the package carries the application, the
+Python runtime, FFmpeg, the face-detection models and the sound effects.
+
 ### macOS (Intel or Apple Silicon)
 
 1. Download the `.dmg` (or the `.app` bundle) for your architecture.
@@ -102,6 +106,31 @@ The application has eleven sections, all reachable from the left sidebar:
 > Windows SmartScreen may warn about an unknown publisher on first run. Choose
 > **More info → Run anyway** — the app is unsigned.
 
+### Linux (Debian / Ubuntu)
+
+```bash
+sudo apt install ./CLIPOS_1.0.0_amd64.deb
+```
+
+That installs the app into `/opt/CLIPOS` and adds a **CLIPOS** entry to your
+application menu, with a desktop icon. To remove it:
+
+```bash
+sudo apt remove clipos
+```
+
+### Linux (Fedora / RHEL / openSUSE)
+
+```bash
+sudo dnf install ./CLIPOS-1.0.0-1.x86_64.rpm
+```
+
+### Linux (no package manager)
+
+Download the portable zip, unpack it anywhere and run `CLIPOS` from the
+`CLIPOS/` folder. Everything it needs is inside — no system libraries beyond
+the usual desktop ones.
+
 ### What the installers contain
 
 * The complete Python runtime and all Python dependencies.
@@ -110,7 +139,8 @@ The application has eleven sections, all reachable from the left sidebar:
 * The eight caption styles and the UI design system.
 
 The only thing you download separately is the speech-to-text model (see
-[Model manager](#model-manager)).
+[Model manager](#model-manager)). After that one download, the whole workflow
+runs offline.
 
 ---
 
