@@ -1,0 +1,36 @@
+name: Probe the Windows runner again
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/probe-windows
+    paths:
+      - .github/workflows/probe-windows.yml
+
+jobs:
+  probe:
+    name: Probe
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - name: Report the machine
+        shell: bash
+        run: |
+          echo "uname: $(uname -a)"
+          echo "=== pip install the CLIPOS set ==="
+          python -m pip install --retries 5 --timeout 60 \
+            "opencv-python-headless>=4.8,<5" \
+            "PySide6>=6.6,<6.9" "numpy>=1.24" "pillow>=10.0" "requests>=2.31" \
+            "huggingface-hub>=0.23" "faster-whisper>=1.0,<2" \
+            "onnxruntime>=1.16" "scenedetect>=0.6.3" "pyinstaller>=6.6"
+          echo "=== what is installed ==="
+          python -m pip list 2>&1 | head -60
+          echo "=== remove the GUI build of OpenCV ==="
+          python -m pip uninstall -y opencv-python
+          echo "=== put the pinned build back ==="
+          python -m pip install --force-reinstall --no-deps \
+            "opencv-python-headless>=4.8,<5"
+          echo "=== import it ==="
+          python -c "import cv2; print('opencv', cv2.__version__); print('cascade', 'ok' if hasattr(cv2, 'CascadeClassifier') else 'MISSING')"
+          echo "=== done ==="
