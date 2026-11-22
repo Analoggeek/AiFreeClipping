@@ -67,6 +67,16 @@ def run(cmd: list[str], **kwargs) -> None:
 
 
 def venv_python() -> str:
+    """The Python that does the freezing.
+
+    CLIPOS_BUILD_PYTHON points at a different interpreter when one is
+    needed -- an Intel build on an Apple Silicon machine needs an Intel
+    Python, because the extension modules have to be compiled for the
+    machine the application is meant to run on.
+    """
+    chosen = os.environ.get("CLIPOS_BUILD_PYTHON", "").strip()
+    if chosen and Path(chosen).exists():
+        return chosen
     py = ROOT / ".venv" / "bin" / "python"
     if py.exists():
         return str(py)

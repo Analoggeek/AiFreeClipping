@@ -31,10 +31,12 @@ import sys
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from scripts.vendor_ffmpeg import (  # noqa: E402
+from clipos.core.binary_arch import (  # noqa: E402
     EXPECTED_ARCH,
     binary_arch,
+    can_run,
     check_arch,
+    running_architecture,
 )
 
 
@@ -69,12 +71,13 @@ class TestArchitectureReading(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "bin"
             header = struct.pack(">II", 0xCAFEBABE, 2)
+            # The fat header is big endian, and so is each entry.
             entry = struct.pack(">iiIII", 0x0100000C, 3, 0, 0, 0)
             entry2 = struct.pack(">iiIII", 0x01000007, 3, 0, 0, 0)
             path.write_bytes(header + entry + entry2)
             found = binary_arch(path)
-            self.assertIn("arm64", found)
-            self.assertIn("x86_64", found)
+            self.assertIn("arm64", found.split("|"))
+            self.assertIn("x86_64", found.split("|"))
 
     def test_reads_an_elf_architecture(self):
         with tempfile.TemporaryDirectory() as td:
@@ -217,6 +220,29 @@ class TestWorkflows(unittest.TestCase):
             path = ROOT / ".github" / "workflows" / name
             if path.exists():
                 yield name, path.read_text(encoding="utf-8")
+
+    def test_the_intel_build_uses_an_intel_python(self):
+        """An Intel application needs an Intel Python.
+
+        The extension modules have to be compiled for the machine the
+        application is meant to run on, so the Python that does the
+        freezing has to be an Intel one.  On an Apple Silicon runner the
+        Python that is already there is the wrong one.
+        """
+        for name, text in self._workflows():
+            self.assertIn(
+                ".venv-intel", text,
+                f"{name} builds the Intel application with the same Python "
+                f"as the Apple Silicon one",
+            )
+            self.assertIn(
+                "CLIPOS_BUILD_PYTHON", text,
+                f"{name} does not tell the build which Python to use",
+            )
+
+    def test_the_build_script_honours_the_python_it_is_given(self):
+        text = (ROOT / "scripts" / "build.py").read_text(encoding="utf-8")
+        self.assertIn("CLIPOS_BUILD_PYTHON", text)
 
     def test_both_applications_are_built(self):
         for name, text in self._workflows():

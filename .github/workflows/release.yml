@@ -176,6 +176,28 @@ jobs:
           echo "### Free disk space before the build"
           df -h . /c 2>&1 | head -5 || df -h . 2>&1 | head -5
 
+      - name: Set up the Intel Python
+        # An Intel application needs an Intel Python: the extension
+        # modules have to be compiled for the machine the application is
+        # meant to run on.  On an Apple Silicon runner the Python that is
+        # already there is the wrong one, so a second one is set up.
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install virtualenv
+          python -m virtualenv --python="$(which python3.11 || which python3)" .venv-intel
+          .venv-intel/bin/python -m pip install --upgrade pip
+          .venv-intel/bin/python -m pip install "opencv-python-headless>=4.8,<5"
+          .venv-intel/bin/python -m pip install "PySide6>=6.6,<6.9" "numpy>=1.24" \
+              "pillow>=10.0" "requests>=2.31" "huggingface-hub>=0.23" \
+              "faster-whisper>=1.0,<2" "onnxruntime>=1.16" "scenedetect>=0.6.3" \
+              "pyinstaller>=6.6"
+          .venv-intel/bin/python -m pip uninstall -y opencv-python || true
+          .venv-intel/bin/python -m pip install --force-reinstall --no-deps \
+              "opencv-python-headless>=4.8,<5"
+          .venv-intel/bin/python -c "import cv2, PySide6; print('intel python ok', cv2.__version__)"
+
       - name: Build
         shell: bash
         run: |
@@ -191,12 +213,11 @@ jobs:
               # of the way, so that the Intel build cannot overwrite it.
               python scripts/build.py macos --skip-tests --skip-vendor --target-arch arm64
               mv dist/CLIPOS.app dist/CLIPOS-arm64.app
-              # The Intel application is built on the same runner, so only
-              # one macOS machine is needed for the whole release.  The
-              # architecture is handed to PyInstaller itself, which then
-              # uses the right bootloader and checks every collected
-              # binary for the right slice.
-              python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
+              # The Intel application is built with an Intel Python and
+              # with the architecture handed to PyInstaller, so one macOS
+              # machine produces both applications.
+              export CLIPOS_BUILD_PYTHON="$PWD/.venv-intel/bin/python"
+              "$CLIPOS_BUILD_PYTHON" scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
               mv dist/CLIPOS.app dist/CLIPOS-intel.app
               ls -la dist/
               ;;

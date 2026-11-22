@@ -118,12 +118,9 @@ FFPROBE: str | None = _find_binary("ffprobe")
 
 def _running_architecture() -> str:
     """The architecture of the machine the application is running on."""
-    machine = platform.machine().lower()
-    if sys.platform == "win32":
-        return "x86_64" if machine in ("amd64", "x86_64") else "i386"
-    if sys.platform == "darwin":
-        return "arm64" if machine in ("arm64", "aarch64") else "x86_64"
-    return "x86_64" if machine in ("amd64", "x86_64") else "i386"
+    from .binary_arch import running_architecture
+
+    return running_architecture()
 
 
 def binary_architecture(path: str | None) -> str | None:
@@ -135,12 +132,9 @@ def binary_architecture(path: str | None) -> str | None:
     """
     if not path:
         return None
-    try:
-        from scripts.vendor_ffmpeg import binary_arch  # type: ignore
+    from .binary_arch import binary_arch
 
-        return binary_arch(Path(path))
-    except Exception:
-        return None
+    return binary_arch(Path(path))
 
 
 def bundled_binary_matches_machine(path: str | None) -> bool:
@@ -151,18 +145,9 @@ def bundled_binary_matches_machine(path: str | None) -> bool:
     """
     if not path:
         return True
-    found = binary_architecture(path)
-    if found is None:
-        # The architecture could not be read; that is not proof of a
-        # problem.
-        return True
-    wanted = _running_architecture()
-    if wanted in found.split("|"):
-        return True
-    if wanted == "arm64" and "x86_64" in found.split("|"):
-        # Apple Silicon can run an Intel binary through Rosetta.
-        return True
-    return False
+    from .binary_arch import can_run
+
+    return can_run(path)
 
 
 def ffmpeg_available() -> bool:

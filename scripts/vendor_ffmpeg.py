@@ -18,8 +18,6 @@ from __future__ import annotations
 
 import json
 import shutil
-import struct
-import subprocess
 import sys
 import tarfile
 import urllib.parse
@@ -27,6 +25,14 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from clipos.core.binary_arch import (  # noqa: E402
+    EXPECTED_ARCH,
+    binary_arch,
+    check_arch,
+)
+
 DEST = ROOT / "resources" / "ffmpeg"
 
 FFMPEG_PKGS = {
@@ -51,121 +57,6 @@ FFPROBE_PKGS = {
     "win32-x64": ("@ffprobe-installer/win32-x64", "ffprobe.exe"),
     "win32-ia32": ("@ffprobe-installer/win32-ia32", "ffprobe.exe"),
 }
-
-# The architecture each platform key has to end up with.
-EXPECTED_ARCH = {
-    "linux-x64": "x86_64",
-    "linux-ia32": "i386",
-    "darwin-x64": "x86_64",
-    "darwin-arm64": "arm64",
-    "win32-x64": "x86_64",
-    "win32-ia32": "i386",
-}
-
-
-# --------------------------------------------------------------------------------------
-# Architecture checks
-# --------------------------------------------------------------------------------------
-_MACH_CPU_TYPES = {
-    7: "i386",
-    0x01000007: "x86_64",
-    12: "arm",
-    0x0100000C: "arm64",
-}
-
-
-def _macho_arch(path: Path) -> str | None:
-    """The architecture of a Mach-O file, or None if it is not a Mach-O."""
-    try:
-        data = path.read_bytes()[:64]
-    except OSError:
-        return None
-    if len(data) < 8:
-        return None
-    little = struct.unpack("<I", data[:4])[0]
-    big = struct.unpack(">I", data[:4])[0]
-    magic = little if little in (0xFEEDFACE, 0xFEEDFACF) else big
-    if magic in (0xFEEDFACE, 0xFEEDFACF):
-        cpu, = struct.unpack("<i", data[4:8])
-        return _MACH_CPU_TYPES.get(cpu, f"cpu{cpu}")
-    if magic in (0xCAFEBABE, 0xBEBAFECA):
-        count = struct.unpack(">I", data[4:8])[0]
-        found = []
-        for index in range(count):
-            offset = 8 + index * 20
-            cpu, = struct.unpack(">i", data[offset:offset + 4])
-            found.append(_MACH_CPU_TYPES.get(cpu, f"cpu{cpu}"))
-        # A fat binary holds several architectures; it satisfies any of them.
-        return "|".join(found)
-    return None
-
-
-def _elf_arch(path: Path) -> str | None:
-    """The architecture of an ELF file, or None if it is not an ELF."""
-    try:
-        data = path.read_bytes()[:20]
-    except OSError:
-        return None
-    if len(data) < 20 or data[:4] != b"\x7fELF":
-        return None
-    is_64 = data[4] == 2
-    little = data[5] == 1
-    order = "<" if little else ">"
-    machine, = struct.unpack(order + "H", data[18:20])
-    names = {3: "i386", 62: "x86_64", 40: "arm", 183: "arm64"}
-    return names.get(machine, f"machine{machine}")
-
-
-def _pe_arch(path: Path) -> str | None:
-    """The architecture of a Windows executable, or None."""
-    try:
-        data = path.read_bytes()[:1024]
-    except OSError:
-        return None
-    if data[:2] != b"MZ":
-        return None
-    offset = struct.unpack("<I", data[0x3C:0x40])[0]
-    if offset + 6 > len(data) or data[offset:offset + 2] != b"PE":
-        return None
-    machine, = struct.unpack("<H", data[offset + 4:offset + 6])
-    return {0x014C: "i386", 0x8664: "x86_64", 0xAA64: "arm64"}.get(
-        machine, f"machine{machine}"
-    )
-
-
-def binary_arch(path: Path) -> str | None:
-    """The architecture of a binary, whichever format it is in."""
-    for probe in (_macho_arch, _elf_arch, _pe_arch):
-        found = probe(path)
-        if found:
-            return found
-    return None
-
-
-def check_arch(path: Path, key: str) -> None:
-    """Make sure a binary really is the architecture it is filed under.
-
-    A mismatch is not a warning: an Intel binary in the Apple Silicon
-    folder runs under Rosetta, or not at all, and nothing in the
-    application says why.
-    """
-    expected = EXPECTED_ARCH.get(key)
-    if not expected:
-        return
-    found = binary_arch(path)
-    if found is None:
-        # The architecture could not be read.  That is not proof of a
-        # problem, so the file is kept.
-        print(f"  [warn] the architecture of {path.name} could not be read")
-        return
-    if expected in found.split("|"):
-        print(f"  [ok  ] {path.name} is {found}")
-        return
-    raise SystemExit(
-        f"{path} is a {found} binary but it is filed as {expected}. "
-        f"The package it came from is wrong; refusing to ship it."
-    )
-
 
 # --------------------------------------------------------------------------------------
 # Downloading

@@ -62,7 +62,8 @@ def check_architecture(bundle: Path, binary: Path | None) -> None:
     to run on any machine: the build happens on Apple Silicon and the
     Intel application is checked there too.
     """
-    from scripts.vendor_ffmpeg import binary_arch
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from clipos.core.binary_arch import binary_arch
 
     wanted = ""
     lowered = bundle.name.lower()
