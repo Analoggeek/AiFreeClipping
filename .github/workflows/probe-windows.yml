@@ -60,16 +60,27 @@ jobs:
           } > build/probe-report.md 2>&1 || true
           echo "report written"
 
-      - name: Upload the report
+      - name: Post the report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/github-script@v7
         with:
-          name: probe-report
-          path: |
-            build/probe-report.md
-            build/pip-install.log
-            build/build-error.log
-          if-no-files-found: ignore
+          script: |
+            const fs = require('fs');
+            let body = '(no report)';
+            for (const name of ['build/probe-report.md', 'build/pip-install.log',
+                                'build/build-error.log']) {
+              try {
+                body += '\n### ' + name + '\n\n' + fs.readFileSync(name, 'utf8');
+              } catch (e) {
+                body += '\n### ' + name + '\n\n(missing)';
+              }
+            }
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'Windows probe report',
+              body: body.slice(0, 60000),
+            });
 
       - name: Fail at the end
         if: always()
