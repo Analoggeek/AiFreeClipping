@@ -60,11 +60,41 @@ def internal_dir(bundle: Path) -> Path:
     return bundle / "_internal"
 
 
+# A directory that holds the bundled resources is recognised by one of
+# these being inside it.
+_RESOURCE_MARKERS = ("ffmpeg", "cascades", "models", "icons", "sounds")
+
+
 def resource_root(bundle: Path) -> Path:
+    """The directory the bundled resources live in.
+
+    A macOS application bundle always has a ``Contents/Resources``
+    directory, but it does not always hold the resources: PyInstaller
+    puts them in a subfolder of its own choosing.  The directory is
+    therefore looked for by what is inside it, and not by its name.
+    """
     internal = internal_dir(bundle)
-    for candidate in (internal / "resources", internal / "clipos" / "resources",
-                      bundle / "resources", bundle / "Contents" / "Resources"):
-        if candidate.exists():
+    candidates = [
+        internal / "resources",
+        internal / "clipos" / "resources",
+        bundle / "resources",
+        bundle / "Contents" / "Resources",
+    ]
+    for candidate in candidates:
+        if not candidate.is_dir():
+            continue
+        for marker in _RESOURCE_MARKERS:
+            if (candidate / marker).is_dir():
+                return candidate
+        # The resources may be one level further down.
+        for child in sorted(candidate.iterdir()):
+            if not child.is_dir():
+                continue
+            for marker in _RESOURCE_MARKERS:
+                if (child / marker).is_dir():
+                    return child
+    for candidate in candidates:
+        if candidate.is_dir():
             return candidate
     return internal / "resources"
 
