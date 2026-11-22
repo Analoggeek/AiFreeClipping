@@ -63,6 +63,12 @@ jobs:
         run: |
           mkdir -p build
           {
+            echo "### the scripts directory"
+            ls -la scripts 2>&1 | head -20 || echo "(no scripts directory)"
+            echo ""
+            echo "### run the installer directly"
+            python scripts/install_deps.py --build 2>&1 | tail -30
+            echo ""
             echo "### the build directory"
             ls -la build 2>&1 || echo "(no build directory)"
             echo ""
