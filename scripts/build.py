@@ -139,6 +139,42 @@ def check_python_runtime() -> None:
         )
 
 
+def freeze(target: str) -> None:
+    """Run PyInstaller, keeping its output in a file for diagnosis.
+
+    PyInstaller prints thousands of lines and the interesting part is
+    usually near the end, so the whole log is kept next to the build.
+    """
+    BUILD.mkdir(parents=True, exist_ok=True)
+    log_path = BUILD / "pyinstaller.log"
+    args = pyinstaller_args(target)
+    print(f"\n$ {' '.join(args)}")
+    with open(log_path, "w", encoding="utf-8", errors="replace") as log:
+        result = subprocess.run(args, cwd=ROOT, stdout=log,
+                                stderr=subprocess.STDOUT)
+    if result.returncode != 0:
+        # Show the tail of the log, where the error is.
+        try:
+            tail = log_path.read_text(encoding="utf-8", errors="replace")
+            lines = tail.splitlines()
+            print("\n".join(lines[-60:]))
+        except OSError:
+            pass
+        try:
+            (BUILD / "build-error.log").write_text(
+                " ".join(str(c) for c in args)
+                + f"\n\nexit code: {result.returncode}\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
+        raise SystemExit(
+            f"PyInstaller failed with exit code {result.returncode}; "
+            f"see {log_path}"
+        )
+    print(f"[build] PyInstaller finished; log at {log_path}")
+
+
 def pyinstaller_args(target: str) -> list[str]:
     sep = ";" if target == "windows" else ":"
     # The source path may be absolute, but the destination must be relative to
@@ -189,7 +225,7 @@ def pyinstaller_args(target: str) -> list[str]:
 
 def build_windows() -> Path:
     print("[build] freezing for Windows ...")
-    run(pyinstaller_args("windows"))
+    freeze("windows")
 
     app_dir = DIST / APP_NAME
     if not app_dir.exists():
@@ -221,13 +257,10 @@ def build_windows() -> Path:
 
 def build_macos(target_arch: str = "") -> Path:
     print("[build] freezing for macOS ...")
-    args = pyinstaller_args("macos")
     if target_arch:
-        env = dict(os.environ, ARCHFLAGS=f"-arch {target_arch}")
         print(f"[build] targeting {target_arch}")
-        run(args, env=env)
-    else:
-        run(args)
+        os.environ["ARCHFLAGS"] = f"-arch {target_arch}"
+    freeze("macos")
 
     app = DIST / f"{APP_NAME}.app"
     if not app.exists():
@@ -258,7 +291,7 @@ def verify_bundle(target: str) -> None:
 
 def build_linux() -> Path:
     print("[build] freezing for Linux ...")
-    run(pyinstaller_args("linux"))
+    freeze("linux")
     app_dir = DIST / APP_NAME
     if not app_dir.exists():
         raise SystemExit(f"PyInstaller did not produce {app_dir}")

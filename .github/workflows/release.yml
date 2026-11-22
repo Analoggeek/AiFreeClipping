@@ -94,6 +94,20 @@ jobs:
               ;;
           esac
 
+      - name: Show what failed
+        if: failure()
+        shell: bash
+        run: |
+          echo "::group::build failure details"
+          for f in build/build-error.log build/pyinstaller.log build/*.iss build/*.nsi; do
+            if [ -f "$f" ]; then
+              echo "--- $f ---"
+              head -c 4000 "$f"
+              echo
+            fi
+          done
+          echo "::endgroup::"
+
       - name: Upload the build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -101,6 +115,7 @@ jobs:
           name: build-log-${{ matrix.artifact || 'windows' }}
           path: |
             build/build-error.log
+            build/pyinstaller.log
             build/CLIPOS/warn-CLIPOS.txt
             build/*.iss
             build/*.nsi
