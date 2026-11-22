@@ -71,7 +71,7 @@ class MyProjectsPage(BasePage):
         lay.setSpacing(Metrics.md)
 
         thumb = VideoThumbnail(width=110)
-        thumb.setVideo(p["thumbnail"], p["duration"])
+        thumb.set_video(p["thumbnail"], p["duration"])
         lay.addWidget(thumb)
 
         info = QVBoxLayout()

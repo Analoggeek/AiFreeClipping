@@ -76,6 +76,10 @@ class StatTile(QFrame):
 
     def set_value(self, value: str, animate: bool = True) -> None:
         """Update the displayed value, optionally counting up to it."""
+        # A new value supersedes any count-up that is still running.
+        old_timer = getattr(self, "_timer", None)
+        if old_timer is not None:
+            old_timer.stop()
         if not animate:
             self._value = value
             self._value_label.setText(value)
@@ -106,8 +110,14 @@ class StatTile(QFrame):
         self._value_label.setText("0")
 
         def step() -> None:
-            pct = min(1.0, self._anim.currentValue() / 1.0)
-            # The opacity animation drives a simple count-up
+            # The opacity animation runs from 0.35 to 1.0, so its progress
+            # has to be remapped onto 0..1 before it is used to drive the
+            # count-up.  Using the raw value made the number jump straight
+            # to a third of the target and then creep upwards.
+            raw = self._anim.currentValue()
+            lo, hi = 0.35, 1.0
+            pct = 0.0 if hi <= lo else (raw - lo) / (hi - lo)
+            pct = max(0.0, min(1.0, pct))
             current = target * pct
             if target >= 1000:
                 self._value_label.setText(f"{int(current):,}")
@@ -116,9 +126,22 @@ class StatTile(QFrame):
             else:
                 self._value_label.setText(f"{int(current)}")
 
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(step)
-        self._timer.start(30)
+        def finish() -> None:
+            # Show the exact value and stop the timer -- otherwise it keeps
+            # firing for the lifetime of the window.
+            if target >= 1000:
+                self._value_label.setText(f"{int(target):,}")
+            elif target != int(target):
+                self._value_label.setText(f"{target:.1f}")
+            else:
+                self._value_label.setText(f"{int(target)}")
+            timer.stop()
+
+        timer = QTimer(self)
+        timer.timeout.connect(step)
+        timer.start(30)
+        self._timer = timer
+        self._anim.finished.connect(finish)
 
     def set_accent(self, color: str) -> None:
         self._accent = color

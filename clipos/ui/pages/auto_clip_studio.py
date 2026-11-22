@@ -262,11 +262,30 @@ class AutoClipStudioPage(BasePage):
     def _populate_clips(self, clips) -> None:
         self.clip_list.clear()
         self._clip_rows = {}
+        if not clips:
+            # Say why the list is empty rather than showing a blank panel.
+            hint = QListWidgetItem()
+            widget = QWidget()
+            layout = QVBoxLayout(widget)
+            layout.setContentsMargins(Metrics.md, Metrics.lg, Metrics.md, Metrics.md)
+            title = QLabel("No clips yet")
+            title.setObjectName("CardSubtitle")
+            title.setStyleSheet("font-weight: 650; font-size: 13px;")
+            layout.addWidget(title)
+            detail = QLabel(
+                "Run the analysis to find engaging moments in this video."
+            )
+            detail.setObjectName("CardSubtitle")
+            detail.setWordWrap(True)
+            layout.addWidget(detail)
+            self.clip_list.addItem(hint)
+            self.clip_list.setItemWidget(hint, widget)
+            return
         for position, c in enumerate(clips):
             item = QListWidgetItem()
             item.setData(Qt.ItemDataRole.UserRole, c["id"])
             hint = item.sizeHint()
-            item.setSizeHint(QSize(hint.width(), 46))
+            item.setSizeHint(QSize(hint.width(), 52))
             widget = self._clip_widget(c, position + 1)
             self.clip_list.addItem(item)
             self.clip_list.setItemWidget(item, widget)
@@ -274,6 +293,9 @@ class AutoClipStudioPage(BasePage):
 
     def _clip_widget(self, c, position: int = 1) -> QWidget:
         w = QWidget()
+        # QListWidget sizes embedded widgets to the item rect, so the widget
+        # needs its own minimum height or the text is squeezed and clipped.
+        w.setMinimumHeight(48)
         lay = QHBoxLayout(w)
         lay.setContentsMargins(Metrics.sm, Metrics.xs, Metrics.sm, Metrics.xs)
         lay.setSpacing(Metrics.md)
