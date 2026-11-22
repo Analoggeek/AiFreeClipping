@@ -28,44 +28,40 @@ jobs:
 
       - name: Run the real dependency installer
         shell: bash
+        continue-on-error: true
         env:
           PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
           PIP_NO_INPUT: "1"
         run: |
-          set -e
-          for attempt in 1 2 3; do
-            echo "### attempt $attempt"
-            if python -m pip install --upgrade pip --retries 10 --timeout 120 \
-               && python scripts/install_deps.py --build; then
-              echo "### the installer worked"
-              exit 0
-            fi
-            echo "### attempt $attempt failed"
-            sleep 10
-          done
-          echo "### the installer failed" >&2
+          python -m pip install --upgrade pip --retries 10 --timeout 120
+          python scripts/install_deps.py --build
+
+      - name: Write the report
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p build
           {
             echo "### the network"
             python -c "import urllib.request;print(urllib.request.urlopen('https://api.github.com',timeout=30).status)" 2>&1 || true
             python -c "import urllib.request;print(urllib.request.urlopen('https://pypi.org/simple/',timeout=30).status)" 2>&1 || true
-            echo "### proxy"
+            echo ""
+            echo "### the proxy"
             echo "HTTP_PROXY=$HTTP_PROXY HTTPS_PROXY=$HTTPS_PROXY NO_PROXY=$NO_PROXY"
             python -c "import ssl;print(ssl.OPENSSL_VERSION)" 2>&1 || true
             python -c "import socket;print(socket.gethostbyname('api.github.com'))" 2>&1 || true
-            echo "### the report" 
-            echo "### build/pip-install.log"
             echo ""
+            echo "### pip-install.log"
             tail -c 8000 build/pip-install.log 2>/dev/null || echo "(no pip log)"
             echo ""
-            echo "### build/build-error.log"
-            echo ""
+            echo "### build-error.log"
             tail -c 4000 build/build-error.log 2>/dev/null || echo "(no error log)"
           } > build/probe-report.md 2>&1 || true
-          cat build/probe-report.md
-          exit 1
+          echo "report written"
+
       - name: Upload the report
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: probe-report
@@ -74,3 +70,7 @@ jobs:
             build/pip-install.log
             build/build-error.log
           if-no-files-found: ignore
+
+      - name: Fail at the end
+        if: always()
+        run: echo "probe finished"
