@@ -70,20 +70,28 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Upgrade pip
         shell: bash
+        continue-on-error: true
         env:
           # The cache survives the step, so a partial download is not
           # started again from scratch.
           PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
           PIP_DISABLE_PIP_VERSION_CHECK: "1"
           PIP_NO_INPUT: "1"
+        run: python -m pip install --upgrade pip --retries 10 --timeout 120
+
+      - name: Install dependencies
+        shell: bash
+        env:
+          PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PIP_NO_INPUT: "1"
         run: |
           set -e
           for attempt in 1 2 3; do
-            echo "### pip install attempt $attempt"
-            if python -m pip install --upgrade pip --retries 10 --timeout 120 \
-               && python scripts/install_deps.py --build $INSTALL_DEPS_ARGS; then
+            echo "### install attempt $attempt"
+            if python scripts/install_deps.py --build $INSTALL_DEPS_ARGS; then
               exit 0
             fi
             echo "### attempt $attempt failed; waiting before trying again"

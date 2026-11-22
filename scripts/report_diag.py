@@ -58,7 +58,7 @@ def _pull_request_number(repo: str, headers: dict) -> str:
     url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}"
     try:
         with urllib.request.urlopen(
-            urllib.request.Request(url, headers=headers), timeout=60
+            urllib.request.Request(url, headers=headers), timeout=30
         ) as response:
             data = json.load(response)
     except (urllib.error.URLError, OSError):
@@ -76,7 +76,7 @@ def _post(url: str, headers: dict, payload: dict) -> bool:
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:
             response.read()
         return True
     except (urllib.error.URLError, OSError) as exc:
@@ -151,7 +151,7 @@ def main() -> int:
             return 0
         if attempt < 2:
             print("[diag] the API did not answer; trying again")
-            time.sleep(10)
+            time.sleep(5)
 
     print("[diag] WARNING: could not report the failure through the API")
     return 0
