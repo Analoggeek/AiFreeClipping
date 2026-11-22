@@ -189,6 +189,31 @@ class TestWorkflows(unittest.TestCase):
                     f"{workflow.name} has a job without a timeout",
                 )
 
+    def test_the_macos_jobs_use_a_runner_that_is_actually_handed_out(self):
+        """The macOS runner image has to be one the pool gives away.
+
+        A job on a runner image the pool does not hand out is cancelled
+        before a machine is assigned -- it starts and finishes within a
+        second, with no steps at all, and there is nothing in the log to
+        explain it.  macos-14 behaved that way here; macos-15 ran
+        straight away.
+        """
+        for workflow in self.workflows:
+            text = workflow.read_text(encoding="utf-8")
+            for job in self._jobs(text):
+                for line in job.splitlines():
+                    stripped = line.strip()
+                    if not stripped.startswith("runs-on:"):
+                        continue
+                    image = stripped.split(":", 1)[1].strip()
+                    if "macos" not in image:
+                        continue
+                    self.assertNotEqual(
+                        image, "macos-14",
+                        f"{workflow.name} builds macOS on a runner image "
+                        f"that is never assigned",
+                    )
+
     @staticmethod
     def _jobs(text):
         """Return the body of every job in a workflow.

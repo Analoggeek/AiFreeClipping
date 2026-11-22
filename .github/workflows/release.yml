@@ -47,7 +47,7 @@ jobs:
           # need a second macOS runner to be free at the same time --
           # which is what kept cancelling the build.
           - name: macOS
-            os: macos-14
+            os: macos-15
             artifact: clipos-macos
             files: |
               dist/CLIPOS.app
