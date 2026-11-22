@@ -77,13 +77,19 @@ def verify(bundle: Path, binary: Path | None) -> int:
                   f"{path.stat().st_size // 1024} KB" if path.exists() else "missing")
 
     print("\n-- executable bits --")
-    for folder in sorted((res / "ffmpeg").glob("*")):
-        for exe in folder.glob("ffmpeg*"):
-            if exe.name.endswith(".exe"):
-                continue
-            mode = exe.stat().st_mode
-            check(f"{exe.relative_to(res)} is executable",
-                  bool(mode & stat.S_IXUSR))
+    # The executable bit is a Unix thing.  Windows has no such bit, and a
+    # checkout there marks every file as not executable, so the check would
+    # fail on every platform's binaries for no reason.
+    if os.name == "nt":
+        print("   (not applicable on Windows)")
+    else:
+        for folder in sorted((res / "ffmpeg").glob("*")):
+            for exe in folder.glob("ffmpeg*"):
+                if exe.name.endswith(".exe"):
+                    continue
+                mode = exe.stat().st_mode
+                check(f"{exe.relative_to(res)} is executable",
+                      bool(mode & stat.S_IXUSR))
 
     print("\n-- bundled Python modules --")
     # PyInstaller packs the application modules into a PYZ archive inside the
