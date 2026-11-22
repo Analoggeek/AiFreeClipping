@@ -234,7 +234,11 @@ jobs:
     # same machine by cross-compiling, so the release does not depend on a
     # second macOS runner being free at the same time -- which is what kept
     # cancelling the build.
-    runs-on: macos-14
+    #
+    # The runner image is macos-15 because that is the one the runner pool
+    # actually hands out: macos-14 was cancelled before a runner was
+    # assigned, every time, while macos-15 ran straight away.
+    runs-on: macos-15
     timeout-minutes: 90
     steps:
       - name: Check out the source
