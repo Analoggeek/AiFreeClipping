@@ -424,24 +424,7 @@ jobs:
           # never visible.
           draft: false
           prerelease: false
-          body: |
-            ## CLIPOS — AI Automatic Video Clipping Studio
-
-            Turn long videos into upload-ready shorts, entirely offline.
-
-            | Platform | File | Install |
-            |---|---|---|
-            | Windows 10/11 | `CLIPOS-Setup.exe` | Run it. No admin rights needed. |
-            | macOS (Apple Silicon) | `CLIPOS-*.dmg` | Drag CLIPOS into Applications. |
-            | macOS (Intel) | `CLIPOS.app` | Drag CLIPOS into Applications. |
-            | Linux | `CLIPOS_*.deb` | `sudo apt install ./CLIPOS_*.deb` |
-
-            Every package is offline: it carries the application, the Python
-            runtime, FFmpeg, the face-detection models and the sound effects.
-            The only thing you download separately is the speech-to-text model
-            (open **AI Models** in the app), after which the whole workflow
-            runs without an internet connection.
-
+          body_path: RELEASE_NOTES.md
           files: |
             artifacts/**/CLIPOS-Setup.exe
             artifacts/**/CLIPOS-*.dmg

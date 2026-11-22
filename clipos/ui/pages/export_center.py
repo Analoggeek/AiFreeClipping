@@ -66,10 +66,16 @@ class ExportWorker(QThread):
         def on_progress(index: int, total: int, message: str, pct: float) -> None:
             self.progress.emit(index, message, pct)
 
-        results = pipe.export_clips(
-            self.clip_ids, self.out_dir, self.settings, analysis,
-            progress_cb=on_progress, cancel_cb=lambda: self._cancel,
-        )
+        try:
+            results = pipe.export_clips(
+                self.clip_ids, self.out_dir, self.settings, analysis,
+                progress_cb=on_progress, cancel_cb=lambda: self._cancel,
+            )
+        except Exception as exc:
+            log.exception("batch export failed")
+            self.failed.emit(0, str(exc))
+            self.all_done.emit(0, 1)
+            return
         for i, info in enumerate(results):
             if info.get("error"):
                 failed += 1
