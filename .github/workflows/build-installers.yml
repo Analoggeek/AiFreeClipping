@@ -297,23 +297,19 @@ jobs:
       - name: Set up the Intel Python
         # An Intel application needs an Intel Python: the extension
         # modules have to be compiled for the machine the application is
-        # meant to run on.  On an Apple Silicon runner the Python that is
-        # already there is the wrong one, so a second one is set up.
+        # meant to run on.  A virtual environment made from the Apple
+        # Silicon Python would still hold Apple Silicon wheels, so the
+        # Intel interpreter itself is installed.
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: x64
+      - name: Install the Intel dependencies
         shell: bash
         run: |
           python -m pip install --upgrade pip
-          python -m pip install virtualenv
-          python -m virtualenv --python="$(which python3.11 || which python3)" .venv-intel
-          .venv-intel/bin/python -m pip install --upgrade pip
-          .venv-intel/bin/python -m pip install "opencv-python-headless>=4.8,<5"
-          .venv-intel/bin/python -m pip install "PySide6>=6.6,<6.9" "numpy>=1.24" \
-              "pillow>=10.0" "requests>=2.31" "huggingface-hub>=0.23" \
-              "faster-whisper>=1.0,<2" "onnxruntime>=1.16" "scenedetect>=0.6.3" \
-              "pyinstaller>=6.6"
-          .venv-intel/bin/python -m pip uninstall -y opencv-python || true
-          .venv-intel/bin/python -m pip install --force-reinstall --no-deps \
-              "opencv-python-headless>=4.8,<5"
-          .venv-intel/bin/python -c "import cv2, PySide6; print('intel python ok', cv2.__version__)"
+          python scripts/install_deps.py --build
+          python -c "import sys, struct; print('intel python ok', sys.version.split()[0])"
 
       - name: Build the Intel application
         # The Intel application is built with an Intel Python and with
@@ -322,7 +318,7 @@ jobs:
         # right slice.  One macOS machine produces both applications.
         shell: bash
         run: |
-          export CLIPOS_BUILD_PYTHON="$PWD/.venv-intel/bin/python"
+          export CLIPOS_BUILD_PYTHON="$(which python3.11 || which python3)"
           "$CLIPOS_BUILD_PYTHON" scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
           mv dist/CLIPOS.app dist/CLIPOS-intel.app
           ls -la dist/
