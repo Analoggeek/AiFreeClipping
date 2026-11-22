@@ -36,6 +36,17 @@ def run(cmd: list[str], **kwargs) -> None:
     print(f"\n$ {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=ROOT, **kwargs)
     if result.returncode != 0:
+        # Write the failing command to a file so a CI job can upload it as an
+        # artifact.  Without this the only clue in the log is the exit code.
+        try:
+            BUILD.mkdir(parents=True, exist_ok=True)
+            (BUILD / "build-error.log").write_text(
+                " ".join(str(c) for c in cmd)
+                + f"\n\nexit code: {result.returncode}\n",
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
         raise SystemExit(f"command failed with exit code {result.returncode}: {cmd}")
 
 
@@ -154,7 +165,14 @@ def pyinstaller_args(target: str) -> list[str]:
         "--collect-submodules", "clipos",
         "--collect-all", "faster_whisper",
         "--collect-all", "cv2",
-        "--collect-all", "onnxruntime",
+        # onnxruntime ships its own DLLs and a large set of data files.
+        # Collecting everything is not only slow, it also pulls in the
+        # training tools, which are not needed at runtime and which some
+        # PyInstaller versions fail to bundle on Windows.
+        "--collect-binaries", "onnxruntime",
+        "--collect-data", "onnxruntime",
+        "--exclude-module", "onnxruntime.tools",
+        "--exclude-module", "onnxruntime.transformers",
         "--exclude-module", "tkinter",
         "--exclude-module", "matplotlib",
         "--exclude-module", "pytest",
