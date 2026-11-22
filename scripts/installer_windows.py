@@ -121,9 +121,13 @@ def inno_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> st
 
     **Relative paths.** Inno resolves them against the *script's own
     directory*, not against the working directory the compiler was started
-    in, and the script is written into ``build/``.  ``SourceDir`` points the
-    compiler back at the repository root so the relative ``Source`` entries
-    resolve to the real application.
+    in, and the script is written into ``build/``.  Every path is therefore
+    absolute.
+
+    Note that ``SourceDir`` must *not* be set here.  When it is, Inno
+    resolves the ``Source`` entries relative to it, so an absolute
+    ``Source`` would be appended to the ``SourceDir`` and nothing would be
+    found.
 
     **MAX_PATH.** Windows cannot open a path longer than 260 characters, and
     a PyInstaller tree with a bundled Python, Qt and OpenCV goes past that
@@ -141,16 +145,14 @@ DefaultDirName={{autopf}}\\{APP_NAME}
 DefaultGroupName={APP_NAME}
 OutputBaseFilename={APP_NAME}-Setup
 OutputDir={output}
-; The compiler resolves relative paths against the script's own directory.
-; The script lives in build/, so point the source directory at the staged
-; application explicitly.
-SourceDir={source}
 Compression=lzma2
 SolidCompression=yes
 LZMANumBlockThreads=8
 WizardStyle=modern
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+; "x64compatible" needs Inno Setup 6.3 or newer.  "x64" works with every
+; 6.x release and covers both 64-bit Windows on Intel and AMD.
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 AllowNoIcons=yes

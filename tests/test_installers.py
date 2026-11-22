@@ -43,8 +43,25 @@ class TestInnoSetupScript(unittest.TestCase):
         # and the script lives in build/, so the source has to be absolute.
         source = str((ROOT / "dist" / "CLIPOS").resolve()).replace("/", "\\")
         self.assertIn(r'Source: "%s\*"' % source, self.script)
-        self.assertIn(f"SourceDir={source}", self.script)
         self.assertIn('DestDir: "{app}"', self.script)
+
+    def test_source_dir_is_not_set(self):
+        # When SourceDir is set, Inno resolves the Source entries relative
+        # to it -- so an absolute Source would be appended to the SourceDir
+        # and no file would ever be found.  That is why the installer kept
+        # failing with "no files found matching".
+        self.assertNotIn("SourceDir=", self.script)
+
+    def test_the_architecture_directives_work_on_every_inno_version(self):
+        # "x64compatible" needs Inno Setup 6.3; "x64" works with every 6.x.
+        self.assertIn("ArchitecturesAllowed=x64\n", self.script)
+        self.assertIn("ArchitecturesInstallIn64BitMode=x64\n", self.script)
+        directives = [
+            line for line in self.script.splitlines()
+            if line.startswith("Architectures")
+        ]
+        for line in directives:
+            self.assertNotIn("compatible", line)
 
     def test_creates_a_start_menu_shortcut(self):
         self.assertIn('{group}\\CLIPOS', self.script)

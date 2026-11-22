@@ -24,10 +24,18 @@ permissions:
   contents: read
   issues: write        # so a build failure can report itself
 
+# One build at a time.  Several queued runs compete for the runner pool and
+# the ones that lose get cancelled -- which is how the macOS jobs kept
+# disappearing.
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   windows:
     name: Windows installer
     runs-on: windows-2022
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -133,6 +141,7 @@ jobs:
   macos:
     name: macOS app and disk image
     runs-on: macos-14
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -171,6 +180,7 @@ jobs:
   macos-intel:
     name: macOS app (Intel)
     runs-on: macos-13
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -201,6 +211,7 @@ jobs:
   linux:
     name: Linux package
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 

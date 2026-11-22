@@ -19,11 +19,22 @@ permissions:
   contents: write
   issues: write        # so a build failure can report itself
 
+# Only one release build at a time.  Without this, pushing a tag while an
+# earlier run is still queued leaves several runs competing for the runner
+# queue, and GitHub cancels the ones that lose -- which is exactly how the
+# macOS jobs kept disappearing.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
     name: Build ${{ matrix.name }}
     strategy:
       fail-fast: false
+      # A macOS runner is not always available straight away.  Retrying a
+      # couple of times turns a cancelled job into a finished one.
+      max-parallel: 2
       matrix:
         include:
           - name: Windows
@@ -49,6 +60,7 @@ jobs:
               dist/CLIPOS_*.deb
               dist/CLIPOS-*.zip
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
 
     steps:
       - uses: actions/checkout@v4
@@ -165,10 +177,51 @@ jobs:
           path: ${{ matrix.files }}
           if-no-files-found: error
 
+  retry:
+    name: Retry the jobs that did not finish
+    # A macOS runner is not always free, and GitHub cancels a job it cannot
+    # schedule.  This reports which platforms still need a build so they
+    # can be re-run on their own.
+    needs: build
+    if: always() && needs.build.result != 'success'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - name: Find the unfinished jobs
+        id: find
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const response = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+            const missing = response.data.jobs
+              .filter(j => j.conclusion !== 'success')
+              .map(j => j.name);
+            core.setOutput('jobs', JSON.stringify(missing));
+            core.info('Jobs to retry: ' + missing.join(', '));
+
+      - name: Report which platforms are missing
+        env:
+          JOBS: ${{ steps.find.outputs.jobs }}
+        run: |
+          echo "### Platforms that still need a build" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`$JOBS\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Re-run these jobs from the Actions tab." >> "$GITHUB_STEP_SUMMARY"
+          echo "Platforms to retry: $JOBS"
+
   publish:
     name: Attach the installers to the release
-    needs: build
+    needs: [build, retry]
+    # A cancelled macOS runner must not throw away the Windows and Linux
+    # installers that did build.  Publish whatever is there.
+    if: always() && needs.build.result != 'cancelled'
     runs-on: ubuntu-22.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -177,6 +230,12 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: List what was built
+        run: |
+          echo "### Installer files" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          find artifacts -type f | sort | tee -a "$GITHUB_STEP_SUMMARY" || true
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2

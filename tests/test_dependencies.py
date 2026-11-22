@@ -132,6 +132,68 @@ class TestWorkflows(unittest.TestCase):
         self.assertIn("QT_QPA_PLATFORM", text)
         self.assertIn("LD_LIBRARY_PATH", text)
 
+    def test_the_workflows_do_not_queue_up_more_than_one_run(self):
+        """Several runs at once starve the runner pool and the jobs that
+        lose get cancelled -- which is exactly how the macOS build kept
+        disappearing.  Every workflow therefore needs a concurrency group.
+        """
+        for workflow in self.workflows:
+            text = workflow.read_text(encoding="utf-8")
+            self.assertIn(
+                "concurrency:", text,
+                f"{workflow.name} has no concurrency group, so its runs pile up",
+            )
+
+    def test_the_release_workflow_keeps_a_finished_run_alive(self):
+        """A release run must not be cancelled half way through: the tag
+        is already published, so cancelling would leave a broken release.
+        """
+        text = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("cancel-in-progress: false", text)
+
+    def test_every_job_has_a_timeout(self):
+        """Without a timeout a stuck job blocks the whole release."""
+        for workflow in self.workflows:
+            text = workflow.read_text(encoding="utf-8")
+            for job in self._jobs(text):
+                self.assertIn(
+                    "timeout-minutes:", job,
+                    f"{workflow.name} has a job without a timeout",
+                )
+
+    @staticmethod
+    def _jobs(text):
+        """Return the body of every job in a workflow.
+
+        Only the blocks under the top level ``jobs:`` key are real jobs --
+        ``on:`` has its own sub-blocks that are not jobs at all.
+        """
+        blocks = []
+        lines = text.splitlines()
+        start = None
+        for index, line in enumerate(lines):
+            if line.startswith("jobs:"):
+                start = index + 1
+                break
+        if start is None:
+            return blocks
+        current = None
+        for line in lines[start:]:
+            if line and not line.startswith(" ") and not line.startswith("#"):
+                break
+            if line.startswith("  ") and not line.startswith("    ") and line.rstrip().endswith(":"):
+                if current is not None:
+                    blocks.append("\n".join(current))
+                current = [line]
+                continue
+            if current is not None:
+                current.append(line)
+        if current is not None:
+            blocks.append("\n".join(current))
+        return blocks
+
 
 class TestPipelineDoesNotDownloadModels(unittest.TestCase):
     """The analysis must not reach out to the network for a model.

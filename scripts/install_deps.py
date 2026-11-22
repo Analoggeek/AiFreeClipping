@@ -98,10 +98,11 @@ def main() -> int:
     packages = list(CORE)
     if args.build:
         packages += BUILD
-        # The Windows installer needs a cross compiler.  On Windows itself
-        # Inno Setup is used instead, but the fallback is still worth having.
-        if sys.platform != "win32":
-            packages.append(ZIG)
+        # The self-extracting Windows installer needs a C compiler.  On
+        # Windows itself Inno Setup is used instead, but the fallback has
+        # to be available too: Inno can fail on a path it cannot open, and
+        # then the build would have no installer at all.
+        packages.append(ZIG)
     run(pip("install", *packages), "installing the core packages")
 
     if not args.no_opencv:
