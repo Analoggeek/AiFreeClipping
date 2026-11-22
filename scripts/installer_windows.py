@@ -173,10 +173,10 @@ AppPublisher=CLIPOS Studio
 AppPublisherURL=https://github.com/Analoggeek/AiFreeClipping
 AppSupportURL=https://github.com/Analoggeek/AiFreeClipping/issues
 AppUpdatesURL=https://github.com/Analoggeek/AiFreeClipping/releases
-AppVersionInfoDescription=Turn long videos into upload-ready shorts, entirely offline.
-AppVersionInfoProductName={APP_NAME}
-AppVersionInfoProductVersion={VERSION}
-AppVersionInfoCompany=CLIPOS Studio
+VersionInfoDescription=Turn long videos into upload-ready shorts, entirely offline.
+VersionInfoProductName={APP_NAME}
+VersionInfoProductVersion={VERSION}
+VersionInfoCompany=CLIPOS Studio
 VersionInfoVersion={VERSION_DOTTED}
 SetupLogging=yes
 

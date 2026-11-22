@@ -63,6 +63,56 @@ class TestInnoSetupScript(unittest.TestCase):
         for line in directives:
             self.assertNotIn("compatible", line)
 
+    def test_every_setup_directive_is_one_inno_setup_knows(self):
+        """Inno Setup rejects the whole script when it meets a directive
+        it does not know, and it says only which line was wrong.  The
+        version information directives are easy to get wrong: they are
+        called VersionInfo..., not AppVersionInfo....
+        """
+        valid = {
+            "AppId", "AppName", "AppVersion", "AppVerName", "AppCopyright",
+            "AppPublisher", "AppPublisherURL", "AppSupportURL",
+            "AppUpdatesURL", "AppComments", "AppContact",
+            "DefaultDirName", "DefaultGroupName", "DefaultUserInfoDir",
+            "DefaultUserInfoGroup", "DisableProgramGroupPage",
+            "DisableWelcomePage", "DisableDirPage", "AllowNoIcons",
+            "AlwaysRestart", "PrivilegesRequired",
+            "PrivilegesRequiredOverridesAllowed", "Compression",
+            "SolidCompression", "LZMANumBlockThreads", "WizardStyle",
+            "WizardSizePercent", "OutputBaseFilename", "OutputDir",
+            "ArchitecturesAllowed", "ArchitecturesInstallIn64BitMode",
+            "UninstallDisplayIcon", "UninstallDisplayName",
+            "UninstallDisplaySize", "SetupLogging", "VersionInfoVersion",
+            "VersionInfoDescription", "VersionInfoProductName",
+            "VersionInfoProductVersion", "VersionInfoCompany",
+            "VersionInfoCopyright", "VersionInfoTextVersion",
+            "VersionInfoOriginalFilename", "UsePreviousAppDir",
+            "UsePreviousGroup", "UsePreviousTasks", "UsePreviousPrivileges",
+            "CloseApplications", "RestartApplications", "Uninstallable",
+            "SetupMutex", "MinVersion", "OnlyBelowVersion", "Password",
+            "EncryptCompressedFiles", "CreateAppDir", "CreateUninstallRegKey",
+            "AppReadmeFile", "InfoBeforeFile", "InfoAfterFile",
+            "LicenseFile", "DefaultLanguage",
+        }
+        setup = self.script.split("[Setup]", 1)[1].split("\n[", 1)[0]
+        unknown = []
+        for line in setup.splitlines():
+            line = line.strip()
+            if not line or line.startswith(";") or "=" not in line:
+                continue
+            key = line.split("=", 1)[0].strip()
+            if key not in valid:
+                unknown.append(key)
+        self.assertEqual(
+            unknown, [],
+            "Inno Setup does not know these directives: "
+            + ", ".join(unknown),
+        )
+
+    def test_the_version_information_directives_are_named_correctly(self):
+        self.assertIn("VersionInfoDescription=", self.script)
+        self.assertNotIn("AppVersionInfo", self.script)
+
     def test_creates_a_start_menu_shortcut(self):
         self.assertIn('{group}\\CLIPOS', self.script)
 
