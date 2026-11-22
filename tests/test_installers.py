@@ -113,6 +113,45 @@ class TestInnoSetupScript(unittest.TestCase):
         self.assertIn("VersionInfoDescription=", self.script)
         self.assertNotIn("AppVersionInfo", self.script)
 
+    def test_the_application_id_is_a_literal_and_not_a_constant(self):
+        """Inno Setup reads ``{name}`` as a constant, so a GUID has to be
+        written with doubled braces.  With single braces the compiler
+        says "Unknown constant" and stops.
+        """
+        line = [l for l in self.script.splitlines() if l.startswith("AppId=")]
+        self.assertEqual(len(line), 1)
+        self.assertTrue(
+            line[0].startswith("AppId={{") and line[0].endswith("}}"),
+            f"the application id must use doubled braces: {line[0]}",
+        )
+
+    def test_every_brace_is_a_constant_inno_setup_knows(self):
+        known = {
+            "app", "group", "autodesktop", "autopf", "autoprograms",
+            "commonpf", "commonprograms", "commonstartup", "commonstartmenu",
+            "commondesktop", "commonappdata", "localappdata", "userappdata",
+            "userdesktop", "userdocs", "userprofiledocuments", "userpictures",
+            "usermusic", "temp", "src", "sys", "win", "sd", "pf", "cf",
+            "cf32", "cf64", "fonts", "dao", "dotnetfx", "dotnetfx11",
+            "dotnetfx20", "dotnetfx35", "dotnetfx40", "dotnetfx45",
+            "uninstallexe", "code", "license", "help", "readme", "groupdocs",
+        }
+        import re
+        unknown = []
+        for line in self.script.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(";"):
+                continue
+            # A doubled brace is a literal, not a constant.
+            stripped = re.sub(r"\{\{[^}]*\}\}", "", stripped)
+            for match in re.finditer(r"\{([^{}]*)\}", stripped):
+                if match.group(1) not in known:
+                    unknown.append(match.group(1))
+        self.assertEqual(
+            unknown, [],
+            "Inno Setup does not know these constants: " + ", ".join(unknown),
+        )
+
     def test_creates_a_start_menu_shortcut(self):
         self.assertIn('{group}\\CLIPOS', self.script)
 

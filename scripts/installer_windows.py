@@ -147,7 +147,7 @@ def inno_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> st
     source = _win_path(app_dir or (ROOT / "dist" / app_dir_name))
     output = _win_path(ROOT / "build" / "dist")
     return f"""[Setup]
-AppId={{{BUNDLE_ID_UPPER}}}
+AppId={{{{{BUNDLE_ID_UPPER}}}}}
 AppName={APP_NAME}
 AppVersion={VERSION}
 AppVerName={APP_NAME} {VERSION}
