@@ -65,6 +65,15 @@ def main() -> int:
 
     ensure_fonts()
 
+    # The caption styles are built before the application exists, so the
+    # font they name is only a guess until now.
+    try:
+        from clipos.captions.caption_engine import resolve_style_fonts
+
+        resolve_style_fonts()
+    except Exception as exc:
+        log.warning("could not settle the caption font: %s", exc)
+
     db = get_db()
     settings = db.get_settings()
     apply_theme(app, settings.get("theme", "dark"))
