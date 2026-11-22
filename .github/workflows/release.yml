@@ -187,9 +187,15 @@ jobs:
             Windows) python scripts/build.py windows --skip-tests --skip-vendor ;;
             Linux)   python scripts/build.py linux   --skip-tests --skip-vendor ;;
             *)
-              python scripts/build.py macos --skip-tests --skip-vendor
+              # The Apple Silicon application is built first and moved out
+              # of the way, so that the Intel build cannot overwrite it.
+              python scripts/build.py macos --skip-tests --skip-vendor --target-arch arm64
+              mv dist/CLIPOS.app dist/CLIPOS-arm64.app
               # The Intel application is built on the same runner, so only
-              # one macOS machine is needed for the whole release.
+              # one macOS machine is needed for the whole release.  The
+              # architecture is handed to PyInstaller itself, which then
+              # uses the right bootloader and checks every collected
+              # binary for the right slice.
               python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
               mv dist/CLIPOS.app dist/CLIPOS-intel.app
               ls -la dist/
@@ -284,7 +290,15 @@ jobs:
           if [ "$RUNNER_OS" = "Linux" ]; then
             export LD_LIBRARY_PATH="$PWD/.stublibs:${LD_LIBRARY_PATH:-}"
           fi
-          python scripts/verify_bundle.py dist
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # Both macOS applications are checked: they are different
+            # binaries and the Intel one can be wrong in a way the other
+            # one is not.
+            python scripts/verify_bundle.py dist/CLIPOS-arm64.app
+            python scripts/verify_bundle.py dist/CLIPOS-intel.app
+          else
+            python scripts/verify_bundle.py dist
+          fi
 
       - name: Upload the build artifacts
         uses: actions/upload-artifact@v4
@@ -371,7 +385,7 @@ jobs:
         run: |
           set -e
           cd artifacts
-          for app in CLIPOS.app CLIPOS-intel.app; do
+          for app in CLIPOS-arm64.app CLIPOS-intel.app; do
             [ -d "$app" ] || continue
             echo "### packing $app"
             tar -czf "${app%.app}.app.tar.gz" "$app"
@@ -411,7 +425,7 @@ jobs:
           files: |
             artifacts/**/CLIPOS-Setup.exe
             artifacts/**/CLIPOS-*.dmg
-            artifacts/**/CLIPOS.app.tar.gz
+            artifacts/**/CLIPOS-arm64.app.tar.gz
             artifacts/**/CLIPOS-intel.app.tar.gz
             artifacts/**/CLIPOS_*.deb
             artifacts/**/CLIPOS-*.zip

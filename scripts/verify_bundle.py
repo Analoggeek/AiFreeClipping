@@ -50,6 +50,35 @@ def resource_root(bundle: Path) -> Path:
     return internal / "resources"
 
 
+def check_architecture(bundle: Path, binary: Path | None) -> None:
+    """Make sure the bundle was built for the architecture it claims.
+
+    The name of the bundle says which machine it is for -- ``CLIPOS-intel``
+    is for an Intel Mac -- but the name is only a claim.  The binary
+    inside has to match it, or the application will not run on the
+    machine it was meant for.
+
+    The architecture is worked out from the name, because the check has
+    to run on any machine: the build happens on Apple Silicon and the
+    Intel application is checked there too.
+    """
+    from scripts.vendor_ffmpeg import binary_arch
+
+    wanted = ""
+    lowered = bundle.name.lower()
+    if "intel" in lowered or "x86_64" in lowered:
+        wanted = "x86_64"
+    elif "arm64" in lowered or "silicon" in lowered:
+        wanted = "arm64"
+    if not wanted or binary is None or not binary.exists():
+        return
+
+    found = binary_arch(binary)
+    check("the application is built for the right architecture",
+          found is not None and wanted in found.split("|"),
+          f"{wanted} wanted, {found or 'unknown'} found")
+
+
 def verify(bundle: Path, binary: Path | None) -> int:
     print(f"=== Verifying bundle: {bundle} ===\n")
 
@@ -107,6 +136,7 @@ def verify(bundle: Path, binary: Path | None) -> int:
         candidates = [bundle / "CLIPOS", bundle / "CLIPOS.exe",
                       bundle / "CLIPOS.app" / "Contents" / "MacOS" / "CLIPOS"]
         binary = next((c for c in candidates if c.exists()), None)
+    check_architecture(bundle, binary)
     if check("application binary found", binary is not None,
              str(binary) if binary else "not found"):
         # The app must at least start, initialise its database and reach the
