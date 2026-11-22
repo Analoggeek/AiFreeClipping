@@ -1,4 +1,4 @@
-name: Probe the Windows runner again
+name: Probe the Windows runner with the real script
 
 on:
   workflow_dispatch:
@@ -12,25 +12,35 @@ jobs:
   probe:
     name: Probe
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
-      - name: Report the machine
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run the real dependency installer
         shell: bash
+        env:
+          PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PIP_NO_INPUT: "1"
         run: |
-          echo "uname: $(uname -a)"
-          echo "=== pip install the CLIPOS set ==="
-          python -m pip install --retries 5 --timeout 60 \
-            "opencv-python-headless>=4.8,<5" \
-            "PySide6>=6.6,<6.9" "numpy>=1.24" "pillow>=10.0" "requests>=2.31" \
-            "huggingface-hub>=0.23" "faster-whisper>=1.0,<2" \
-            "onnxruntime>=1.16" "scenedetect>=0.6.3" "pyinstaller>=6.6"
-          echo "=== what is installed ==="
-          python -m pip list 2>&1 | head -60
-          echo "=== remove the GUI build of OpenCV ==="
-          python -m pip uninstall -y opencv-python
-          echo "=== put the pinned build back ==="
-          python -m pip install --force-reinstall --no-deps \
-            "opencv-python-headless>=4.8,<5"
-          echo "=== import it ==="
-          python -c "import cv2; print('opencv', cv2.__version__); print('cascade', 'ok' if hasattr(cv2, 'CascadeClassifier') else 'MISSING')"
-          echo "=== done ==="
+          set -e
+          for attempt in 1 2 3; do
+            echo "### attempt $attempt"
+            if python -m pip install --upgrade pip --retries 10 --timeout 120 \
+               && python scripts/install_deps.py --build; then
+              echo "### the installer worked"
+              exit 0
+            fi
+            echo "### attempt $attempt failed"
+            sleep 10
+          done
+          echo "### the installer failed" >&2
+          cat build/pip-install.log 2>/dev/null | tail -60 || true
+          exit 1
