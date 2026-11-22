@@ -7,7 +7,8 @@ import threading
 import zipfile
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QThread, QTimer, Signal
+from PySide6.QtCore import Qt, QThread, QTimer, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
     QListWidget, QListWidgetItem, QProgressBar, QPushButton, QSpinBox,
@@ -45,6 +46,9 @@ class ExportWorker(QThread):
 
     def cancel(self) -> None:
         self._cancel = True
+        pipe = getattr(self, "_pipe", None)
+        if pipe:
+            pipe.cancel()
 
     def run(self) -> None:
         ok = 0
@@ -57,15 +61,21 @@ class ExportWorker(QThread):
             self.all_done.emit(0, 1)
             return
 
-        pipe = ClipOSPipeline(self.db, self.project_id)
+        pipe = self._pipe = ClipOSPipeline(self.db, self.project_id)
 
         def on_progress(index: int, total: int, message: str, pct: float) -> None:
             self.progress.emit(index, message, pct)
 
-        results = pipe.export_clips(
-            self.clip_ids, self.out_dir, self.settings, analysis,
-            progress_cb=on_progress, cancel_cb=lambda: self._cancel,
-        )
+        try:
+            results = pipe.export_clips(
+                self.clip_ids, self.out_dir, self.settings, analysis,
+                progress_cb=on_progress, cancel_cb=lambda: self._cancel,
+            )
+        except Exception as exc:
+            log.exception("batch export failed")
+            self.failed.emit(0, str(exc))
+            self.all_done.emit(0, 1)
+            return
         for i, info in enumerate(results):
             if info.get("error"):
                 failed += 1
@@ -96,8 +106,12 @@ class ExportWorker(QThread):
             extract_audio_wav(source, wav)
         if wav.exists():
             result.audio = analyze_audio(wav)
-            result.visual = analyze_visual(source, fps_sample=1.0)
-            result.speaker = analyze_speakers(result.visual, result.audio)
+            if self.settings.smart_reframe:
+                try:
+                    result.visual = analyze_visual(source, fps_sample=0.25)
+                    result.speaker = analyze_speakers(result.visual, result.audio)
+                except Exception as exc:
+                    log.warning("Tracking unavailable; exporting with centre framing: %s", exc)
 
         tr = self.db.get_transcript(self.project_id)
         if tr:
@@ -111,6 +125,32 @@ class ExportWorker(QThread):
                 text=tr["full_text"], segments=segs, model=tr["model"],
             )
         return result
+
+
+class RecipePreviewWorker(QThread):
+    ready = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, source, start, end, settings, parent=None):
+        super().__init__(parent)
+        self.source, self.start_time, self.end_time = source, start, end
+        self.settings = settings
+        self.cancelled = False
+
+    def run(self):
+        try:
+            import uuid
+            from ...core.config import PATHS
+            from ...video.renderer import ClipRenderer
+            folder = PATHS.cache / "recipe-previews" / uuid.uuid4().hex
+            folder.mkdir(parents=True, exist_ok=True)
+            result = ClipRenderer(folder).render(self.source, folder / "preview.mp4",
+                self.start_time, min(self.end_time, self.start_time + 4), self.settings,
+                cancel_cb=lambda: self.cancelled)
+            if not result.cancelled:
+                self.ready.emit(result.output_path)
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 
 class ExportCenterPage(BasePage):
@@ -142,6 +182,25 @@ class ExportCenterPage(BasePage):
 
         settings_card = Card()
         settings_card.add(SectionHeader("Export Settings", ""))
+        from ...video.presets import PRESETS
+        self.recipe_combo = QComboBox()
+        for key, (name, detail) in PRESETS.items():
+            self.recipe_combo.addItem(name, key)
+        self.recipe_combo.setToolTip("Gaming uses the upper-left facecam region by default. Adjust your source before export if needed.")
+        settings_card.add(self.recipe_combo)
+        self.preview_recipe_btn = QPushButton("Preview recipe · 4 seconds")
+        self.preview_recipe_btn.setToolTip("Renders your first clip at draft resolution with the selected layout and colour. Caption preview is in Caption Studio.")
+        self.preview_recipe_btn.clicked.connect(self._preview_recipe)
+        settings_card.add(self.preview_recipe_btn)
+        self.facecam_controls = []
+        facecam_form = QFormLayout()
+        for label, value in (("Facecam X %", 0), ("Facecam Y %", 0), ("Facecam width %", 25), ("Facecam height %", 30)):
+            spin = QSpinBox()
+            spin.setRange(0 if "X" in label or "Y" in label else 1, 100)
+            spin.setValue(value)
+            facecam_form.addRow(label, spin)
+            self.facecam_controls.append(spin)
+        settings_card.add_layout(facecam_form)
 
         form = QFormLayout()
         form.setSpacing(Metrics.sm)
@@ -306,7 +365,30 @@ class ExportCenterPage(BasePage):
         rs.caption_font = db_settings.get("caption_font", "")
         rs.show_captions = self.captions_check.isChecked()
         rs.encoder_preference = self.gpu_combo.currentData()
-        return rs
+        x, y, w, h = [spin.value()/100 for spin in self.facecam_controls]
+        rs.facecam_rect = (min(x, .99), min(y, .99), min(w, 1-min(x, .99)), min(h, 1-min(y, .99)))
+        from ...video.presets import apply_preset
+        return apply_preset(rs, self.recipe_combo.currentData())
+
+    def _preview_recipe(self):
+        if not self.project_id or not self.queue.count():
+            self.window.notify("Select a project with clips first")
+            return
+        project = self.db.get_project(self.project_id)
+        clip = self.db.get_clip(self.queue.item(0).data(Qt.ItemDataRole.UserRole))
+        settings = self._render_settings()
+        ratio = settings.width / settings.height
+        settings.height = 480
+        settings.width = int(480 * ratio / 2) * 2
+        settings.encoder_preference = "cpu"
+        settings.show_captions = False
+        worker = RecipePreviewWorker(project["source_path"], clip["start_time"], clip["end_time"], settings, self)
+        self._recipe_worker = worker
+        self.preview_recipe_btn.setEnabled(False)
+        worker.ready.connect(lambda path: QDesktopServices.openUrl(QUrl.fromLocalFile(path)))
+        worker.failed.connect(lambda message: self.window.notify("Preview failed: " + message, 6000))
+        worker.finished.connect(lambda: self.preview_recipe_btn.setEnabled(True))
+        worker.start()
 
     def _start_export(self) -> None:
         if not self.project_id:
@@ -367,6 +449,10 @@ class ExportCenterPage(BasePage):
 
     def shutdown(self) -> None:
         """Cancel a running export and wait for its thread to stop."""
+        preview = getattr(self, "_recipe_worker", None)
+        if preview and preview.isRunning():
+            preview.cancelled = True
+            preview.wait()
         worker = self._worker
         if worker is not None:
             try:

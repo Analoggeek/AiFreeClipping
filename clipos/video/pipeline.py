@@ -294,13 +294,25 @@ class ClipOSPipeline:
             if progress_cb:
                 progress_cb(pct, msg)
 
-        result = renderer.render(
-            source, output,
-            clip["start_time"], clip["end_time"],
-            settings, cues=cues,
-            audio=analysis.audio, visual=analysis.visual, speaker=analysis.speaker,
-            progress_cb=prog, cancel_cb=self._cancel.is_set,
-        )
+        saved_edit = PATHS.projects / str(self.project_id) / "edits" / f"{clip_id}.json"
+        if saved_edit.exists():
+            from .timeline import Timeline
+            timeline = Timeline.load(saved_edit)
+            from ..captions.caption_engine import retime_cues, build_cues
+            edited_cues = retime_cues(build_cues(analysis.transcript, 0, analysis.duration),
+                [(seg.start, seg.end, seg.speed) for seg in timeline.segments]) if settings.show_captions and analysis.transcript else []
+            result = renderer.render_timeline(
+                source, output, timeline, settings, cues=edited_cues,
+                progress_cb=prog, cancel_cb=self._cancel.is_set,
+            )
+        else:
+            result = renderer.render(
+                source, output,
+                clip["start_time"], clip["end_time"],
+                settings, cues=cues,
+                audio=analysis.audio, visual=analysis.visual, speaker=analysis.speaker,
+                progress_cb=prog, cancel_cb=self._cancel.is_set,
+            )
         self._check_cancel()
 
         # Thumbnails from the best frames in the clip
@@ -509,7 +521,8 @@ def run_one_click(
         stt_model=stt_model, language=language, progress_cb=progress_cb,
     )
 
-    settings = RenderSettings.for_aspect(aspect)
+    from .presets import apply_preset
+    settings = apply_preset(RenderSettings.for_aspect(aspect), db.get_setting("editing_preset", "clean"))
     settings.caption_style = db.get_setting("caption_style", "bold_viral")
     settings.caption_size = int(db.get_setting("caption_size", 58))
     settings.caption_font = db.get_setting("caption_font", "") or ""

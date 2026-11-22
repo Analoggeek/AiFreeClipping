@@ -99,7 +99,9 @@ class TemplatesPage(BasePage):
 
     def _apply(self, aspect: str, fps: int, codec: str, bitrate: int,
                cap_style: str, name: str) -> None:
+        recipe = "podcast" if "Podcast" in name else "clean"
         self.db.set_settings({
+            "editing_preset": recipe,
             "aspect_ratio": aspect,
             "caption_style": cap_style,
             "default_clip_duration": "30-45",
@@ -108,6 +110,7 @@ class TemplatesPage(BasePage):
         # Reflect the preset in the export page if it is open
         export_page = self.window.pages.get("export")
         if export_page is not None:
+            export_page.recipe_combo.setCurrentIndex(max(0, export_page.recipe_combo.findData(recipe)))
             idx = export_page.aspect_combo.findData(aspect)
             if idx >= 0:
                 export_page.aspect_combo.setCurrentIndex(idx)

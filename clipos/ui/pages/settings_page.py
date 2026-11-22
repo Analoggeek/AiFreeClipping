@@ -4,10 +4,11 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout,
-    QLabel, QPushButton, QSpinBox, QVBoxLayout, QWidget,
+    QLabel, QPushButton, QMessageBox, QSpinBox, QVBoxLayout, QWidget,
 )
 
 from ...core.config import ASPECT_RATIOS, CLIP_DURATION_PRESETS, PATHS
@@ -20,12 +21,44 @@ from .base import BasePage
 log = get_logger(__name__)
 
 
+class UpdateCheck(QThread):
+    result = Signal(object)
+    failed = Signal(str)
+
+    def run(self):
+        try:
+            from ... import __version__
+            from ...core.updates import check_update
+            self.result.emit(check_update(__version__))
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class SettingsPage(BasePage):
     page_title = "Settings"
     page_subtitle = "Everything is stored on this device. Nothing is uploaded."
 
     def build(self) -> None:
         settings = self.db.get_settings()
+
+        updates = Card()
+        updates.add(SectionHeader("Software updates", "By Analoggeek · checks GitHub only when requested"))
+        self.update_button = QPushButton("Check for updates")
+        self.update_button.clicked.connect(self._check_update)
+        updates.add(self.update_button)
+        updates.add(QLabel("Downloads the matching installer. Quit CLIPOS before installation. Your project library stays separate."))
+        self.content_layout.addWidget(updates)
+
+        from ...video.presets import PRESETS
+        recipes = Card()
+        recipes.add(SectionHeader("One-click editing recipe", "Original offline presets, not engagement guarantees"))
+        recipe = QComboBox()
+        for key, (name, detail) in PRESETS.items():
+            recipe.addItem(name + " — " + detail, key)
+        recipe.setCurrentIndex(max(0, recipe.findData(settings.get("editing_preset", "clean"))))
+        recipe.currentIndexChanged.connect(lambda _: self._save("editing_preset", recipe.currentData()))
+        recipes.add(recipe)
+        self.content_layout.addWidget(recipes)
 
         # ---------------- appearance ----------------
         appear = Card()
@@ -317,6 +350,26 @@ class SettingsPage(BasePage):
         self.hw_label.setObjectName("CardSubtitle")
         hw.add(self.hw_label)
         self.content_layout.addWidget(hw)
+
+    def _check_update(self):
+        self.update_button.setEnabled(False)
+        self._update_worker = UpdateCheck(self)
+        self._update_worker.result.connect(self._update_ready)
+        self._update_worker.failed.connect(lambda message: self.window.notify("Update check failed: " + message, 6000))
+        self._update_worker.finished.connect(lambda: self.update_button.setEnabled(True))
+        self._update_worker.start()
+
+    def _update_ready(self, release):
+        if not release:
+            self.window.notify("You have the latest published stable version")
+            return
+        if QMessageBox.question(self, "Update available", f"Download {release['version']} ({release['name']})? Install after quitting CLIPOS. Project files are not removed.") == QMessageBox.StandardButton.Yes:
+            QDesktopServices.openUrl(QUrl(release["url"]))
+
+    def shutdown(self):
+        worker = getattr(self, "_update_worker", None)
+        if worker and worker.isRunning():
+            worker.wait(25000)
 
     # -- handlers ------------------------------------------------------------------
     def _save(self, key: str, value) -> None:

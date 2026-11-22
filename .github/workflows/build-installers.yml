@@ -304,26 +304,9 @@ jobs:
         with:
           python-version: "3.11"
           architecture: x64
-      - name: Find the Intel Python
-        # The Intel interpreter is installed by the step above, but the
-        # path can still point at the Apple Silicon one first.  The
-        # interpreter that is actually wanted is the one that reports
-        # itself as Intel, so it is looked for.
+      - name: Install isolated Intel dependencies
         shell: bash
-        run: |
-          echo "### the interpreters on the path"
-          for py in python3.11 python3 python; do
-            command -v "$py" >/dev/null 2>&1 || continue
-            echo "$py -> $(command -v "$py")"
-            "$py" -c "import platform; print('   ', platform.machine())" || true
-          done
-          echo ""
-          echo "### the interpreters in the tool cache"
-          ls -d /Users/runner/hostedtoolcache/Python/*/x64/bin 2>/dev/null || true
-          ls -d /Users/runner/hostedtoolcache/Python/*/arm64/bin 2>/dev/null || true
-          echo ""
-          echo "### the interpreters in the framework directory"
-          ls -d /Library/Frameworks/Python.framework/Versions/*/bin 2>/dev/null || true
+        run: bash scripts/setup_intel_python.sh
 
       - name: Build the Intel application
         # The Intel application is built with an Intel Python and with
@@ -332,7 +315,7 @@ jobs:
         # right slice.  One macOS machine produces both applications.
         shell: bash
         run: |
-          export CLIPOS_BUILD_PYTHON="$(which python3.11 || which python3)"
+          export CLIPOS_BUILD_PYTHON="$CLIPOS_INTEL_PYTHON"
           "$CLIPOS_BUILD_PYTHON" scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
           mv dist/CLIPOS.app dist/CLIPOS-intel.app
           ls -la dist/

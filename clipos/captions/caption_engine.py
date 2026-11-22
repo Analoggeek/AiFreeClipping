@@ -505,3 +505,20 @@ def pick_highlight_words(text: str, top_n: int = 3) -> list[str]:
         scored[w] = score
     ranked = sorted(scored.items(), key=lambda kv: (-kv[1], kv[0]))
     return [w for w, _ in ranked[:top_n]]
+
+
+def retime_cues(cues, ranges):
+    """Map absolute source cues through ordered (start, end, speed) edits."""
+    output, offset = [], 0.0
+    for start, end, speed in ranges:
+        for cue in cues:
+            left, right = max(start, cue.start), min(end, cue.end)
+            if right <= left:
+                continue
+            words = [{**word, "s": offset + (max(start, word["s"])-start)/speed,
+                      "e": offset + (min(end, word["e"])-start)/speed}
+                     for word in cue.words if word["e"] > start and word["s"] < end]
+            text = " ".join(word["w"] for word in words) if words else cue.text
+            output.append(CaptionCue(offset+(left-start)/speed, offset+(right-start)/speed, text, words))
+        offset += (end-start)/speed
+    return output

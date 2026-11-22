@@ -9,7 +9,7 @@ from PySide6.QtCore import QPropertyAnimation, QSize, Qt, QTimer, Signal
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
-    QPushButton, QSizePolicy, QStackedWidget, QStatusBar, QVBoxLayout, QWidget,
+    QPushButton, QStyle, QSizePolicy, QStackedWidget, QStatusBar, QVBoxLayout, QWidget,
 )
 
 from ..core.config import PATHS
@@ -25,7 +25,22 @@ class NavButton(QPushButton):
     """A sidebar navigation item with an icon and label."""
 
     def __init__(self, icon: str, label: str, key: str, parent=None) -> None:
-        super().__init__(f"  {icon}    {label}", parent)
+        super().__init__(label, parent)
+        icons = {
+            "home": QStyle.StandardPixmap.SP_ComputerIcon,
+            "new": QStyle.StandardPixmap.SP_FileDialogNewFolder,
+            "studio": QStyle.StandardPixmap.SP_MediaPlay,
+            "projects": QStyle.StandardPixmap.SP_DirIcon,
+            "library": QStyle.StandardPixmap.SP_FileDialogDetailedView,
+            "templates": QStyle.StandardPixmap.SP_FileDialogListView,
+            "captions": QStyle.StandardPixmap.SP_FileDialogContentsView,
+            "editor": QStyle.StandardPixmap.SP_MediaSeekForward,
+            "export": QStyle.StandardPixmap.SP_DialogSaveButton,
+            "models": QStyle.StandardPixmap.SP_DriveHDIcon,
+            "settings": QStyle.StandardPixmap.SP_FileDialogInfoView,
+        }
+        self.setIcon(self.style().standardIcon(icons[key]))
+        self.setIconSize(QSize(16, 16))
         self.setObjectName("NavButton")
         self.setCheckable(True)
         self.setCursor(Qt.CursorShape.PointingHandCursor)

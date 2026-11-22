@@ -50,9 +50,9 @@ jobs:
             os: macos-15
             artifact: clipos-macos
             files: |
-              dist/CLIPOS.app
+              dist/CLIPOS-arm64.app.tar.gz
               dist/CLIPOS-*.dmg
-              dist/CLIPOS-intel.app
+              dist/CLIPOS-intel.app.tar.gz
           - name: Linux
             os: ubuntu-22.04
             artifact: clipos-linux
@@ -176,6 +176,14 @@ jobs:
           echo "### Free disk space before the build"
           df -h . /c 2>&1 | head -5 || df -h . 2>&1 | head -5
 
+      - name: Build Apple Silicon before changing Python
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          python scripts/build.py macos --skip-tests --skip-vendor --target-arch arm64
+          mv dist/CLIPOS.app dist/CLIPOS-arm64.app
+          python scripts/verify_bundle.py dist/CLIPOS-arm64.app
+
       - name: Set up the Intel Python
         # An Intel application needs an Intel Python: the extension
         # modules have to be compiled for the machine the application is
@@ -187,24 +195,10 @@ jobs:
         with:
           python-version: "3.11"
           architecture: x64
-      - name: Find the Intel Python
-        # The Intel interpreter is installed by the step above, but the
-        # path can still point at the Apple Silicon one first.  The
-        # interpreter that is actually wanted is the one that reports
-        # itself as Intel, so it is looked for.
+      - name: Install isolated Intel dependencies
         if: runner.os == 'macOS'
         shell: bash
-        run: |
-          echo "### the interpreters on the path"
-          for py in python3.11 python3 python; do
-            command -v "$py" >/dev/null 2>&1 || continue
-            echo "$py -> $(command -v "$py")"
-            "$py" -c "import platform; print('   ', platform.machine())" || true
-          done
-          echo ""
-          echo "### the interpreters in the tool cache"
-          ls -d /Users/runner/hostedtoolcache/Python/*/x64/bin 2>/dev/null || true
-          ls -d /Users/runner/hostedtoolcache/Python/*/arm64/bin 2>/dev/null || true
+        run: bash scripts/setup_intel_python.sh
 
       - name: Build
         shell: bash
@@ -219,12 +213,10 @@ jobs:
             *)
               # The Apple Silicon application is built first and moved out
               # of the way, so that the Intel build cannot overwrite it.
-              python scripts/build.py macos --skip-tests --skip-vendor --target-arch arm64
-              mv dist/CLIPOS.app dist/CLIPOS-arm64.app
               # The Intel application is built with an Intel Python and
               # with the architecture handed to PyInstaller, so one macOS
               # machine produces both applications.
-              export CLIPOS_BUILD_PYTHON="$(which python3.11 || which python3)"
+              export CLIPOS_BUILD_PYTHON="$CLIPOS_INTEL_PYTHON"
               "$CLIPOS_BUILD_PYTHON" scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
               mv dist/CLIPOS.app dist/CLIPOS-intel.app
               ls -la dist/
@@ -329,6 +321,13 @@ jobs:
             python scripts/verify_bundle.py dist
           fi
 
+      - name: Archive native app permissions and symlinks
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          tar -czf dist/CLIPOS-arm64.app.tar.gz -C dist CLIPOS-arm64.app
+          tar -czf dist/CLIPOS-intel.app.tar.gz -C dist CLIPOS-intel.app
+
       - name: Upload the build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -377,9 +376,8 @@ jobs:
   publish:
     name: Attach the installers to the release
     needs: [build, retry]
-    # A cancelled macOS runner must not throw away the Windows and Linux
-    # installers that did build.  Publish whatever is there.
-    if: always() && needs.build.result != 'cancelled'
+    # Never publish a partial release as latest; all platforms must verify.
+    if: always() && needs.build.result == 'success'
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
@@ -433,24 +431,7 @@ jobs:
           # never visible.
           draft: false
           prerelease: false
-          body: |
-            ## CLIPOS — AI Automatic Video Clipping Studio
-
-            Turn long videos into upload-ready shorts, entirely offline.
-
-            | Platform | File | Install |
-            |---|---|---|
-            | Windows 10/11 | `CLIPOS-Setup.exe` | Run it. No admin rights needed. |
-            | macOS (Apple Silicon) | `CLIPOS-*.dmg` | Drag CLIPOS into Applications. |
-            | macOS (Intel) | `CLIPOS.app` | Drag CLIPOS into Applications. |
-            | Linux | `CLIPOS_*.deb` | `sudo apt install ./CLIPOS_*.deb` |
-
-            Every package is offline: it carries the application, the Python
-            runtime, FFmpeg, the face-detection models and the sound effects.
-            The only thing you download separately is the speech-to-text model
-            (open **AI Models** in the app), after which the whole workflow
-            runs without an internet connection.
-
+          body_path: RELEASE_NOTES.md
           files: |
             artifacts/**/CLIPOS-Setup.exe
             artifacts/**/CLIPOS-*.dmg

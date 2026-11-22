@@ -49,6 +49,8 @@ log = get_logger(__name__)
 @dataclass
 class RenderSettings:
     """User-facing editing options for one clip."""
+    editing_preset: str = "clean"
+    facecam_rect: tuple = (0.0, 0.0, 0.25, 0.3)
     aspect: str = "9:16"
     width: int = 1080
     height: int = 1920
@@ -326,6 +328,16 @@ def _escape_ass_path(p: Path) -> str:
     return s
 
 
+def segment_video_filter(segment, width, height):
+    """Crop inside the scaled image, rather than cropping an already tight frame."""
+    zoom = max(1.0, float(segment.zoom))
+    sw = int(width * zoom / 2 + 0.5) * 2
+    sh = int(height * zoom / 2 + 0.5) * 2
+    x, y = max(0, min(1, segment.crop_x)), max(0, min(1, segment.crop_y))
+    return (f"scale={sw}:{sh}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height}:(iw-ow)*{x:.5f}:(ih-oh)*{y:.5f},setsar=1")
+
+
 def _build_color_filter(s: RenderSettings) -> str:
     parts: list[str] = []
     if s.color_correct:
@@ -466,7 +478,11 @@ class ClipRenderer:
         vf_parts: list[str] = []
         vf_parts.append(f"fps={settings.fps}")
 
-        if settings.smart_reframe and visual and speaker and visual.tracks:
+        if settings.editing_preset == "gaming":
+            from .presets import gaming_filter
+            vf_parts.append(gaming_filter(settings.width, settings.height, src_w, src_h, settings.facecam_rect))
+            result.steps.append("Gameplay above, selected facecam below")
+        elif settings.smart_reframe and visual and speaker and visual.tracks:
             keys = _smooth_keys(
                 _subject_keyframes(speaker, visual, start, end, step=0.5)
             )
@@ -511,8 +527,10 @@ class ClipRenderer:
 
             highlights = pick_highlight_words(" ".join(c.text for c in cues))
             ass_path = self.work_dir / f"captions_{output.stem}.ass"
+            from ..captions.caption_engine import retime_cues
+            output_cues = retime_cues(cues, [(start+ks, start+ke, 1.0) for ks, ke in keeps])
             write_ass(
-                ass_path, cues, style,
+                ass_path, output_cues, style,
                 settings.width, settings.height,
                 font_override=settings.caption_font,
                 size_override=settings.caption_size,
@@ -549,9 +567,16 @@ class ClipRenderer:
             # Build: [0:v]vf[v0];[1:v]vf[v1];...;[0:a][1:a]...concat
             parts: list[str] = []
             for i in range(len(keeps)):
-                parts.append(f"[{i}:v]{vf}[v{i}]")
+                segment_vf = vf
+                for label in ("game", "cam", "upper", "lower"):
+                    segment_vf = segment_vf.replace(f"[{label}]", f"[{label}{i}]")
+                parts.append(f"[{i}:v]{segment_vf}[v{i}]")
             for i in range(len(keeps)):
-                parts.append(f"[{i}:a]{af}[a{i}]" if af else f"[{i}:a]anull[a{i}]")
+                if has_audio:
+                    parts.append(f"[{i}:a]{af}[a{i}]" if af else f"[{i}:a]anull[a{i}]")
+                else:
+                    ks, ke = keeps[i]
+                    parts.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={ke-ks:.6f}[a{i}]")
             labels = "".join(f"[v{i}][a{i}]" for i in range(len(keeps)))
             parts.append(f"{labels}concat=n={len(keeps)}:v=1:a=1[vcat][acat]")
             filter_parts.append(";".join(parts))
@@ -567,11 +592,17 @@ class ClipRenderer:
                 )
             else:
                 filter_parts.append(f"[0:v]{vf}[v0]")
-            if af:
+            if not has_audio:
+                filter_parts.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={clip_dur:.6f}[a0]")
+            elif af:
                 filter_parts.append(f"[0:a]{af}[a0]")
             else:
                 filter_parts.append(f"[0:a]anull[a0]")
             final_v, final_a = vlabel, alabel
+
+        if ass_path and len(keeps) > 1:
+            filter_parts.append(f"{final_v}ass='{_escape_ass_path(ass_path)}'{fontsdir_arg()}[captioned]")
+            final_v = "[captioned]"
 
         # Background music as a second input
         music_idx = None
@@ -645,9 +676,16 @@ class ClipRenderer:
             return result
         except Exception as exc:
             # Retry without the complex filter chain if the graph was rejected
-            log.warning("primary render failed (%s); retrying with simple filters", exc)
-            result.warnings.append(f"Complex filter chain failed, used simplified render: {exc}")
-            simple = self._simple_render_cmd(source, output, start, clip_dur, settings, enc, ass_path)
+            log.warning("primary render failed (%s); retrying with CPU encoding", exc)
+            result.warnings.append(f"Primary render failed, retried on CPU: {exc}")
+            # An encoder being listed does not mean the driver/device works.
+            # Software fallback must not reuse NVENC/QSV/VideoToolbox options.
+            enc = choose_encoder("cpu", settings.codec)
+            result.encoder = enc.description
+            simple = ["ffmpeg", *cmd[:cmd.index("-c:v")],
+                "-c:v", enc.video_encoder, "-preset", "medium", "-crf", str(settings.crf),
+                "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart", str(output)]
             runner2 = FFmpegRunner(total_duration=clip_dur,
                                    progress_cb=lambda p, t: progress_cb(
                                        5.0 + p * 0.9, f"Rendering… {p:.0f}%"
@@ -692,6 +730,7 @@ class ClipRenderer:
         source = Path(source)
         output = Path(output)
         segments = list(timeline.segments)
+        has_audio = probe(source).has_audio
         if not segments:
             raise ValueError("Cannot render an empty timeline")
 
@@ -702,25 +741,7 @@ class ClipRenderer:
         seg_filters: list[str] = []
         for seg in segments:
             parts: list[str] = []
-            # Crop/scale to the output aspect.
-            parts.append(
-                f"scale={settings.width}:{settings.height}:force_original_aspect_ratio=increase"
-            )
-            parts.append(f"crop={settings.width}:{settings.height}")
-            # User zoom on top of the reframed frame.
-            if seg.zoom > 1.001:
-                z = seg.zoom
-                parts.append(
-                    f"zoompan=z='min(zoom+0.0001,{z:.4f})':d=1:"
-                    f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-                    f"d=1:s={settings.width}x{settings.height}:fps={settings.fps}"
-                )
-            elif abs(seg.crop_x - 0.5) > 0.005 or abs(seg.crop_y - 0.5) > 0.005:
-                # Move the crop centre without zooming.
-                dx = int((0.5 - seg.crop_x) * settings.width)
-                dy = int((0.5 - seg.crop_y) * settings.height)
-                parts.append(f"crop={settings.width}:{settings.height}:{dx}:{dy}")
-            parts.append("setsar=1")
+            parts.append(segment_video_filter(seg, settings.width, settings.height))
             seg_filters.append(",".join(parts))
 
         # ---- audio filter ---------------------------------------------------------
@@ -775,9 +796,12 @@ class ClipRenderer:
             parts.append(v)
 
         for i, seg in enumerate(segments):
+            if not has_audio:
+                parts.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={seg.duration:.6f}[a{i}]")
+                continue
             a = f"[{i}:a]"
             if seg.muted:
-                a += "anull"
+                a += "volume=0"
             elif af:
                 a += af
             else:
@@ -832,21 +856,18 @@ class ClipRenderer:
             result.cancelled = True
             return result
         except Exception as exc:
-            log.warning("timeline render failed (%s); retrying without captions", exc)
+            log.warning("timeline render failed (%s); retrying on CPU", exc)
+            enc = choose_encoder("cpu", settings.codec)
+            result.encoder = enc.description
             result.warnings.append(f"Timeline filter chain failed, retried simply: {exc}")
-            simple_parts = []
-            for i, seg in enumerate(segments):
-                simple_parts.append(f"[{i}:v]{seg_filters[i]}[v{i}]")
-                simple_parts.append(f"[{i}:a]anull[a{i}]")
-            labels = "".join(f"[v{i}][a{i}]" for i in range(len(segments)))
-            simple_parts.append(f"{labels}concat=n={len(segments)}:v=1:a=1[vv][aa]")
-            cmd = cmd[:1 + len(input_args)] + [
-                *_filter_args(";".join(simple_parts), self.work_dir, output.stem),
-                "-map", "[vv]", "-map", "[aa]",
+            # Preserve the complete graph: dropping speed/captions here silently
+            # exports a different edit. Only the encoder is allowed to change.
+            cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y", *input_args,
+                *_filter_args(filter_complex, self.work_dir, output.stem),
+                "-map", final_v, "-map", final_a,
                 "-c:v", enc.video_encoder, "-preset", "medium", "-crf", str(settings.crf),
                 "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart", str(output),
-            ]
+                "-movflags", "+faststart", str(output)]
             FFmpegRunner(total_duration=total, cancel_cb=cancel_cb).run(
                 cmd[1:], total_duration=total
             )

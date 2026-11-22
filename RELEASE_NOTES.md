@@ -1,3 +1,29 @@
+# CLIPOS 1.1.0 — Creator workflow update
+
+By **Analoggeek**.
+
+- Restored persistent timeline edits in batch exports; corrected crop, zoom,
+  mute, caption retiming and hardware-to-CPU recovery without discarding edits.
+- Offline clean, podcast, gaming and story recipes; configurable gameplay-above,
+  facecam-below composition and real four-second draft previews.
+- Permission-confirmed public YouTube imports via yt-dlp, highest available
+  streams; no DRM, login or access-control bypass.
+- Refreshed native theme, navigation icons and app logo.
+- Opt-in GitHub update checks and compatible installer downloads. Installation
+  remains manual, not a silent self-updater. Project data is separate from app
+  binaries; back up important projects before upgrading.
+- Public static download website under `docs/` with Analoggeek branding.
+- Isolated Intel wheels and architecture verification; no partial release may
+  publish as latest if any platform's build fails.
+
+Validation: 182 local tests and 35 real-video E2E checks passed before release.
+Native CI results must be checked separately. Physical Mac/Windows upgrade tests,
+real-time compositing, live YouTube downloads and full offline speech-model runs
+are not certified. Recipes are deterministic, not newly trained AI weights.
+Engagement or virality is not guaranteed.
+
+---
+
 # CLIPOS 1.0.0 — AI Automatic Video Clipping Studio
 
 **CLIPOS** is a native, offline-first desktop application that turns a long video

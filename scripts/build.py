@@ -30,7 +30,7 @@ BUILD = ROOT / "build"
 
 APP_NAME = "CLIPOS"
 BUNDLE_ID = "com.clipos.studio"
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 
 def _write_summary(title: str, body: str) -> None:
@@ -352,7 +352,7 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
     for src, dest in bundles:
         args += ["--add-data", f"{ROOT / src}{sep}{dest}"]
     args += [
-        "--hidden-import", "clipos",
+        "--collect-all", "yt_dlp", "--hidden-import", "clipos",
         "--collect-submodules", "clipos",
         "--collect-all", "faster_whisper",
         "--collect-all", "cv2",
