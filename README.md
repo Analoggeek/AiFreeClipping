@@ -448,8 +448,11 @@ its ready state. Every build runs it automatically.
 # End-to-end pipeline test
 python scripts/e2e_test.py
 
-# Unit tests — timeline model and render_timeline() against real FFmpeg
-python -m unittest tests.test_timeline -v
+# Unit tests — timeline model, render_timeline() and GUI regressions
+python -m unittest discover -s tests -t .
+
+# Screenshot every page with real data (writes to /tmp/clipos_gui)
+./scripts/run_headless.sh scripts/gui_walkthrough.py
 
 # Verify a frozen bundle
 python scripts/verify_bundle.py dist

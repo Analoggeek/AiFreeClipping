@@ -25,7 +25,9 @@ class CaptionPreview(QWidget):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setMinimumSize(300, 533)
+        # Tall enough to show a 9:16 frame, short enough that the caption
+        # label underneath is not pushed out of the card.
+        self.setMinimumSize(300, 480)
         self.style_key = "bold_viral"
         self.text = "HERE IS THE TRUTH ABOUT THE SKY"
         self.highlight = {"TRUTH", "SKY"}

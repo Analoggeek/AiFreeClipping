@@ -456,9 +456,14 @@ def _candidate_windows(
         for c in visual.scenes.times:
             anchors.add(round(c, 2))
     if not anchors:
-        anchors = {round(x, 2) for x in [0.0] + list(range(int(duration), 0, -int(max_dur)))}
+        # No transcript and no scene cuts: fall back to evenly spaced
+        # anchors across the whole source.
+        step_back = max(1, int(max_dur))
+        anchors = {round(x, 2) for x in [0.0] + list(range(int(duration), 0, -step_back))}
     anchors.add(0.0)
-    anchors = {a for a in anchors if 0 <= a <= max(0.0, duration - min_dur)}
+    # An anchor is usable when a full-length clip can still start there.
+    latest = max(0.0, duration - min_dur)
+    anchors = {a for a in anchors if 0 <= a <= latest}
 
     windows: list[tuple[float, float]] = []
     for a in sorted(anchors):
@@ -467,6 +472,12 @@ def _candidate_windows(
             e = min(duration, a + length)
             if e - s >= min_dur - 0.01:
                 windows.append((s, e))
+
+    # The source may be shorter than the shortest requested clip.  Rather
+    # than returning nothing, offer the whole source as one clip so the
+    # user still gets a usable result.
+    if not windows and duration > 1.0:
+        windows.append((0.0, duration))
     # Deduplicate
     seen = set()
     out = []
