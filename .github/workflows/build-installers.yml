@@ -1,0 +1,179 @@
+name: Build installers
+
+# Builds the native installers on the operating systems they target:
+#   - Windows  -> dist/CLIPOS-Setup.exe   (Inno Setup, a genuine installer)
+#   - macOS    -> dist/CLIPOS.app + dist/CLIPOS-<version>.dmg
+#
+# The artifacts are attached to every release and can be downloaded straight
+# from the Releases page.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to stamp into the installer"
+        required: false
+        default: ""
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Fetch the native binaries
+        shell: bash
+        run: python scripts/vendor_ffmpeg.py
+
+      - name: Run the end-to-end test
+        shell: bash
+        run: python scripts/e2e_test.py
+
+      - name: Install Inno Setup
+        shell: bash
+        run: choco install innosetup --no-progress -y
+
+      - name: Build the installer
+        shell: bash
+        run: python scripts/build.py windows --skip-tests --skip-vendor
+
+      - name: Verify the frozen bundle
+        shell: bash
+        run: python scripts/verify_bundle.py dist
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipos-windows
+          path: |
+            dist/CLIPOS-Setup.exe
+          if-no-files-found: error
+  macos:
+    name: macOS app and disk image
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Fetch the native binaries
+        run: python scripts/vendor_ffmpeg.py
+
+      - name: Run the end-to-end test
+        run: python scripts/e2e_test.py
+
+      - name: Build the application and the disk image
+        run: python scripts/build.py macos --skip-tests --skip-vendor
+
+      - name: Verify the frozen bundle
+        run: python scripts/verify_bundle.py dist
+
+      - name: Upload the application and the disk image
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipos-macos
+          path: |
+            dist/CLIPOS.app
+            dist/CLIPOS-*.dmg
+          if-no-files-found: error
+
+  macos-intel:
+    name: macOS app (Intel)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Fetch the native binaries
+        run: python scripts/vendor_ffmpeg.py
+
+      - name: Build the application
+        run: python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
+
+      - name: Upload the application
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipos-macos-intel
+          path: dist/CLIPOS.app
+          if-no-files-found: error
+
+  linux:
+    name: Linux package
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Install the build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libpython3.11
+
+      - name: Fetch the native binaries
+        run: python scripts/vendor_ffmpeg.py
+
+      - name: Run the end-to-end test
+        run: python scripts/e2e_test.py
+
+      - name: Build the package
+        run: python scripts/build.py linux --skip-tests --skip-vendor
+
+      - name: Upload the package
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipos-linux
+          path: |
+            dist/CLIPOS_*.deb
+            dist/CLIPOS-*.zip
+          if-no-files-found: error

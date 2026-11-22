@@ -177,45 +177,28 @@ def build_windows() -> Path:
     if not app_dir.exists():
         raise SystemExit(f"PyInstaller did not produce {app_dir}")
 
-    # Try Inno Setup first, then NSIS; both produce a native .exe installer.
-    iscc = shutil.which("iscc") or shutil.which("ISCC.exe")
-    if iscc:
-        iss = BUILD / "clipos.iss"
-        iss.write_text(_inno_script(), encoding="utf-8")
-        run([iscc, str(iss)])
-        produced = Path(BUILD / "dist" / f"{APP_NAME}-Setup.exe")
-        target = DIST / produced.name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(produced, target)
-        print(f"[build] installer: {target}")
-        return target
+    # The installer back-end lives in its own module so it can be tested and
+    # reused without running the whole PyInstaller pipeline.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from installer_windows import build_windows_installer
 
-    makensis = shutil.which("makensis") or shutil.which("makensis.exe")
-    if makensis:
-        nsi = BUILD / "clipos.nsi"
-        nsi.write_text(_nsis_script(), encoding="utf-8")
-        run([makensis, str(nsi)])
-        produced = Path(BUILD / "dist" / f"{APP_NAME}-Setup.exe")
-        target = DIST / produced.name
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(produced, target)
-        print(f"[build] installer: {target}")
-        return target
+    try:
+        target = build_windows_installer(app_dir, DIST)
+    except SystemExit as exc:
+        print(f"[build] WARNING: {exc}")
+        print("[build] Falling back to a portable zip.")
+        import zipfile
 
-    print("[build] Neither Inno Setup nor NSIS was found.")
-    print("        Install one of them to produce a native .exe installer:")
-    print("          - Inno Setup: https://jrsoftware.org/isdl.php")
-    print("          - NSIS:       https://nsis.sourceforge.io/Download")
-    print("        Producing a portable zip instead.")
-    import zipfile
+        zip_path = DIST / f"{APP_NAME}-{VERSION}-portable-win.zip"
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for p in app_dir.rglob("*"):
+                if p.is_file():
+                    zf.write(p, Path(APP_NAME) / p.relative_to(app_dir))
+        print(f"[build] portable build: {zip_path}")
+        return zip_path
 
-    zip_path = DIST / f"{APP_NAME}-{VERSION}-portable-win.zip"
-    with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for p in app_dir.rglob("*"):
-            if p.is_file():
-                zf.write(p, Path(APP_NAME) / p.relative_to(app_dir))
-    print(f"[build] portable build: {zip_path}")
-    return zip_path
+    print(f"[build] installer: {target}")
+    return target
 
 
 def build_macos(target_arch: str = "") -> Path:
@@ -232,53 +215,14 @@ def build_macos(target_arch: str = "") -> Path:
     if not app.exists():
         raise SystemExit(f"PyInstaller did not produce {app}")
 
-    _polish_macos_bundle(app)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from installer_macos import build_dmg, polish_app_bundle
 
-    dmg = DIST / f"{APP_NAME}-{VERSION}.dmg"
-    if dmg.exists():
-        dmg.unlink()
+    polish_app_bundle(app)
 
-    # A drag-to-install disk image: the app sits next to a symlink to
-    # /Applications, which is what people expect from a Mac installer.
-    staging = BUILD / "dmg-staging"
-    shutil.rmtree(staging, ignore_errors=True)
-    staging.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(app, staging / f"{APP_NAME}.app", symlinks=True)
-    os.symlink("/Applications", staging / "Applications")
-
-    run([
-        "hdiutil", "create", "-volname", APP_NAME,
-        "-srcfolder", str(staging),
-        "-ov", "-format", "UDZO", str(dmg),
-    ])
+    dmg = build_dmg(app, DIST)
     print(f"[build] disk image: {dmg}")
     return dmg
-
-
-def _polish_macos_bundle(app: Path) -> None:
-    """Give the .app a proper Info.plist and a working dock icon."""
-    plist = app / "Contents" / "Info.plist"
-    if not plist.exists():
-        return
-    text = plist.read_text(encoding="utf-8")
-    additions = {
-        "CFBundleIdentifier": f"<string>{BUNDLE_ID}</string>",
-        "CFBundleShortVersionString": f"<string>{VERSION}</string>",
-        "CFBundleVersion": f"<string>{VERSION}</string>",
-        "CFBundleName": f"<string>{APP_NAME}</string>",
-        "NSHighResolutionCapable": "<true/>",
-        "LSMinimumSystemVersion": "<string>11.0</string>",
-        "NSHumanReadableCopyright": f"<string>CLIPOS {VERSION}</string>",
-    }
-    for key, value in additions.items():
-        if f"<key>{key}</key>" in text:
-            continue
-        text = text.replace(
-            "</dict>",
-            f"    <key>{key}</key>\n    {value}\n</dict>",
-        )
-    plist.write_text(text, encoding="utf-8")
-    print("[build] Info.plist updated")
 
 
 def verify_bundle(target: str) -> None:
@@ -333,94 +277,6 @@ def build_linux() -> Path:
     for path in installers:
         print(f"[build] installer: {path}")
     return installers[0]
-
-
-def _inno_script() -> str:
-    return f"""[Setup]
-AppId={{B7C2E9A4-9D1F-4E6B-9C3A-5F2D8E1B4A70}}
-AppName={APP_NAME}
-AppVersion={VERSION}
-DefaultDirName={{autopf}}\\{APP_NAME}
-DefaultGroupName={APP_NAME}
-OutputBaseFilename={APP_NAME}-Setup
-OutputDir=..\\build\\dist
-Compression=lzma2
-SolidCompression=yes
-WizardStyle=modern
-ArchitecturesInstallIn64BitMode=x64
-DisableProgramGroupPage=yes
-UninstallDisplayIcon={{app}}\\{APP_NAME}.exe
-AppPublisher=CLIPOS
-AppComments=Turn long videos into upload-ready shorts, entirely offline.
-
-[Files]
-Source: "dist\\{APP_NAME}\\*"; DestDir: "{{app}}"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-[Icons]
-Name: "{{group}}\\{APP_NAME}"; Filename: "{{app}}\\{APP_NAME}.exe"
-Name: "{{autodesktop}}\\{APP_NAME}"; Filename: "{{app}}\\{APP_NAME}.exe"
-
-[Run]
-Filename: "{{app}}\\{APP_NAME}.exe"; Description: "Launch {APP_NAME}"; Flags: nowait postinstall skipifsilent
-"""
-
-
-def _nsis_script() -> str:
-    """NSIS script — a fallback when Inno Setup is not installed.
-
-    NSIS is available as a single ``makensis`` executable and produces the
-    same kind of native Windows installer.
-    """
-    return f""";!NSIS v3.0
-Unicode true
-Name "{APP_NAME}"
-OutFile "..\\build\\dist\\{APP_NAME}-Setup.exe"
-InstallDir "$PROGRAMFILES64\\{APP_NAME}"
-InstallDirRegKey HKLM "Software\\{APP_NAME}" "InstallDir"
-RequestExecutionLevel admin
-SetCompressor /SOLID lzma
-
-!include MUI2.nsh
-!include FileFunc.nsh
-
-!define MUI_ABORTWARNING
-!define MUI_FINISHPAGE_RUN "$INSTDIR\\{APP_NAME}.exe"
-
-Section "Install"
-  SetOutPath "$INSTDIR"
-  File /r "dist\\{APP_NAME}\\*"
-  WriteRegStr HKLM "Software\\{APP_NAME}" "InstallDir" "$INSTDIR"
-
-  CreateDirectory "$SMPROGRAMS\\{APP_NAME}"
-  CreateShortcut "$SMPROGRAMS\\{APP_NAME}\\{APP_NAME}.lnk" "$INSTDIR\\{APP_NAME}.exe"
-  CreateShortcut "$SMPROGRAMS\\{APP_NAME}\\Uninstall.lnk" "$INSTDIR\\uninstall.exe"
-  CreateShortcut "$DESKTOP\\{APP_NAME}.lnk" "$INSTDIR\\{APP_NAME}.exe"
-
-  WriteUninstaller "$INSTDIR\\uninstall.exe"
-  WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\
-    "DisplayName" "{APP_NAME}"
-  WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\
-    "DisplayIcon" "$INSTDIR\\{APP_NAME}.exe"
-  WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\
-    "Publisher" "CLIPOS"
-  WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\
-    "DisplayVersion" "{VERSION}"
-  WriteRegStr HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\
-    "UninstallString" '"$INSTDIR\\uninstall.exe"'
-  WriteRegDWORD HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\
-    "NoModify" 1
-SectionEnd
-
-Section "Uninstall"
-  Delete "$DESKTOP\\{APP_NAME}.lnk"
-  Delete "$SMPROGRAMS\\{APP_NAME}\\{APP_NAME}.lnk"
-  Delete "$SMPROGRAMS\\{APP_NAME}\\Uninstall.lnk"
-  RMDir /r "$INSTDIR"
-  RMDir "$SMPROGRAMS\\{APP_NAME}"
-  DeleteRegKey HKLM "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}"
-  DeleteRegKey HKLM "Software\\{APP_NAME}"
-SectionEnd
-"""
 
 
 def main() -> int:

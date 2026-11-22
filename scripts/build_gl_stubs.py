@@ -124,6 +124,73 @@ def _pyside_lib_dir() -> Path | None:
     return None
 
 
+def _bundled_lib_dirs() -> list[Path]:
+    """Every directory inside the venv that ships shared libraries.
+
+    OpenCV bundles its own Qt5 build (``opencv_python.libs``) which needs
+    OpenGL symbols that Qt6 alone never asks for.  Scanning only the Qt6
+    directory produced a stub that was missing e.g. ``glMatrixMode``, and
+    importing cv2 then failed with "undefined symbol".
+    """
+    dirs: list[Path] = []
+    seen: set[Path] = set()
+    for root in (ROOT / ".venv",):
+        if not root.exists():
+            continue
+        for path in root.rglob("*.libs"):
+            if path.is_dir() and path not in seen:
+                seen.add(path)
+                dirs.append(path)
+        # PySide6 keeps the real Qt libraries in Qt/lib.
+        try:
+            import PySide6  # noqa: F401
+
+            base = Path(PySide6.__file__).parent
+            for cand in (base / "Qt" / "lib", base / "QtCore"):
+                if cand.is_dir() and cand not in seen:
+                    seen.add(cand)
+                    dirs.append(cand)
+        except Exception:
+            pass
+    return dirs
+
+
+def _scan_all_libs_for(prefixes: tuple[str, ...]) -> set[str]:
+    """Undefined symbols in the given family across every bundled library."""
+    found: set[str] = set()
+    for lib_dir in _bundled_lib_dirs():
+        for lib in sorted(lib_dir.glob("*.so*")):
+            if lib.is_symlink() or not lib.is_file():
+                continue
+            try:
+                out = subprocess.run(
+                    ["nm", "-D", "--undefined-only", str(lib)],
+                    capture_output=True, text=True, timeout=60,
+                )
+            except Exception:
+                continue
+            if out.returncode != 0:
+                continue
+            for line in out.stdout.splitlines():
+                parts = line.split()
+                if not parts or parts[0] not in ("U", "w"):
+                    continue
+                raw = parts[-1]
+                sym, _, ver = raw.partition("@")
+                if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", sym):
+                    continue
+                if sym.startswith(SKIP_PREFIXES):
+                    continue
+                if ver:
+                    # Versioned requests belong to a specific library; a
+                    # versionless stub cannot satisfy them.
+                    continue
+                if prefixes and not sym.startswith(prefixes):
+                    continue
+                found.add(sym)
+    return found
+
+
 def _resolve_lib(lib_dir: Path, lib_name: str) -> Path | None:
     """Find a library by name, tolerating the .so.N versioning suffix."""
     direct = lib_dir / lib_name
@@ -317,10 +384,16 @@ def main() -> int:
                         continue
                 needed.add(sym)
 
+        if not tag and prefixes:
+            # Scan every bundled library, not just the Qt6 ones: OpenCV ships
+            # its own Qt5 build that pulls in additional OpenGL entry points.
+            needed |= _scan_all_libs_for(prefixes)
+
         # Remove symbols already defined by other Qt libs (avoid duplicate defs)
-        for other in lib_dir.glob("*.so*"):
-            if other.name.startswith("libQt6"):
-                needed -= defined_symbols(lib_dir, other.name)
+        for other_dir in _bundled_lib_dirs():
+            for other in other_dir.glob("*.so*"):
+                if other.name.startswith("libQt6") or other.name.startswith("libQt5"):
+                    needed -= defined_symbols(other_dir, other.name)
         # Remove symbols another stub already provides
         needed -= claimed
 

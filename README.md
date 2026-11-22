@@ -390,15 +390,50 @@ python scripts/build.py linux        # -> dist/CLIPOS (AppImage)
 ```
 
 The build script installs PyInstaller, vendors the native binaries, runs the
-end-to-end test, freezes the application, and then verifies the frozen bundle
-before it reports success.
+end-to-end test, freezes the application, packages it, and then verifies the
+frozen bundle before it reports success.
 
-* **Windows**: PyInstaller produces a one-folder application; `scripts/build.py`
-  wraps it in an Inno Setup `.exe` installer if `iscc` is available, otherwise it
-  produces a portable zip.
-* **macOS**: PyInstaller produces `CLIPOS.app`; `hdiutil` builds the `.dmg`.
+* **Windows**: PyInstaller produces a one-folder application, which is then
+  wrapped in a native `.exe` installer. Three back-ends are tried in order:
+
+  | Back-end | Produces | Needs |
+  |---|---|---|
+  | Inno Setup | `CLIPOS-Setup.exe` | `iscc` on the PATH |
+  | NSIS | `CLIPOS-Setup.exe` | `makensis` on the PATH |
+  | Built-in launcher | `CLIPOS-Setup.exe` | a C cross compiler — `pip install ziglang` |
+
+  The built-in launcher is a small Win32 program that carries the frozen
+  application inside itself and unpacks it on the first run, so a Windows
+  installer can be produced on any machine — including Linux and macOS.
+
+* **macOS**: PyInstaller produces `CLIPOS.app`; `hdiutil` builds a
+  drag-to-install `.dmg` with the app next to an `/Applications` symlink.
   Build on each architecture, or use `--target-arch` for a universal build.
-* **Linux**: PyInstaller produces a folder and a portable zip.
+  `scripts/installer_macos.py` can also sign the bundle with a Developer ID
+  and submit it to Apple's notary service, so Gatekeeper lets the app open
+  without a warning.
+
+* **Linux**: PyInstaller produces a folder, a portable zip and a native
+  `.deb` (plus an `.rpm` where `rpmbuild` is available).
+
+### Building the installers from GitHub Actions
+
+Two workflows do this for you, on the real target operating systems:
+
+| Workflow | Trigger | Produces |
+|---|---|---|
+| `build-installers.yml` | every push to `main`, every pull request | the installer for each platform, as a downloadable artifact |
+| `release.yml` | pushing a `v*` tag | the installers attached to a GitHub release |
+
+The Windows job runs on `windows-2022`, the macOS jobs on `macos-14`
+(Apple Silicon) and `macos-13` (Intel), and the Linux job on `ubuntu-22.04`.
+Each job runs the end-to-end test and the bundle verifier before it uploads
+anything.
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0        # the release workflow publishes the installers
+```
 
 ### If PyInstaller cannot find the Python shared library
 

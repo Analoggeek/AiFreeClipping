@@ -1,0 +1,150 @@
+name: Release
+
+# Publishes the native installers to a GitHub release.
+#
+# Push a tag that starts with "v" and the workflow builds the Windows
+# installer, the macOS application and disk image, and the Linux package,
+# then attaches them to the release.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish a release for"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-2022
+            artifact: clipos-windows
+            files: |
+              dist/CLIPOS-Setup.exe
+          - name: macOS (Apple Silicon)
+            os: macos-14
+            artifact: clipos-macos
+            files: |
+              dist/CLIPOS.app
+              dist/CLIPOS-*.dmg
+          - name: macOS (Intel)
+            os: macos-13
+            artifact: clipos-macos-intel
+            files: |
+              dist/CLIPOS.app
+          - name: Linux
+            os: ubuntu-22.04
+            artifact: clipos-linux
+            files: |
+              dist/CLIPOS_*.deb
+              dist/CLIPOS-*.zip
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Install the platform build tools
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            choco install innosetup --no-progress -y
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y libpython3.11
+          fi
+
+      - name: Fetch the native binaries
+        run: python scripts/vendor_ffmpeg.py
+
+      - name: Run the end-to-end test
+        run: python scripts/e2e_test.py
+
+      - name: Build
+        shell: bash
+        run: |
+          case "$RUNNER_OS" in
+            Windows) python scripts/build.py windows --skip-tests --skip-vendor ;;
+            Linux)   python scripts/build.py linux   --skip-tests --skip-vendor ;;
+            *)
+              if [ "${{ matrix.name }}" = "macOS (Intel)" ]; then
+                python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
+              else
+                python scripts/build.py macos --skip-tests --skip-vendor
+              fi
+              ;;
+          esac
+
+      - name: Verify the frozen bundle
+        run: python scripts/verify_bundle.py dist
+
+      - name: Upload the build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  publish:
+    name: Attach the installers to the release
+    needs: build
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download the artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: CLIPOS ${{ github.event.inputs.tag || github.ref_name }}
+          body: |
+            ## CLIPOS — AI Automatic Video Clipping Studio
+
+            Turn long videos into upload-ready shorts, entirely offline.
+
+            | Platform | File | Install |
+            |---|---|---|
+            | Windows 10/11 | `CLIPOS-Setup.exe` | Run it. No admin rights needed. |
+            | macOS (Apple Silicon) | `CLIPOS-*.dmg` | Drag CLIPOS into Applications. |
+            | macOS (Intel) | `CLIPOS.app` | Drag CLIPOS into Applications. |
+            | Linux | `CLIPOS_*.deb` | `sudo apt install ./CLIPOS_*.deb` |
+
+            Every package is offline: it carries the application, the Python
+            runtime, FFmpeg, the face-detection models and the sound effects.
+            The only thing you download separately is the speech-to-text model
+            (open **AI Models** in the app), after which the whole workflow
+            runs without an internet connection.
+
+          files: |
+            artifacts/**/CLIPOS-Setup.exe
+            artifacts/**/CLIPOS-*.dmg
+            artifacts/**/CLIPOS.app/**
+            artifacts/**/CLIPOS_*.deb
+            artifacts/**/CLIPOS-*.zip
+          fail_on_unmatched_files: false

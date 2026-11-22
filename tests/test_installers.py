@@ -1,0 +1,292 @@
+"""Tests for the Windows and macOS installer packaging.
+
+These do not run Inno Setup, NSIS or ``hdiutil`` — they check the things that
+actually break: a malformed installer script, a missing icon, an
+``Info.plist`` that does not describe the bundle, or a build pipeline that
+forgets to call the packaging step at all.
+"""
+from __future__ import annotations
+
+import plistlib
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from installer_macos import (  # noqa: E402
+    APP_NAME,
+    BUNDLE_ID,
+    PLIST_ENTRIES,
+    VERSION,
+    polish_app_bundle,
+)
+from installer_windows import inno_script, nsis_script  # noqa: E402
+
+
+class TestInnoSetupScript(unittest.TestCase):
+    """The Inno Setup script must be complete and self-consistent."""
+
+    def setUp(self):
+        self.script = inno_script()
+
+    def test_declares_every_mandatory_section(self):
+        for section in ("[Setup]", "[Files]", "[Icons]", "[Run]", "[Tasks]",
+                        "[UninstallDelete]"):
+            self.assertIn(section, self.script, f"missing {section}")
+
+    def test_installs_the_frozen_application(self):
+        self.assertIn('Source: "dist\\CLIPOS\\*"', self.script)
+        self.assertIn('DestDir: "{app}"', self.script)
+
+    def test_creates_a_start_menu_shortcut(self):
+        self.assertIn('{group}\\CLIPOS', self.script)
+
+    def test_offers_a_desktop_shortcut_as_an_optional_task(self):
+        self.assertIn('{autodesktop}\\CLIPOS', self.script)
+        self.assertIn('Name: "desktopicon"', self.script)
+
+    def test_registers_an_uninstaller(self):
+        self.assertIn("UninstallDisplayIcon", self.script)
+        self.assertIn("UninstallDisplayName", self.script)
+
+    def test_does_not_require_administrator_rights(self):
+        # A creator tool should install for a standard user without a UAC
+        # prompt; {autopf} then resolves inside the user's own profile.
+        self.assertIn("PrivilegesRequired=lowest", self.script)
+        self.assertIn("PrivilegesRequiredOverridesAllowed=dialog", self.script)
+
+    def test_uses_the_same_app_id_for_install_and_uninstall(self):
+        # Inno derives the uninstall registry key from AppId, so it must be
+        # a fixed GUID rather than something that changes between builds.
+        app_id = next(
+            line for line in self.script.splitlines() if line.startswith("AppId=")
+        )
+        value = app_id.split("=", 1)[1].strip()
+        self.assertTrue(value.startswith("{") and value.endswith("}"))
+        self.assertEqual(len(value.strip("{}")), 32)
+
+    def test_version_is_stamped_into_the_installer(self):
+        self.assertIn(f"AppVersion={VERSION}", self.script)
+        self.assertIn(f"OutputBaseFilename={APP_NAME}-Setup", self.script)
+
+    def test_uses_lzma2_compression(self):
+        self.assertIn("Compression=lzma2", self.script)
+        self.assertIn("SolidCompression=yes", self.script)
+
+    def test_launches_the_app_after_installing(self):
+        self.assertIn("postinstall", self.script)
+        self.assertIn(f"{{app}}\\{APP_NAME}.exe", self.script)
+
+
+class TestNsisScript(unittest.TestCase):
+    """The NSIS fallback must be equally complete."""
+
+    def setUp(self):
+        self.script = nsis_script()
+
+    def test_declares_every_mandatory_section(self):
+        for section in ("Section \"Install\"", "Section \"Uninstall\""):
+            self.assertIn(section, self.script)
+
+    def test_installs_the_frozen_application(self):
+        self.assertIn('File /r "dist\\CLIPOS\\*"', self.script)
+        self.assertIn('SetOutPath "$INSTDIR"', self.script)
+
+    def test_creates_shortcuts_and_an_uninstaller(self):
+        self.assertIn('CreateShortcut "$SMPROGRAMS\\CLIPOS\\CLIPOS.lnk"', self.script)
+        self.assertIn('CreateShortcut "$DESKTOP\\CLIPOS.lnk"', self.script)
+        self.assertIn('WriteUninstaller "$INSTDIR\\uninstall.exe"', self.script)
+
+    def test_registers_the_uninstall_entry(self):
+        self.assertIn("CurrentVersion\\Uninstall\\CLIPOS", self.script)
+        self.assertIn('"UninstallString"', self.script)
+
+    def test_cleans_up_on_uninstall(self):
+        self.assertIn('RMDir /r "$INSTDIR"', self.script)
+        self.assertIn('Delete "$DESKTOP\\CLIPOS.lnk"', self.script)
+
+    def test_installs_for_a_standard_user(self):
+        # RequestExecutionLevel user keeps the installer free of a UAC
+        # prompt; the target directory lives inside the user profile.
+        self.assertIn("RequestExecutionLevel user", self.script)
+        self.assertIn("$LOCALAPPDATA\\Programs\\CLIPOS", self.script)
+
+    def test_removes_the_uninstall_registry_key(self):
+        self.assertIn('DeleteRegKey HKCU "Software\\Microsoft\\Windows'
+                      '\\CurrentVersion\\Uninstall\\CLIPOS"', self.script)
+
+
+class TestMacOSBundle(unittest.TestCase):
+    """The .app bundle must be described correctly by its Info.plist."""
+
+    def _make_bundle(self, tmp: Path) -> Path:
+        app = tmp / f"{APP_NAME}.app"
+        (app / "Contents" / "MacOS").mkdir(parents=True)
+        (app / "Contents" / "Info.plist").write_bytes(plistlib.dumps({
+            "CFBundleName": APP_NAME,
+            "CFBundleExecutable": APP_NAME,
+        }))
+        (app / "Contents" / "MacOS" / APP_NAME).write_bytes(b"\xcf\xfa\xed\xfe")
+        return app
+
+    def test_info_plist_is_completed(self):
+        with tempfile.TemporaryDirectory() as td:
+            app = self._make_bundle(Path(td))
+            polish_app_bundle(app)
+            info = plistlib.loads((app / "Contents" / "Info.plist").read_bytes())
+
+        for key in ("CFBundleIdentifier", "CFBundleShortVersionString",
+                    "CFBundleIconFile", "LSMinimumSystemVersion",
+                    "NSHighResolutionCapable", "CFBundlePackageType"):
+            self.assertIn(key, info, f"Info.plist is missing {key}")
+
+    def test_bundle_identifier_is_a_reverse_dns_name(self):
+        self.assertEqual(PLIST_ENTRIES["CFBundleIdentifier"], BUNDLE_ID)
+        self.assertTrue(BUNDLE_ID.startswith("com."))
+        self.assertIn(".", BUNDLE_ID)
+
+    def test_declares_itself_a_video_application(self):
+        self.assertEqual(
+            PLIST_ENTRIES["LSApplicationCategoryType"], "public.app-category.video"
+        )
+
+    def test_states_the_minimum_macos_version(self):
+        self.assertEqual(PLIST_ENTRIES["LSMinimumSystemVersion"], "11.0")
+
+    def test_installs_the_icns_icon(self):
+        with tempfile.TemporaryDirectory() as td:
+            app = self._make_bundle(Path(td))
+            polish_app_bundle(app)
+            icon = app / "Contents" / "Resources" / "app_icon.icns"
+            self.assertTrue(icon.exists())
+            self.assertGreater(icon.stat().st_size, 1024)
+
+    def test_keeps_the_executable_name_in_sync(self):
+        with tempfile.TemporaryDirectory() as td:
+            app = self._make_bundle(Path(td))
+            polish_app_bundle(app)
+            info = plistlib.loads((app / "Contents" / "Info.plist").read_bytes())
+            self.assertEqual(info["CFBundleExecutable"], APP_NAME)
+            self.assertTrue((app / "Contents" / "MacOS" / APP_NAME).exists())
+
+
+class TestSelfExtractingInstaller(unittest.TestCase):
+    """The toolchain-independent installer must produce a real PE file.
+
+    This is the path used when neither Inno Setup nor NSIS is installed on
+    the build machine, so it is the one that has to work everywhere.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from installer_windows import _find_windows_compiler
+
+        cls.compiler = _find_windows_compiler()
+        if cls.compiler is None:
+            raise unittest.SkipTest(
+                "no Windows cross compiler available "
+                "(pip install ziglang, or apt install mingw-w64)"
+            )
+
+        import tempfile
+
+        cls.tmp = Path(tempfile.mkdtemp())
+        app = cls.tmp / "CLIPOS"
+        (app / "_internal" / "resources" / "ffmpeg" / "win32-x64").mkdir(parents=True)
+        (app / "CLIPOS.exe").write_bytes(b"MZ fake")
+        (app / "_internal" / "resources" / "ffmpeg" / "win32-x64"
+         / "ffmpeg.exe").write_bytes(b"FAKE FFMPEG")
+        (app / "app_icon.ico").write_bytes(b"ICO")
+
+        from installer_windows import build_selfextracting_installer
+
+        cls.installer = build_selfextracting_installer(app, cls.tmp / "out")
+
+    def test_the_installer_is_a_windows_executable(self):
+        data = self.installer.read_bytes()
+        self.assertEqual(data[:2], b"MZ", "not a DOS/PE image")
+        pe_offset = int.from_bytes(data[0x3C:0x40], "little")
+        self.assertEqual(data[pe_offset:pe_offset + 4], b"PE\x00\x00")
+
+    def test_the_executable_targets_64_bit_windows(self):
+        data = self.installer.read_bytes()
+        pe_offset = int.from_bytes(data[0x3C:0x40], "little")
+        machine = int.from_bytes(data[pe_offset + 4:pe_offset + 6], "little")
+        self.assertEqual(machine, 0x8664, "not an x86-64 image")
+
+    def test_the_executable_has_no_console_window(self):
+        data = self.installer.read_bytes()
+        pe_offset = int.from_bytes(data[0x3C:0x40], "little")
+        optional = pe_offset + 24
+        magic = int.from_bytes(data[optional:optional + 2], "little")
+        self.assertEqual(magic, 0x20B, "expected a PE32+ image")
+        subsystem = int.from_bytes(data[optional + 68:optional + 70], "little")
+        self.assertEqual(subsystem, 2, "expected the GUI subsystem")
+
+    def test_the_trailer_records_the_payload(self):
+        import struct
+
+        data = self.installer.read_bytes()
+        magic, length, _ = struct.unpack("<8sII", data[-16:])
+        self.assertEqual(magic, b"CLIPOSPA")
+        self.assertGreater(length, 0)
+        self.assertLess(length, len(data))
+
+    def test_the_payload_is_a_valid_zip_holding_the_application(self):
+        import io
+        import struct
+        import zipfile
+
+        data = self.installer.read_bytes()
+        _, length, _ = struct.unpack("<8sII", data[-16:])
+        payload = data[-16 - length:-16]
+        self.assertEqual(payload[:2], b"PK")
+
+        with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+            self.assertIsNone(archive.testzip(), "the payload is corrupt")
+            names = archive.namelist()
+            self.assertIn("CLIPOS/CLIPOS.exe", names)
+            self.assertTrue(
+                any("ffmpeg.exe" in name for name in names),
+                "the bundled FFmpeg is missing from the installer",
+            )
+
+    def test_the_installer_carries_the_application_icon(self):
+        data = self.installer.read_bytes()
+        # The icon travels inside the payload, so it must appear in the file.
+        self.assertIn(b"app_icon.ico", data)
+
+
+class TestBuildPipeline(unittest.TestCase):
+    """The build script must actually reach the packaging step."""
+
+    def test_build_script_calls_the_windows_installer(self):
+        text = (ROOT / "scripts" / "build.py").read_text(encoding="utf-8")
+        self.assertIn("from installer_windows import build_windows_installer",
+                      text)
+        self.assertIn("from installer_macos import build_dmg, polish_app_bundle",
+                      text)
+
+    def test_build_script_no_longer_duplicates_the_installer_scripts(self):
+        text = (ROOT / "scripts" / "build.py").read_text(encoding="utf-8")
+        # The scripts now live in their own modules so they can be tested.
+        self.assertNotIn("def _inno_script", text)
+        self.assertNotIn("def _nsis_script", text)
+
+    def test_a_workflow_builds_both_platforms(self):
+        workflow = ROOT / ".github" / "workflows" / "build-installers.yml"
+        self.assertTrue(workflow.exists(), "no installer workflow")
+        text = workflow.read_text(encoding="utf-8")
+        self.assertIn("windows-2022", text)
+        self.assertIn("macos-14", text)
+        self.assertIn("scripts/build.py windows", text)
+        self.assertIn("scripts/build.py macos", text)
+        self.assertIn("innosetup", text.lower())
+
+
+if __name__ == "__main__":
+    unittest.main()
