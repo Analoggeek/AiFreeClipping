@@ -68,8 +68,18 @@ jobs:
       - name: Install dependencies
         shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python scripts/install_deps.py --build
+          set -e
+          for attempt in 1 2 3; do
+            echo "### pip install attempt $attempt"
+            if python -m pip install --upgrade pip --retries 5 --timeout 60 \
+               && python scripts/install_deps.py --build; then
+              exit 0
+            fi
+            echo "### attempt $attempt failed; waiting before trying again"
+            sleep 20
+          done
+          echo "### the dependencies could not be installed" >&2
+          exit 1
 
       - name: Fetch the native binaries
         shell: bash

@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,11 +60,29 @@ ZIG = "ziglang>=0.11"
 
 
 def run(cmd: list[str], what: str) -> None:
+    """Run a command, retrying it a few times.
+
+    The download of the packages is the flakiest part of the build: the
+    network on a build machine drops connections regularly, and a build
+    that fails after half an hour of PyInstaller work is a build that has
+    to be thrown away.  Retrying the download costs a minute and saves
+    the whole run.
+    """
     print(f"\n=== {what} ===")
     print(f"$ {' '.join(cmd)}", flush=True)
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        raise SystemExit(f"{what} failed with exit code {result.returncode}")
+
+    attempts = 3 if "pip" in " ".join(cmd) else 1
+    last = 0
+    for attempt in range(1, attempts + 1):
+        result = subprocess.run(cmd)
+        if result.returncode == 0:
+            return
+        last = result.returncode
+        if attempt < attempts:
+            print(f"### {what} failed with exit code {last}; "
+                  f"trying again ({attempt}/{attempts - 1})", flush=True)
+            time.sleep(15)
+    raise SystemExit(f"{what} failed with exit code {last}")
 
 
 def pip(*args: str) -> list[str]:
