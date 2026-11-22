@@ -129,7 +129,8 @@ def main() -> int:
     ap.add_argument("--build", action="store_true",
                     help="also install the packaging tools")
     ap.add_argument("--no-opencv", action="store_true",
-                    help="skip the OpenCV repair (Windows and macOS only)")
+                    help="kept for compatibility; the OpenCV version is "
+                         "always pinned")
     args = ap.parse_args()
 
     try:
@@ -194,18 +195,13 @@ def _install(args) -> int:
             print("### the C compiler fallback is not available; "
                   "the build will rely on Inno Setup")
 
-    if not args.no_opencv:
-        # scenedetect pulled in the GUI build of OpenCV.  Remove it, then
-        # reinstall the headless build so the files it overwrote are restored.
-        for name in FORBIDDEN:
-            uninstall(name)
-        run(pip("install", "--force-reinstall", "--no-deps", HEADLESS_OPENCV),
-            "installing the headless build of OpenCV")
-    else:
-        # Windows and macOS have libGL, so the GUI build works there — but
-        # OpenCV 5 still removed CascadeClassifier, so pin the version.
-        run(pip("install", "--force-reinstall", "--no-deps", HEADLESS_OPENCV),
-            "pinning the OpenCV version")
+    # scenedetect pulls in the GUI build of OpenCV, which removed
+    # CascadeClassifier.  It has to go whatever else is done, and then
+    # the pinned build is put back so the files it overwrote are restored.
+    for name in FORBIDDEN:
+        uninstall(name)
+    run(pip("install", "--force-reinstall", "--no-deps", HEADLESS_OPENCV),
+        "installing the pinned build of OpenCV")
 
     print("\n=== verifying ===")
     check = subprocess.run(
@@ -220,6 +216,10 @@ def _install(args) -> int:
     print(check.stdout.strip())
     if check.returncode != 0:
         print(check.stderr.strip(), file=sys.stderr)
+        # The import error is the whole point of the check, so it is kept
+        # where it can be read afterwards.
+        _write_failure("the dependencies did not import cleanly\n\n"
+                       + check.stdout.strip() + "\n\n" + check.stderr.strip())
         raise SystemExit("the dependencies did not import cleanly")
     return 0
 
