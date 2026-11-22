@@ -20,6 +20,8 @@ import sys
 import unittest
 from pathlib import Path
 
+import yaml
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
@@ -188,6 +190,33 @@ class TestWorkflows(unittest.TestCase):
                     "timeout-minutes:", job,
                     f"{workflow.name} has a job without a timeout",
                 )
+
+    def test_a_step_with_shell_syntax_runs_under_bash(self):
+        """A step that uses shell syntax has to say which shell it uses.
+
+        A step without ``shell: bash`` runs under PowerShell on the
+        Windows runner, where ``mkdir -p``, ``$RUNNER_OS`` and
+        ``${PIPESTATUS[0]}`` mean nothing.  The step then fails at the
+        first line, before it does any work, and the reason is buried
+        in a shell error that says nothing about the build.
+        """
+        markers = ("$RUNNER_OS", "${PIPESTATUS", "$GITHUB_STEP_SUMMARY",
+                   "LD_LIBRARY_PATH=", "mkdir -p")
+        for workflow in self.workflows:
+            data = yaml.safe_load(workflow.read_text(encoding="utf-8"))
+            for job_name, job in (data.get("jobs") or {}).items():
+                for step in job.get("steps") or []:
+                    run = step.get("run")
+                    if not isinstance(run, str):
+                        continue
+                    if not any(marker in run for marker in markers):
+                        continue
+                    self.assertEqual(
+                        step.get("shell"), "bash",
+                        f"{workflow.name} / {job_name} / "
+                        f"{step.get('name')} uses shell syntax but does not "
+                        f"ask for bash",
+                    )
 
     def test_the_macos_jobs_use_a_runner_that_is_actually_handed_out(self):
         """The macOS runner image has to be one the pool gives away.

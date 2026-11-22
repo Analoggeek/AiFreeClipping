@@ -155,6 +155,7 @@ jobs:
         run: python scripts/build_gl_stubs.py
 
       - name: Run the end-to-end test
+        shell: bash
         run: |
           # The headless settings are for Linux only.  On Windows the
           # "minimal" platform plugin stops OpenCV from opening a video,
@@ -319,6 +320,7 @@ jobs:
             core.info('Jobs to retry: ' + missing.join(', '));
 
       - name: Report which platforms are missing
+        shell: bash
         env:
           JOBS: ${{ steps.find.outputs.jobs }}
         run: |
@@ -354,6 +356,7 @@ jobs:
           merge-multiple: true
 
       - name: List what was built
+        shell: bash
         run: |
           echo "### Installer files" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
