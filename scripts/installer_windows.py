@@ -26,6 +26,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 
@@ -38,8 +39,60 @@ VERSION_DOTTED = "1.0.0.0"
 
 
 # --------------------------------------------------------------------------
+# Staging
+# --------------------------------------------------------------------------
+# Windows cannot open a path longer than 260 characters (MAX_PATH).  A frozen
+# PyInstaller tree carries the whole Python runtime, Qt and OpenCV, so the
+# deepest file easily goes past that -- and the Inno Setup compiler fails
+# with "The system cannot find the path specified" while it compresses.
+#
+# The build machine's checkout path makes it worse: on a CI runner the
+# repository alone can be 60 characters deep before the application folder
+# is even reached.
+#
+# Copying the application into a short directory first solves both.  On
+# Windows the drive root is used; everywhere else a directory under the
+# system temporary folder is used, which is short on every platform.
+
+STAGING_NAME = "clipos-inst"
+
+
+def staging_dir() -> Path:
+    """A short directory the installer can safely read from."""
+    if sys.platform == "win32":
+        root = Path(os.environ.get("SystemDrive", "C:") + "\\")
+        return root / STAGING_NAME
+    return Path(tempfile.gettempdir()) / STAGING_NAME
+
+
+def stage_for_installer(app_dir: Path) -> Path:
+    """Copy the frozen application into a short directory.
+
+    Returns the directory the installer script should read from.
+    """
+    target = staging_dir()
+    if target.exists():
+        shutil.rmtree(target, ignore_errors=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(app_dir, target / app_dir.name, symlinks=False)
+    print(f"[win] staged the application in {target}")
+    return target / app_dir.name
+
+
+# --------------------------------------------------------------------------
 # Inno Setup
 # --------------------------------------------------------------------------
+def _win_path(path: Path) -> str:
+    """A path in the form Inno Setup and NSIS expect on Windows.
+
+    ``Path.resolve()`` produces forward slashes on Linux and backslashes on
+    Windows.  Both tools accept forward slashes, but mixing them with the
+    ``\\*`` wildcard is asking for trouble, so the separators are normalised
+    here and the tests can check one consistent form.
+    """
+    return str(path.resolve()).replace("/", "\\")
+
+
 def inno_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> str:
     """The Inno Setup script.
 
@@ -47,13 +100,21 @@ def inno_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> st
     install when the user is not an administrator, which is what most people
     running a creator tool actually do.
 
-    Inno resolves relative paths against the *script's own directory*, not
-    against the working directory the compiler was started in.  The script is
-    written into ``build/``, so every path here has to be absolute or it
-    would point at ``build/dist/...`` instead of the real application.
+    Two Windows-specific traps are handled here.
+
+    **Relative paths.** Inno resolves them against the *script's own
+    directory*, not against the working directory the compiler was started
+    in, and the script is written into ``build/``.  ``SourceDir`` points the
+    compiler back at the repository root so the relative ``Source`` entries
+    resolve to the real application.
+
+    **MAX_PATH.** Windows cannot open a path longer than 260 characters, and
+    a PyInstaller tree with a bundled Python, Qt and OpenCV goes past that
+    easily.  The files are therefore staged into a short directory first
+    (see :func:`stage_for_installer`) and the script installs from there.
     """
-    source = (app_dir or (ROOT / "dist" / app_dir_name)).resolve()
-    output = (ROOT / "build" / "dist").resolve()
+    source = _win_path(app_dir or (ROOT / "dist" / app_dir_name))
+    output = _win_path(ROOT / "build" / "dist")
     return f"""[Setup]
 AppId={{{BUNDLE_ID_UPPER}}}
 AppName={APP_NAME}
@@ -63,6 +124,10 @@ DefaultDirName={{autopf}}\\{APP_NAME}
 DefaultGroupName={APP_NAME}
 OutputBaseFilename={APP_NAME}-Setup
 OutputDir={output}
+; The compiler resolves relative paths against the script's own directory.
+; The script lives in build/, so point the source directory at the staged
+; application explicitly.
+SourceDir={source}
 Compression=lzma2
 SolidCompression=yes
 LZMANumBlockThreads=8
@@ -127,10 +192,10 @@ def nsis_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> st
     Like Inno, NSIS resolves relative paths against the script's own
     directory, so the paths here are absolute.
     """
-    source = (app_dir or (ROOT / "dist" / app_dir_name)).resolve()
-    output = (ROOT / "build" / "dist" / f"{APP_NAME}-Setup.exe").resolve()
-    icon = (ROOT / "resources" / "icons" / "app_icon.ico").resolve()
-    icon_line = f'!define MUI_ICON "{icon}"' if icon.exists() else ""
+    source = _win_path(app_dir or (ROOT / "dist" / app_dir_name))
+    output = _win_path(ROOT / "build" / "dist" / f"{APP_NAME}-Setup.exe")
+    icon = _win_path(ROOT / "resources" / "icons" / "app_icon.ico")
+    icon_line = f'!define MUI_ICON "{icon}"' if (ROOT / "resources" / "icons" / "app_icon.ico").exists() else ""
     return f""";!NSIS v3.0
 Unicode true
 Name "{APP_NAME}"
@@ -294,46 +359,69 @@ def build_selfextracting_installer(app_dir: Path, output_dir: Path) -> Path:
 
 
 def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
-    """Build the Windows installer and return the path of the ``.exe``."""
+    """Build the Windows installer and return the path of the ``.exe``.
+
+    The back-ends are tried in order of quality: Inno Setup produces the
+    nicest installer, NSIS the next best, and the built-in self-extracting
+    launcher is the fallback that always works.  If one of the first two
+    fails the next one is tried, so a packaging problem never leaves the
+    build without an installer.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
     build_dir = ROOT / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
 
+    # Stage the application in a short directory.  Windows cannot open a path
+    # longer than 260 characters, and the Inno compiler fails with "The
+    # system cannot find the path specified" while compressing a deep
+    # PyInstaller tree.
+    staged = stage_for_installer(app_dir)
+
     iscc = shutil.which("iscc") or shutil.which("ISCC.exe")
     if iscc:
         iss = build_dir / "clipos.iss"
-        iss.write_text(inno_script(app_dir.name, app_dir), encoding="utf-8")
+        iss.write_text(inno_script(staged.name, staged), encoding="utf-8")
         print(f"[win] using Inno Setup: {iscc}")
-        proc = subprocess.run([iscc, str(iss)], cwd=ROOT, capture_output=True, text=True)
-        if proc.returncode != 0:
-            print(proc.stdout[-4000:])
-            print(proc.stderr[-4000:], file=sys.stderr)
-            raise SystemExit("Inno Setup failed")
-        produced = build_dir / "dist" / f"{APP_NAME}-Setup.exe"
-        target = output_dir / produced.name
-        shutil.copy2(produced, target)
-        return target
+        proc = subprocess.run(
+            [iscc, str(iss)], cwd=ROOT, capture_output=True, text=True
+        )
+        if proc.returncode == 0:
+            produced = build_dir / "dist" / f"{APP_NAME}-Setup.exe"
+            target = output_dir / produced.name
+            shutil.copy2(produced, target)
+            shutil.rmtree(staging_dir(), ignore_errors=True)
+            return target
+        print("[win] Inno Setup failed:")
+        print(proc.stdout[-4000:])
+        print(proc.stderr[-4000:], file=sys.stderr)
+        print("[win] Trying the next installer back-end.")
 
     makensis = shutil.which("makensis") or shutil.which("makensis.exe")
     if makensis:
         nsi = build_dir / "clipos.nsi"
-        nsi.write_text(nsis_script(app_dir.name, app_dir), encoding="utf-8")
+        nsi.write_text(nsis_script(staged.name, staged), encoding="utf-8")
         print(f"[win] using NSIS: {makensis}")
-        proc = subprocess.run([makensis, str(nsi)], cwd=ROOT, capture_output=True, text=True)
-        if proc.returncode != 0:
-            print(proc.stdout[-4000:])
-            print(proc.stderr[-4000:], file=sys.stderr)
-            raise SystemExit("NSIS failed")
-        produced = build_dir / "dist" / f"{APP_NAME}-Setup.exe"
-        target = output_dir / produced.name
-        shutil.copy2(produced, target)
-        return target
+        proc = subprocess.run(
+            [makensis, str(nsi)], cwd=ROOT, capture_output=True, text=True
+        )
+        if proc.returncode == 0:
+            produced = build_dir / "dist" / f"{APP_NAME}-Setup.exe"
+            target = output_dir / produced.name
+            shutil.copy2(produced, target)
+            shutil.rmtree(staging_dir(), ignore_errors=True)
+            return target
+        print("[win] NSIS failed:")
+        print(proc.stdout[-4000:])
+        print(proc.stderr[-4000:], file=sys.stderr)
+        print("[win] Trying the next installer back-end.")
 
-    # Neither tool is installed: fall back to the self-extracting launcher,
-    # which is compiled here and needs nothing but a C cross compiler.
-    print("[win] Neither Inno Setup nor NSIS is installed.")
-    print("[win] Building the self-extracting installer instead.")
-    return build_selfextracting_installer(app_dir, output_dir)
+    # The self-extracting launcher needs nothing but a C cross compiler, so
+    # it is the back-end that always works.
+    print("[win] Building the self-extracting installer.")
+    try:
+        return build_selfextracting_installer(staged, output_dir)
+    finally:
+        shutil.rmtree(staging_dir(), ignore_errors=True)
 
 
 def main() -> int:

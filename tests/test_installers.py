@@ -41,8 +41,9 @@ class TestInnoSetupScript(unittest.TestCase):
     def test_installs_the_frozen_application(self):
         # Inno resolves relative paths against the script's own directory,
         # and the script lives in build/, so the source has to be absolute.
-        source = (ROOT / "dist" / "CLIPOS").resolve()
-        self.assertIn(f'Source: "{source}\\*"', self.script)
+        source = str((ROOT / "dist" / "CLIPOS").resolve()).replace("/", "\\")
+        self.assertIn(r'Source: "%s\*"' % source, self.script)
+        self.assertIn(f"SourceDir={source}", self.script)
         self.assertIn('DestDir: "{app}"', self.script)
 
     def test_creates_a_start_menu_shortcut(self):
@@ -75,15 +76,22 @@ class TestInnoSetupScript(unittest.TestCase):
     def test_the_output_directory_is_absolute(self):
         # The script is written into build/, so a relative OutputDir would
         # put the installer somewhere nobody looks for it.
-        output = (ROOT / "build" / "dist").resolve()
+        output = str((ROOT / "build" / "dist").resolve()).replace("/", "\\")
         self.assertIn(f"OutputDir={output}", self.script)
 
     def test_the_source_directory_is_absolute(self):
-        source = (ROOT / "dist" / "CLIPOS").resolve()
+        source = str((ROOT / "dist" / "CLIPOS").resolve()).replace("/", "\\")
         # Inno wants a backslash before the wildcard.
         self.assertIn(r'Source: "%s\*"' % source, self.script)
         # A relative path would silently point at build/dist/CLIPOS.
         self.assertNotIn('Source: "dist', self.script)
+
+    def test_the_paths_use_windows_separators(self):
+        # A forward slash next to the backslash wildcard confuses the
+        # compiler, so the separators are normalised.
+        for line in self.script.splitlines():
+            if line.startswith("Source:") or line.startswith("OutputDir="):
+                self.assertNotIn("/", line)
 
     def test_version_is_stamped_into_the_installer(self):
         self.assertIn(f"AppVersion={VERSION}", self.script)
@@ -111,12 +119,14 @@ class TestNsisScript(unittest.TestCase):
     def test_installs_the_frozen_application(self):
         # NSIS resolves relative paths against the script's own directory
         # too, so the source has to be absolute.
-        source = (ROOT / "dist" / "CLIPOS").resolve()
-        self.assertIn(f'File /r "{source}\\*"', self.script)
+        source = str((ROOT / "dist" / "CLIPOS").resolve()).replace("/", "\\")
+        self.assertIn(r'File /r "%s\*"' % source, self.script)
         self.assertIn('SetOutPath "$INSTDIR"', self.script)
 
     def test_writes_the_installer_to_an_absolute_path(self):
-        output = (ROOT / "build" / "dist" / "CLIPOS-Setup.exe").resolve()
+        output = str(
+            (ROOT / "build" / "dist" / "CLIPOS-Setup.exe").resolve()
+        ).replace("/", "\\")
         self.assertIn(f'OutFile "{output}"', self.script)
 
     def test_creates_shortcuts_and_an_uninstaller(self):
@@ -282,6 +292,52 @@ class TestSelfExtractingInstaller(unittest.TestCase):
         data = self.installer.read_bytes()
         # The icon travels inside the payload, so it must appear in the file.
         self.assertIn(b"app_icon.ico", data)
+
+
+class TestStaging(unittest.TestCase):
+    """The installer must read from a short path.
+
+    Windows cannot open a path longer than 260 characters.  A frozen
+    PyInstaller tree carries the whole Python runtime, Qt and OpenCV, so the
+    deepest file goes past that easily -- and the Inno Setup compiler fails
+    with "The system cannot find the path specified" while it compresses.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        from installer_windows import staging_dir
+
+        cls.staging = staging_dir()
+
+    def test_the_staging_directory_is_short(self):
+        # Anything longer than this defeats the point of staging.
+        self.assertLess(len(str(self.staging)), 40,
+                        f"the staging path is too long: {self.staging}")
+
+    def test_the_staging_directory_is_not_inside_the_repository(self):
+        # The repository lives in a long path on a CI runner.
+        self.assertNotIn(str(ROOT), str(self.staging))
+
+    def test_staging_copies_the_application(self):
+        import shutil
+        import tempfile
+
+        from installer_windows import stage_for_installer
+
+        source = Path(tempfile.mkdtemp()) / "CLIPOS"
+        (source / "_internal" / "resources").mkdir(parents=True)
+        (source / "CLIPOS.exe").write_bytes(b"MZ")
+        (source / "_internal" / "resources" / "app_icon.ico").write_bytes(b"ICO")
+
+        try:
+            staged = stage_for_installer(source)
+            self.assertTrue(staged.exists())
+            self.assertTrue((staged / "CLIPOS.exe").exists())
+            self.assertTrue((staged / "_internal" / "resources"
+                             / "app_icon.ico").exists())
+        finally:
+            shutil.rmtree(self.staging, ignore_errors=True)
+            shutil.rmtree(source.parent, ignore_errors=True)
 
 
 class TestBuildPipeline(unittest.TestCase):
