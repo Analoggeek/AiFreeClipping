@@ -31,20 +31,39 @@ def check(name: str, condition: bool, detail: str = "") -> bool:
     return condition
 
 
+def is_app_bundle(bundle: Path) -> bool:
+    """True for a macOS application bundle."""
+    return (bundle / "Contents").is_dir()
+
+
 def find_bundle(root: Path) -> Path:
-    """Return the directory that holds the frozen application."""
-    if (root / "_internal").exists():
+    """Return the directory that holds the frozen application.
+
+    A macOS application bundle keeps its files under ``Contents``, and
+    the one-folder build on the other platforms keeps them under
+    ``_internal``.  Both are understood.
+    """
+    if (root / "_internal").exists() or is_app_bundle(root):
         return root
     for child in root.iterdir():
-        if child.is_dir() and (child / "_internal").exists():
+        if child.is_dir() and (
+            (child / "_internal").exists() or is_app_bundle(child)
+        ):
             return child
     return root
 
 
+def internal_dir(bundle: Path) -> Path:
+    """The directory the frozen files live in."""
+    if is_app_bundle(bundle):
+        return bundle / "Contents"
+    return bundle / "_internal"
+
+
 def resource_root(bundle: Path) -> Path:
-    internal = bundle / "_internal"
+    internal = internal_dir(bundle)
     for candidate in (internal / "resources", internal / "clipos" / "resources",
-                      bundle / "resources"):
+                      bundle / "resources", bundle / "Contents" / "Resources"):
         if candidate.exists():
             return candidate
     return internal / "resources"
@@ -83,9 +102,13 @@ def check_architecture(bundle: Path, binary: Path | None) -> None:
 def verify(bundle: Path, binary: Path | None) -> int:
     print(f"=== Verifying bundle: {bundle} ===\n")
 
-    internal = bundle / "_internal"
-    check("bundle has an _internal directory", internal.exists())
-    if not internal.exists():
+    internal = internal_dir(bundle)
+    if is_app_bundle(bundle):
+        check("the application bundle has a Contents directory",
+              (bundle / "Contents" / "MacOS").is_dir())
+    else:
+        check("bundle has an _internal directory", internal.exists())
+    if not internal.is_dir():
         return 1
 
     res = resource_root(bundle)
@@ -130,11 +153,20 @@ def verify(bundle: Path, binary: Path | None) -> int:
         or any(bundle.rglob("*.pyz"))
     )
     check("clipos is bundled", clipos_bundled)
-    check("PySide6 is bundled", (internal / "PySide6").exists())
+    # The libraries live in a different place in a macOS application
+    # bundle, so they are looked for in both places.
+    pyside6 = any(
+        (base / "PySide6").exists()
+        for base in (internal, bundle / "Contents" / "Frameworks",
+                     bundle / "Contents" / "Resources", bundle)
+        if base.exists()
+    )
+    check("PySide6 is bundled", pyside6)
 
     print("\n-- application entry point --")
     if binary is None:
         candidates = [bundle / "CLIPOS", bundle / "CLIPOS.exe",
+                      bundle / "Contents" / "MacOS" / "CLIPOS",
                       bundle / "CLIPOS.app" / "Contents" / "MacOS" / "CLIPOS"]
         binary = next((c for c in candidates if c.exists()), None)
     check_architecture(bundle, binary)
