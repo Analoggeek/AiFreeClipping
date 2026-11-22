@@ -604,3 +604,43 @@ scripts/
 The bundled FFmpeg binaries are built under the LGPL/GPL terms of their
 respective projects. The YuNet models come from the OpenCV Zoo (MIT). The
 Haar cascades are part of OpenCV (Apache 2.0).
+
+## Creator workflow improvements (source branch)
+
+- **Editing recipes:** Settings → One-click editing recipe. Choose Clean Studio,
+  Podcast Focus, Gameplay + Facecam or Story Highlight. These are original local
+  rules, not model training or a promise of increased engagement.
+- **Gaming composition:** Export Center → Gameplay + Facecam. Set the source
+  facecam rectangle using X/Y/width/height percentages. Gameplay is fitted above,
+  the selected camera region below. The default rectangle is only a starting
+  point, not automatic facecam recognition. Use **Preview recipe · 4 seconds**
+  before exporting. This is a real draft-resolution render opened in your system
+  player; captions are previewed separately in Caption Studio.
+- **Saved edits:** timeline edits autosave by clip and are restored on reopen.
+  Batch export uses saved edits instead of silently reverting to original timing.
+  Clip captions are retimed through trims/speed changes in batch export.
+- **Export recovery:** a failed hardware encoder now retries using software
+  encoding. Timeline mute, zoom and crop are honoured. Inspect warnings if a
+  complex effect required the simplified recovery path.
+- **YouTube:** paste a public video URL and confirm permission. Requires internet
+  and `yt-dlp` (installed by `scripts/install_deps.py`). Downloads the highest
+  available video/audio streams and merges them locally. Private, DRM,
+  authentication and platform blocks are not bypassed. Source availability and
+  extractor changes can still cause failure; local import remains available.
+- **Updates:** Settings → Check for updates checks GitHub on demand and opens the
+  matching published installer download after confirmation. This is **not silent
+  auto-installation**. Quit CLIPOS and run the installer; project data lives in
+  the OS application-data folder, separately from application binaries. Back up
+  important projects before upgrading; migrations still need platform testing.
+- **Website:** [`docs/`](docs/README.md) contains the public download site and
+  GitHub Pages publication instructions. Buttons resolve actual release assets.
+  Publishing the site does not publish new application binaries.
+
+### Current validation limits
+
+Automated Linux tests exercise real FFmpeg exports and edited timelines. macOS
+and Windows native install/update tests, physical-device validation, live YouTube
+network imports and the full Whisper workflow with model weights still need
+verification. GPU availability and export speed depend on the device. No product
+can guarantee engagement or virality. A published older installer does not
+contain these source changes until a new verified release is built.

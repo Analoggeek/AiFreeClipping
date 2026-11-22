@@ -198,6 +198,10 @@ class TimelineWidget(QWidget):
     # -- interaction ----------------------------------------------------------
     def mousePressEvent(self, event) -> None:  # noqa: N802
         t = self._t(event.position().x())
+        for index, segment in enumerate(self._segments):
+            if segment["out_start"] <= t <= segment["out_end"]:
+                self.select(index)
+                break
         self._dragging = True
         self.seek_requested.emit(t)
 
@@ -313,8 +317,9 @@ class PreviewWorker(QThread):
     failed = Signal(str)
 
     def __init__(self, source: str, timestamp: float, out_dir: Path,
-                 parent=None) -> None:
+                 parent=None, video_filter="") -> None:
         super().__init__(parent)
+        self.video_filter = video_filter
         self.source = source
         self.timestamp = timestamp
         self.out_dir = out_dir
@@ -322,9 +327,14 @@ class PreviewWorker(QThread):
 
     def run(self) -> None:
         try:
-            self._seq += 1
-            out_dir = self.out_dir / f"seq_{self._seq:05d}"
-            written = extract_frames(self.source, out_dir, [self.timestamp], width=540)
+            import uuid
+            from ...core.ffmpeg import run_ffmpeg
+            out_dir = self.out_dir / uuid.uuid4().hex
+            out_dir.mkdir(parents=True, exist_ok=True)
+            frame = out_dir / "preview.jpg"
+            run_ffmpeg(["-y", "-ss", str(self.timestamp), "-i", self.source,
+                        "-frames:v", "1", "-vf", self.video_filter or "scale=540:-2", str(frame)])
+            written = [str(frame)]
             if written and Path(written[0]).exists():
                 self.frame_ready.emit(str(written[0]))
             else:
@@ -638,7 +648,15 @@ class EditorPage(BasePage):
         self.timeline = Timeline.from_clip(
             clip["start_time"], clip["end_time"], project["duration"],
         )
+        from ...core.config import PATHS
+        saved = PATHS.projects / str(self.project_id) / "edits" / f"{clip_id}.json"
+        if saved.exists():
+            try:
+                self.timeline = Timeline.load(saved)
+            except (ValueError, OSError, KeyError) as exc:
+                log.warning("Could not restore timeline: %s", exc)
         self._frame_cache.clear()
+        self.timeline_widget.select(0)
         self.timeline_widget.set_duration(self.timeline.duration)
         self.timeline_widget.set_segments(self._segment_views())
         self._load_waveform()
@@ -750,9 +768,18 @@ class EditorPage(BasePage):
         old = self._worker
         if old is not None:
             old.deleteLater()
+        from ...video.renderer import segment_video_filter
+        acc = 0.0
+        active = None
+        for segment in self.timeline.segments:
+            if acc <= t <= acc + segment.duration:
+                active = segment
+                break
+            acc += segment.duration
+        vf = segment_video_filter(active, 270, 480) if active else "scale=540:-2"
         self._worker = PreviewWorker(
             str(self.source), self.timeline.source_time_at(t),
-            PATHS.cache / "frames", parent=self,
+            PATHS.cache / "frames", parent=self, video_filter=vf,
         )
         self._worker.frame_ready.connect(self._show_frame)
         self._worker.failed.connect(lambda m: log.debug("frame: %s", m))
@@ -864,9 +891,14 @@ class EditorPage(BasePage):
         self._after_edit()
 
     def _after_edit(self) -> None:
+        from ...core.config import PATHS
+        if self.clip_id:
+            self.timeline.save(PATHS.projects / str(self.project_id) / "edits" / f"{self.clip_id}.json")
+        self._frame_cache.clear()
         self.timeline_widget.set_segments(self._segment_views())
         self.timeline_widget.set_duration(self.timeline.duration)
         self._update_controls()
+        self._request_frame(self.timeline_widget.position())
 
     def _update_controls(self) -> None:
         self.btn_undo.setEnabled(self.timeline.can_undo())

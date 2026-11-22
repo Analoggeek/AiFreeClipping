@@ -17,6 +17,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.venv-intel/
 venv/
 .pytest_cache/
 .mypy_cache/

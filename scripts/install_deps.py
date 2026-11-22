@@ -32,6 +32,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # The packages CLIPOS actually needs, in a deliberate order.
 CORE = [
+    "yt-dlp>=2025.1.15",
     "PySide6>=6.6,<6.9",
     "numpy>=1.24",
     "pillow>=10.0",

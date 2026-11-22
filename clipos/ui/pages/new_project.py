@@ -6,7 +6,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
+    QComboBox, QMessageBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar,
     QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 
@@ -86,12 +86,12 @@ class NewProjectPage(BasePage):
         link_layout.setSpacing(Metrics.sm)
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText(
-            "Paste a direct video URL (https://…/video.mp4) — YouTube/Vimeo/TikTok "
-            "links are detected and explained"
+            "Paste a YouTube or direct video link — restricted "
+            "sources show an explanation"
         )
         self.url_input.returnPressed.connect(self._start_url_import)
         link_layout.addWidget(self.url_input, 1)
-        self.analyze_btn = QPushButton("Analyze Link")
+        self.analyze_btn = QPushButton("Download Video")
         self.analyze_btn.setObjectName("Primary")
         self.analyze_btn.clicked.connect(self._start_url_import)
         link_layout.addWidget(self.analyze_btn)
@@ -213,6 +213,13 @@ class NewProjectPage(BasePage):
             self.window.notify(f"{adapter.name} does not allow direct downloads")
             self._on_url_changed(url)
             return
+        if adapter.key == "youtube":
+            answer = QMessageBox.question(self, "Download permission",
+                "Download only videos you own or are authorised to use. Public videos only; no sign-in or DRM bypass. Continue?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No)
+            if answer != QMessageBox.StandardButton.Yes:
+                return
         self._start_import(url=url)
 
     def _start_import(self, url: str = "", path: str = "") -> None:

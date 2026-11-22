@@ -119,29 +119,14 @@ class YouTubeAdapter(SourceAdapter):
     key = "youtube"
     name = "YouTube"
     patterns = ["youtube.com", "youtu.be", "youtube-nocookie.com"]
-    allows_download = False
-    note = (
-        "YouTube's Terms of Service do not permit downloading videos outside the "
-        "YouTube app. CLIPOS will not bypass that restriction.\n\n"
-        "To work with YouTube content, download the video with a tool you are "
-        "entitled to use, then import it here with Import Local Video."
-    )
+    allows_download = True
+    note = "Public videos only. Download only content you own or have permission to use; no DRM or sign-in bypass."
 
     def resolve(self, url: str) -> AdapterResult:
         vid = self.extract_id(url)
-        return AdapterResult(
-            ok=False, requires_auth=True,
-            message=(
-                "YouTube blocks direct downloads by design.\n\n"
-                "Options:\n"
-                "  1. Download the video with your own authorised copy and use "
-                "Import Local Video.\n"
-                "  2. Paste a direct .mp4 link if you have one.\n"
-                "  3. Use your own media server URL.\n\n"
-                "CLIPOS does not bypass DRM or access restrictions."
-            ),
+        return AdapterResult(ok=True, url=url, extension=".mkv",
             title=f"YouTube video {vid}" if vid else "YouTube video",
-        )
+            message="Public video download via yt-dlp; permission required. No DRM or sign-in bypass.")
 
     @staticmethod
     def extract_id(url: str) -> str:
@@ -297,6 +282,9 @@ def import_url(
         raise ImportError_(msg)
 
     adapter = find_adapter(url)
+    if isinstance(adapter, YouTubeAdapter):
+        from .youtube import download_youtube
+        return download_youtube(url, dest_dir or PATHS.media, progress_cb)
     resolution = adapter.resolve(url)
 
     if not resolution.ok:
