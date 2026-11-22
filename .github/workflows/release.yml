@@ -66,6 +66,9 @@ jobs:
       # The headless build is used anyway so the same package is installed
       # everywhere, and so OpenCV 5 never sneaks in.
       INSTALL_DEPS_ARGS: ${{ matrix.os == 'windows-2022' && '--no-opencv' || '' }}
+      PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+      PIP_DISABLE_PIP_VERSION_CHECK: "1"
+      PIP_NO_INPUT: "1"
 
     steps:
       - name: Check out the source
@@ -99,7 +102,7 @@ jobs:
           set -e
           for attempt in 1 2 3; do
             echo "### pip install attempt $attempt"
-            if python -m pip install --upgrade pip --retries 5 --timeout 60 \
+            if python -m pip install --upgrade pip --retries 10 --timeout 120 \
                && python scripts/install_deps.py --build $INSTALL_DEPS_ARGS; then
               exit 0
             fi
