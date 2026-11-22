@@ -132,7 +132,15 @@ def check_python_runtime() -> None:
     ``libpython3.x.so``, which PyInstaller's bootloader needs.  The fix is to
     install the ``libpython3.x`` package (requires root) or to build against a
     Python that ships the shared library (python.org builds, conda, Homebrew).
+
+    Windows and macOS are exempt.  The Windows bootloader links against
+    ``python3.dll``, which ships with the interpreter, and the macOS one
+    builds against the framework.  Only the ELF build needs the shared
+    object.
     """
+    if sys.platform in ("win32", "darwin"):
+        return
+
     import sysconfig
 
     libdir = sysconfig.get_config_var("LIBDIR") or ""

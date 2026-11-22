@@ -98,7 +98,11 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          echo "::group::build failure details"
+          echo "### Build failure details"
+          echo ""
+          echo "The build directory contains:"
+          ls -la build 2>&1 | head -30
+          echo ""
           for f in build/build-error.log build/pyinstaller.log build/*.iss build/*.nsi; do
             if [ -f "$f" ]; then
               echo "--- $f ---"
@@ -106,7 +110,26 @@ jobs:
               echo
             fi
           done
-          echo "::endgroup::"
+          echo "--- end of the build directory ---"
+          echo ""
+          echo "### Disk space"
+          df -h . 2>&1 | head -5
+          echo ""
+          {
+            echo "### Build failure details"
+            echo ""
+            echo '```'
+            ls -la build 2>&1 | head -30
+            echo ""
+            for f in build/build-error.log build/pyinstaller.log build/*.iss build/*.nsi; do
+              if [ -f "$f" ]; then
+                echo "--- $f ---"
+                head -c 4000 "$f"
+                echo
+              fi
+            done
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
       - name: Upload the build log on failure
         if: failure()
