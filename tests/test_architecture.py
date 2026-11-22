@@ -303,6 +303,35 @@ class TestBundleLayout(unittest.TestCase):
                 verify_bundle.internal_dir(app), app / "Contents"
             )
 
+    def test_the_resources_are_found_in_a_bundle(self):
+        """The resources may sit one level down inside the bundle.
+
+        PyInstaller puts them under ``Contents/Resources/resources``, and
+        the ``Contents/Resources`` directory is always there whether or
+        not it holds anything -- so the directory is found by what is
+        inside it.
+        """
+        import verify_bundle
+
+        with tempfile.TemporaryDirectory() as td:
+            app = self._make_app(Path(td), "CLIPOS-arm64.app")
+            # PyInstaller keeps them one level down.
+            resources = app / "Contents" / "Resources" / "resources"
+            resources.mkdir()
+            (resources / "ffmpeg").mkdir()
+            (resources / "sounds").mkdir()
+            found = verify_bundle.resource_root(app)
+            self.assertTrue((found / "ffmpeg").is_dir())
+
+    def test_the_resources_are_found_directly_in_the_bundle(self):
+        import verify_bundle
+
+        with tempfile.TemporaryDirectory() as td:
+            app = self._make_app(Path(td))
+            (app / "Contents" / "Resources" / "ffmpeg").mkdir()
+            found = verify_bundle.resource_root(app)
+            self.assertTrue((found / "ffmpeg").is_dir())
+
     def test_the_application_binary_is_found_in_a_bundle(self):
         import verify_bundle
 
