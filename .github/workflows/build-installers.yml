@@ -51,9 +51,19 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        continue-on-error: true
         with:
           python-version: "3.11"
           cache: pip
+      - name: Set up Python again
+        # The tool cache download fails often enough to be worth a second
+        # attempt before a half-hour build is thrown away.  The cache is
+        # left out here: a cache that cannot be restored is not worth
+        # losing the build over.
+        if: failure()
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install dependencies
         shell: bash
@@ -143,6 +153,26 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: python scripts/report_diag.py
 
+      - name: Write down what the runner said
+        # The step messages are the only place a failing action explains
+        # itself, and they are not always readable afterwards.
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### The steps that ran"
+            echo ""
+            for f in build/step-summary.txt; do
+              [ -f "$f" ] && cat "$f"
+            done
+            echo ""
+            echo "### The runner"
+            uname -a
+            python --version 2>&1 || true
+            df -h . 2>&1 | head -3 || true
+          } > build/step-failure.txt 2>&1 || true
+          cat build/step-failure.txt
+
       - name: Upload the build log on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -187,9 +217,19 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        continue-on-error: true
         with:
           python-version: "3.11"
           cache: pip
+      - name: Set up Python again
+        # The tool cache download fails often enough to be worth a second
+        # attempt before a half-hour build is thrown away.  The cache is
+        # left out here: a cache that cannot be restored is not worth
+        # losing the build over.
+        if: failure()
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -242,9 +282,19 @@ jobs:
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        continue-on-error: true
         with:
           python-version: "3.11"
           cache: pip
+      - name: Set up Python again
+        # The tool cache download fails often enough to be worth a second
+        # attempt before a half-hour build is thrown away.  The cache is
+        # left out here: a cache that cannot be restored is not worth
+        # losing the build over.
+        if: failure()
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
