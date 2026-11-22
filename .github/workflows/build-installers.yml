@@ -275,6 +275,7 @@ jobs:
         run: python scripts/vendor_ffmpeg.py
 
       - name: Run the end-to-end test
+        shell: bash
         run: |
           # The output is kept so that a failure can be read afterwards:
           # the CI log storage is not always reachable.
@@ -398,13 +399,17 @@ jobs:
         run: python scripts/build_gl_stubs.py
 
       - name: Run the end-to-end test
+        shell: bash
         env:
           QT_QPA_PLATFORM: minimal
         run: |
           export LD_LIBRARY_PATH="$PWD/.stublibs:${LD_LIBRARY_PATH:-}"
-          python scripts/e2e_test.py
+          mkdir -p build
+          python scripts/e2e_test.py 2>&1 | tee build/e2e.log
+          exit "${PIPESTATUS[0]}"
 
       - name: Build the package
+        shell: bash
         env:
           QT_QPA_PLATFORM: minimal
         run: |
