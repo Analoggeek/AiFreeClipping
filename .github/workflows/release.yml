@@ -63,12 +63,14 @@ jobs:
     timeout-minutes: 90
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          # A flaky network on the runner must not throw away a build that
-          # takes half an hour to produce.
-          fetch-depth: 1
-          retry: 3
+      - name: Check out the source
+        uses: actions/checkout@v4
+        continue-on-error: true
+      - name: Check out the source again
+        # A flaky network on the runner must not throw away a build that
+        # takes half an hour to produce.
+        if: failure()
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -246,12 +248,14 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with:
-          # A flaky network on the runner must not throw away a build that
-          # takes half an hour to produce.
-          fetch-depth: 1
-          retry: 3
+      - name: Check out the source
+        uses: actions/checkout@v4
+        continue-on-error: true
+      - name: Check out the source again
+        # A flaky network on the runner must not throw away a build that
+        # takes half an hour to produce.
+        if: failure()
+        uses: actions/checkout@v4
 
       - name: Download the artifacts
         uses: actions/download-artifact@v4
