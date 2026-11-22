@@ -76,6 +76,12 @@ jobs:
           done
           echo "iscc: $(which iscc || echo 'not on PATH')"
 
+      - name: Report the free disk space
+        shell: bash
+        run: |
+          echo "### Free disk space before the build"
+          df -h . /c 2>&1 | head -5 || df -h . 2>&1 | head -5
+
       - name: Build the installer
         shell: bash
         run: python scripts/build.py windows --skip-tests --skip-vendor
@@ -153,8 +159,17 @@ jobs:
           if-no-files-found: error
   macos:
     name: macOS app and disk image
-    runs-on: macos-14
-    timeout-minutes: 60
+    # Only one macOS runner is needed.  The Intel build is produced on the
+    # same machine by cross-compiling, so the release does not depend on a
+    # second macOS runner being free at the same time -- which is what kept
+    # cancelling the build.
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        os: [macos-14]
     steps:
       - uses: actions/checkout@v4
 
@@ -181,6 +196,14 @@ jobs:
       - name: Verify the frozen bundle
         run: python scripts/verify_bundle.py dist
 
+      - name: Build the Intel application
+        # PyInstaller cross-compiles a second, Intel build on the same
+        # runner, so one macOS machine produces both applications.
+        run: |
+          python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
+          mv dist/CLIPOS.app dist/CLIPOS-intel.app
+          ls -la dist/
+
       - name: Upload the application and the disk image
         uses: actions/upload-artifact@v4
         with:
@@ -188,37 +211,7 @@ jobs:
           path: |
             dist/CLIPOS.app
             dist/CLIPOS-*.dmg
-          if-no-files-found: error
-
-  macos-intel:
-    name: macOS app (Intel)
-    runs-on: macos-13
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python scripts/install_deps.py --build
-
-      - name: Fetch the native binaries
-        run: python scripts/vendor_ffmpeg.py
-
-      - name: Build the application
-        run: python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
-
-      - name: Upload the application
-        uses: actions/upload-artifact@v4
-        with:
-          name: clipos-macos-intel
-          path: dist/CLIPOS.app
+            dist/CLIPOS-intel.app
           if-no-files-found: error
 
   linux:

@@ -296,7 +296,10 @@ def build_macos(target_arch: str = "") -> Path:
 
     polish_app_bundle(app)
 
-    dmg = build_dmg(app, DIST)
+    # The disk image carries the architecture in its name, so an Apple
+    # Silicon build and an Intel build can live side by side.
+    arch = {"x86_64": "intel", "arm64": "arm64"}.get(target_arch, "")
+    dmg = build_dmg(app, DIST, arch=arch)
     print(f"[build] disk image: {dmg}")
     return dmg
 

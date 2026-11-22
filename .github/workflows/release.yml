@@ -42,17 +42,17 @@ jobs:
             artifact: clipos-windows
             files: |
               dist/CLIPOS-Setup.exe
-          - name: macOS (Apple Silicon)
+          # One macOS runner builds both applications.  The Intel build is
+          # cross-compiled on the same machine, so the release does not
+          # need a second macOS runner to be free at the same time --
+          # which is what kept cancelling the build.
+          - name: macOS
             os: macos-14
             artifact: clipos-macos
             files: |
               dist/CLIPOS.app
               dist/CLIPOS-*.dmg
-          - name: macOS (Intel)
-            os: macos-13
-            artifact: clipos-macos-intel
-            files: |
-              dist/CLIPOS.app
+              dist/CLIPOS-intel.app
           - name: Linux
             os: ubuntu-22.04
             artifact: clipos-linux
@@ -103,6 +103,12 @@ jobs:
       - name: Run the end-to-end test
         run: python scripts/e2e_test.py
 
+      - name: Report the free disk space
+        shell: bash
+        run: |
+          echo "### Free disk space before the build"
+          df -h . /c 2>&1 | head -5 || df -h . 2>&1 | head -5
+
       - name: Build
         shell: bash
         run: |
@@ -110,11 +116,12 @@ jobs:
             Windows) python scripts/build.py windows --skip-tests --skip-vendor ;;
             Linux)   python scripts/build.py linux   --skip-tests --skip-vendor ;;
             *)
-              if [ "${{ matrix.name }}" = "macOS (Intel)" ]; then
-                python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
-              else
-                python scripts/build.py macos --skip-tests --skip-vendor
-              fi
+              python scripts/build.py macos --skip-tests --skip-vendor
+              # The Intel application is built on the same runner, so only
+              # one macOS machine is needed for the whole release.
+              python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
+              mv dist/CLIPOS.app dist/CLIPOS-intel.app
+              ls -la dist/
               ;;
           esac
 
@@ -275,6 +282,7 @@ jobs:
             artifacts/**/CLIPOS-Setup.exe
             artifacts/**/CLIPOS-*.dmg
             artifacts/**/CLIPOS.app/**
+            artifacts/**/CLIPOS-intel.app/**
             artifacts/**/CLIPOS_*.deb
             artifacts/**/CLIPOS-*.zip
           fail_on_unmatched_files: false

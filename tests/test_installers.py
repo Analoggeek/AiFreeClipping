@@ -398,6 +398,31 @@ class TestBuildPipeline(unittest.TestCase):
                 f"{name} does not pin the Inno Setup version",
             )
 
+    def test_only_one_macos_runner_is_needed(self):
+        """A second macOS runner is not always free, and the job that
+        cannot get one is cancelled.  Both applications are therefore built
+        on the same runner, with the Intel one cross-compiled.
+        """
+        for name in ("build-installers.yml", "release.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(
+                encoding="utf-8"
+            )
+            self.assertNotIn(
+                "macos-13", text,
+                f"{name} still needs a second macOS runner",
+            )
+            self.assertIn(
+                "--target-arch x86_64", text,
+                f"{name} does not build the Intel application",
+            )
+
+    def test_the_disk_image_names_carry_the_architecture(self):
+        """Both disk images have to survive on one machine."""
+        text = (ROOT / "scripts" / "installer_macos.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("suffix = f\"-{arch}\" if arch else \"\"", text)
+
 
 class TestFailureReporting(unittest.TestCase):
     """A packaging failure has to say what went wrong.
