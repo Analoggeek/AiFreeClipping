@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  issues: write        # so a build failure can report itself
 
 jobs:
   build:
