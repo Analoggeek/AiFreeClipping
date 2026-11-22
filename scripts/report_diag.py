@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -57,7 +58,7 @@ def _pull_request_number(repo: str, headers: dict) -> str:
     url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}"
     try:
         with urllib.request.urlopen(
-            urllib.request.Request(url, headers=headers), timeout=60
+            urllib.request.Request(url, headers=headers), timeout=30
         ) as response:
             data = json.load(response)
     except (urllib.error.URLError, OSError):
@@ -75,7 +76,7 @@ def _post(url: str, headers: dict, payload: dict) -> bool:
         headers=headers,
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as response:
+        with urllib.request.urlopen(request, timeout=30) as response:
             response.read()
         return True
     except (urllib.error.URLError, OSError) as exc:
@@ -89,12 +90,16 @@ def collect() -> str:
     if build.is_dir():
         listing = sorted(p.name for p in build.iterdir())
         parts.append(f"The build directory contains: {', '.join(listing)}\n")
-    for name in ("build-error.log", "pyinstaller.log"):
+    for name in ("build-error.log", "pyinstaller.log", "step-failure.txt",
+                 "pip-install.log"):
         path = build / name
         if path.exists():
             text = path.read_text(encoding="utf-8", errors="replace")
-            tail = text[-3000:]
-            parts.append(f"#### {name}\n\n```\n{tail}\n```\n")
+            # The build error log holds one section per failed back-end.
+            # Keeping only the tail threw the first one away, which is
+            # where the real reason usually is, so the whole thing is kept
+            # when it fits and trimmed from the middle when it does not.
+            parts.append(f"#### {name}\n\n```\n{_trim(text)}\n```\n")
     for pattern in ("*.iss", "*.nsi"):
         for path in build.glob(pattern):
             parts.append(f"#### {path.name}\n\n```\n"
@@ -102,26 +107,52 @@ def collect() -> str:
     return "\n".join(parts)
 
 
+def _trim(text: str, limit: int = 24000) -> str:
+    """Keep a log readable without losing the beginning of it.
+
+    A failure report that starts halfway through the log is worse than
+    useless, so the middle is dropped rather than the start.
+    """
+    if len(text) <= limit:
+        return text
+    head = limit // 2
+    tail = limit - head
+    return (
+        text[:head]
+        + f"\n\n... {len(text) - limit} characters in the middle were left out ...\n\n"
+        + text[-tail:]
+    )
+
+
 def main() -> int:
     body = collect()
     print(body[:2000])
 
-    # The commit status is the broadest channel available: it works with the
-    # least permissions and the text shows up on the commit itself.
-    if post_status(body):
-        print("[diag] posted the diagnostics as a commit status")
-        return 0
-    if post_comment(body):
-        print("[diag] posted the diagnostics as a comment")
-        return 0
-
-    # Nothing worked.  The diagnostics are still worth keeping, so they are
-    # written next to the build where the artifact step will pick them up.
+    # The report is written to disk first.  The network calls below may
+    # all fail -- the runner's connection to the API is not always
+    # reliable -- and the file is what the artifact step uploads, so the
+    # diagnostics survive either way.
     try:
-        (ROOT / "build" / "failure-report.md").write_text(body, encoding="utf-8")
+        path = ROOT / "build" / "failure-report.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
         print("[diag] wrote build/failure-report.md")
     except OSError:
         pass
+
+    # The commit status is the broadest channel available: it works with the
+    # least permissions and the text shows up on the commit itself.
+    for attempt in range(3):
+        if post_status(body):
+            print("[diag] posted the diagnostics as a commit status")
+            return 0
+        if post_comment(body):
+            print("[diag] posted the diagnostics as a comment")
+            return 0
+        if attempt < 2:
+            print("[diag] the API did not answer; trying again")
+            time.sleep(5)
+
     print("[diag] WARNING: could not report the failure through the API")
     return 0
 
@@ -144,10 +175,27 @@ def post_status(body: str) -> bool:
     payload = {
         "state": "failure",
         "context": "clipos-build",
-        "description": "CLIPOS build failed — see the run log",
+        "description": _summary_line(body),
         "target_url": f"https://github.com/{repo}/actions/runs/{run_id}",
     }
     return _post(url, headers, payload)
+
+
+def _summary_line(body: str) -> str:
+    """One line that says what went wrong.
+
+    The status is the one piece of a failed run that is readable from
+    anywhere, so it carries the reason rather than a pointer to a log
+    that may not be reachable.
+    """
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("###") and "failure" not in stripped.lower():
+            # The first real section is the one that failed.
+            name = stripped.lstrip("#").strip()
+            if name and name.lower() != "clipos build failure":
+                return f"CLIPOS build failed: {name}"[:140]
+    return "CLIPOS build failed — see the run log"
 
 
 if __name__ == "__main__":

@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,11 +60,49 @@ ZIG = "ziglang>=0.11"
 
 
 def run(cmd: list[str], what: str) -> None:
+    """Run a command, retrying it a few times.
+
+    The download of the packages is the flakiest part of the build: the
+    network on a build machine drops connections regularly, and a build
+    that fails after half an hour of PyInstaller work is a build that has
+    to be thrown away.  Retrying the download costs a minute and saves
+    the whole run.
+    """
     print(f"\n=== {what} ===")
     print(f"$ {' '.join(cmd)}", flush=True)
-    result = subprocess.run(cmd)
-    if result.returncode != 0:
-        raise SystemExit(f"{what} failed with exit code {result.returncode}")
+
+    is_pip = "pip" in " ".join(cmd)
+    attempts = 3 if is_pip else 1
+    last = 0
+    log_path = ROOT / "build" / "pip-install.log" if is_pip else None
+    for attempt in range(1, attempts + 1):
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, "a", encoding="utf-8", errors="replace") as log:
+                log.write(f"\n$ {' '.join(cmd)}\n")
+                log.flush()
+                result = subprocess.run(cmd, stdout=log,
+                                        stderr=subprocess.STDOUT)
+        else:
+            result = subprocess.run(cmd)
+        if result.returncode == 0:
+            return
+        last = result.returncode
+        if attempt < attempts:
+            print(f"### {what} failed with exit code {last}; "
+                  f"trying again ({attempt}/{attempts - 1})", flush=True)
+            time.sleep(15)
+    if is_pip:
+        # Keep what pip said: it names the package and the reason, which
+        # is exactly what is needed to fix it.
+        tail = ""
+        try:
+            tail = log_path.read_text(encoding="utf-8", errors="replace")[-6000:]
+        except OSError:
+            pass
+        _write_failure(f"{what} failed with exit code {last}\n"
+                       f"$ {' '.join(cmd)}\n\n{tail}")
+    raise SystemExit(f"{what} failed with exit code {last}")
 
 
 def pip(*args: str) -> list[str]:
@@ -90,32 +129,79 @@ def main() -> int:
     ap.add_argument("--build", action="store_true",
                     help="also install the packaging tools")
     ap.add_argument("--no-opencv", action="store_true",
-                    help="skip the OpenCV repair (Windows and macOS only)")
+                    help="kept for compatibility; the OpenCV version is "
+                         "always pinned")
     args = ap.parse_args()
 
+    try:
+        return _install(args)
+    except SystemExit as exc:
+        # A failed dependency install has to be readable afterwards: the
+        # CI logs are not always reachable, so the reason is written next
+        # to the build where the diagnostic reporter picks it up.
+        _write_failure(str(exc))
+        raise
+
+
+def _write_failure(reason: str) -> None:
+    try:
+        path = Path(__file__).resolve().parents[1] / "build" / "build-error.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"### Installing the dependencies failed\n\n{reason}\n\n")
+    except OSError:
+        pass
+
+
+def _install_zig() -> bool:
+    """Install the C compiler used by the self-extracting installer.
+
+    The wheel is large and the download is the slowest part of the
+    dependency install, so a failure here is reported but does not stop
+    the build: on Windows the installer is produced by Inno Setup, and
+    the compiler is only the fallback.
+    """
+    if installed("ziglang"):
+        print("=== the C compiler is already installed ===")
+        return True
+    try:
+        run(pip("install", ZIG), "installing the C compiler")
+    except SystemExit as exc:
+        print(f"### the C compiler could not be installed: {exc}")
+        return False
+    return True
+
+
+def _install(args) -> int:
     run(pip("install", "--upgrade", "pip"), "upgrading pip")
+
+    # OpenCV is pinned and installed on its own, before anything that
+    # depends on it.  scenedetect pulls in the GUI build of OpenCV 5,
+    # which removed CascadeClassifier and cannot be imported without
+    # libGL, so the version has to be set before the rest.
+    run(pip("install", HEADLESS_OPENCV), "pinning the OpenCV version")
 
     packages = list(CORE)
     if args.build:
         packages += BUILD
-        # The Windows installer needs a cross compiler.  On Windows itself
-        # Inno Setup is used instead, but the fallback is still worth having.
-        if sys.platform != "win32":
-            packages.append(ZIG)
     run(pip("install", *packages), "installing the core packages")
 
-    if not args.no_opencv:
-        # scenedetect pulled in the GUI build of OpenCV.  Remove it, then
-        # reinstall the headless build so the files it overwrote are restored.
-        for name in FORBIDDEN:
-            uninstall(name)
-        run(pip("install", "--force-reinstall", "--no-deps", HEADLESS_OPENCV),
-            "installing the headless build of OpenCV")
-    else:
-        # Windows and macOS have libGL, so the GUI build works there — but
-        # OpenCV 5 still removed CascadeClassifier, so pin the version.
-        run(pip("install", "--force-reinstall", "--no-deps", HEADLESS_OPENCV),
-            "pinning the OpenCV version")
+    if args.build:
+        # The self-extracting Windows installer needs a C compiler.  On
+        # Windows itself Inno Setup is used instead, so the compiler is
+        # only a fallback -- and the wheel is over a hundred megabytes,
+        # so a failure here must not stop the build.
+        if not _install_zig():
+            print("### the C compiler fallback is not available; "
+                  "the build will rely on Inno Setup")
+
+    # scenedetect pulls in the GUI build of OpenCV, which removed
+    # CascadeClassifier.  It has to go whatever else is done, and then
+    # the pinned build is put back so the files it overwrote are restored.
+    for name in FORBIDDEN:
+        uninstall(name)
+    run(pip("install", "--force-reinstall", "--no-deps", HEADLESS_OPENCV),
+        "installing the pinned build of OpenCV")
 
     print("\n=== verifying ===")
     check = subprocess.run(
@@ -130,6 +216,10 @@ def main() -> int:
     print(check.stdout.strip())
     if check.returncode != 0:
         print(check.stderr.strip(), file=sys.stderr)
+        # The import error is the whole point of the check, so it is kept
+        # where it can be read afterwards.
+        _write_failure("the dependencies did not import cleanly\n\n"
+                       + check.stdout.strip() + "\n\n" + check.stderr.strip())
         raise SystemExit("the dependencies did not import cleanly")
     return 0
 

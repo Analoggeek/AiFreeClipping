@@ -43,8 +43,114 @@ class TestInnoSetupScript(unittest.TestCase):
         # and the script lives in build/, so the source has to be absolute.
         source = str((ROOT / "dist" / "CLIPOS").resolve()).replace("/", "\\")
         self.assertIn(r'Source: "%s\*"' % source, self.script)
-        self.assertIn(f"SourceDir={source}", self.script)
         self.assertIn('DestDir: "{app}"', self.script)
+
+    def test_source_dir_is_not_set(self):
+        # When SourceDir is set, Inno resolves the Source entries relative
+        # to it -- so an absolute Source would be appended to the SourceDir
+        # and no file would ever be found.  That is why the installer kept
+        # failing with "no files found matching".
+        self.assertNotIn("SourceDir=", self.script)
+
+    def test_the_architecture_directives_work_on_every_inno_version(self):
+        # "x64compatible" needs Inno Setup 6.3; "x64" works with every 6.x.
+        self.assertIn("ArchitecturesAllowed=x64\n", self.script)
+        self.assertIn("ArchitecturesInstallIn64BitMode=x64\n", self.script)
+        directives = [
+            line for line in self.script.splitlines()
+            if line.startswith("Architectures")
+        ]
+        for line in directives:
+            self.assertNotIn("compatible", line)
+
+    def test_every_setup_directive_is_one_inno_setup_knows(self):
+        """Inno Setup rejects the whole script when it meets a directive
+        it does not know, and it says only which line was wrong.  The
+        version information directives are easy to get wrong: they are
+        called VersionInfo..., not AppVersionInfo....
+        """
+        valid = {
+            "AppId", "AppName", "AppVersion", "AppVerName", "AppCopyright",
+            "AppPublisher", "AppPublisherURL", "AppSupportURL",
+            "AppUpdatesURL", "AppComments", "AppContact",
+            "DefaultDirName", "DefaultGroupName", "DefaultUserInfoDir",
+            "DefaultUserInfoGroup", "DisableProgramGroupPage",
+            "DisableWelcomePage", "DisableDirPage", "AllowNoIcons",
+            "AlwaysRestart", "PrivilegesRequired",
+            "PrivilegesRequiredOverridesAllowed", "Compression",
+            "SolidCompression", "LZMANumBlockThreads", "WizardStyle",
+            "WizardSizePercent", "OutputBaseFilename", "OutputDir",
+            "ArchitecturesAllowed", "ArchitecturesInstallIn64BitMode",
+            "UninstallDisplayIcon", "UninstallDisplayName",
+            "UninstallDisplaySize", "SetupLogging", "VersionInfoVersion",
+            "VersionInfoDescription", "VersionInfoProductName",
+            "VersionInfoProductVersion", "VersionInfoCompany",
+            "VersionInfoCopyright", "VersionInfoTextVersion",
+            "VersionInfoOriginalFilename", "UsePreviousAppDir",
+            "UsePreviousGroup", "UsePreviousTasks", "UsePreviousPrivileges",
+            "CloseApplications", "RestartApplications", "Uninstallable",
+            "SetupMutex", "MinVersion", "OnlyBelowVersion", "Password",
+            "EncryptCompressedFiles", "CreateAppDir", "CreateUninstallRegKey",
+            "AppReadmeFile", "InfoBeforeFile", "InfoAfterFile",
+            "LicenseFile", "DefaultLanguage",
+        }
+        setup = self.script.split("[Setup]", 1)[1].split("\n[", 1)[0]
+        unknown = []
+        for line in setup.splitlines():
+            line = line.strip()
+            if not line or line.startswith(";") or "=" not in line:
+                continue
+            key = line.split("=", 1)[0].strip()
+            if key not in valid:
+                unknown.append(key)
+        self.assertEqual(
+            unknown, [],
+            "Inno Setup does not know these directives: "
+            + ", ".join(unknown),
+        )
+
+    def test_the_version_information_directives_are_named_correctly(self):
+        self.assertIn("VersionInfoDescription=", self.script)
+        self.assertNotIn("AppVersionInfo", self.script)
+
+    def test_the_application_id_is_a_literal_and_not_a_constant(self):
+        """Inno Setup reads ``{name}`` as a constant, so a GUID has to be
+        written with doubled braces.  With single braces the compiler
+        says "Unknown constant" and stops.
+        """
+        line = [l for l in self.script.splitlines() if l.startswith("AppId=")]
+        self.assertEqual(len(line), 1)
+        self.assertTrue(
+            line[0].startswith("AppId={{") and line[0].endswith("}}"),
+            f"the application id must use doubled braces: {line[0]}",
+        )
+
+    def test_every_brace_is_a_constant_inno_setup_knows(self):
+        known = {
+            "app", "group", "autodesktop", "autopf", "autoprograms",
+            "commonpf", "commonprograms", "commonstartup", "commonstartmenu",
+            "commondesktop", "commonappdata", "localappdata", "userappdata",
+            "userdesktop", "userdocs", "userprofiledocuments", "userpictures",
+            "usermusic", "temp", "src", "sys", "win", "sd", "pf", "cf",
+            "cf32", "cf64", "fonts", "dao", "dotnetfx", "dotnetfx11",
+            "dotnetfx20", "dotnetfx35", "dotnetfx40", "dotnetfx45",
+            "uninstallexe", "code", "license", "help", "readme", "groupdocs",
+        }
+        import re
+        unknown = []
+        for line in self.script.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith(";"):
+                continue
+            # A doubled brace is a literal, not a constant.
+            stripped = re.sub(r"\{\{[^}]*\}\}", "", stripped)
+            for match in re.finditer(r"\{([^{}]*)\}", stripped):
+                if match.group(1) not in known:
+                    unknown.append(match.group(1))
+        self.assertEqual(
+            unknown, [],
+            "Inno Setup does not know these constants: " + ", ".join(unknown),
+        )
 
     def test_creates_a_start_menu_shortcut(self):
         self.assertIn('{group}\\CLIPOS', self.script)
@@ -365,6 +471,113 @@ class TestBuildPipeline(unittest.TestCase):
         self.assertIn("scripts/build.py windows", text)
         self.assertIn("scripts/build.py macos", text)
         self.assertIn("innosetup", text.lower())
+
+    def test_the_inno_setup_version_is_pinned(self):
+        """The Inno Setup package on Chocolatey has moved between 5.x and
+        6.x over the years.  Inno 5 does not understand the
+        ``ArchitecturesAllowed`` directive at all, so the version has to be
+        pinned or the installer script is rejected.
+        """
+        for name in ("build-installers.yml", "release.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(
+                encoding="utf-8"
+            )
+            self.assertIn(
+                "choco install innosetup --version=", text,
+                f"{name} does not pin the Inno Setup version",
+            )
+
+    def test_only_one_macos_runner_is_needed(self):
+        """A second macOS runner is not always free, and the job that
+        cannot get one is cancelled.  Both applications are therefore built
+        on the same runner, with the Intel one cross-compiled.
+        """
+        for name in ("build-installers.yml", "release.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(
+                encoding="utf-8"
+            )
+            self.assertNotIn(
+                "macos-13", text,
+                f"{name} still needs a second macOS runner",
+            )
+            self.assertIn(
+                "--target-arch x86_64", text,
+                f"{name} does not build the Intel application",
+            )
+
+    def test_the_disk_image_names_carry_the_architecture(self):
+        """Both disk images have to survive on one machine."""
+        text = (ROOT / "scripts" / "installer_macos.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("suffix = f\"-{arch}\" if arch else \"\"", text)
+
+    def test_the_compiler_output_directory_is_created(self):
+        """Neither Inno Setup nor NSIS creates the directory they write
+        their installer to, and both fail with a bare "Can't open output
+        file" when it is missing.
+        """
+        text = (ROOT / "scripts" / "installer_windows.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'compiler_out = build_dir / "dist"', text,
+            "the installer compiler output directory is never created",
+        )
+        self.assertIn(
+            'compiler_out.mkdir(parents=True, exist_ok=True)', text,
+            "the installer compiler output directory is never created",
+        )
+
+    def test_the_compilers_write_into_the_created_directory(self):
+        text = (ROOT / "scripts" / "installer_windows.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'produced = compiler_out / f"{APP_NAME}-Setup.exe"', text,
+            "the installer is read back from a directory that may not exist",
+        )
+
+
+class TestFailureReporting(unittest.TestCase):
+    """A packaging failure has to say what went wrong.
+
+    The job summary is not always readable from outside, and the build
+    logs are stored on a host that cannot always be reached, so the
+    failure has to be written into ``build/build-error.log`` as well.
+    """
+
+    def test_a_failure_is_written_to_the_build_error_log(self):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import installer_windows
+
+        log = ROOT / "build" / "build-error.log"
+        before = log.read_text(encoding="utf-8") if log.exists() else ""
+        try:
+            installer_windows._write_summary("Test failure", "the details")
+            after = log.read_text(encoding="utf-8")
+        finally:
+            if log.exists():
+                log.write_text(before, encoding="utf-8")
+        self.assertIn("Test failure", after)
+        self.assertIn("the details", after)
+
+    def test_the_inno_report_contains_the_compiler_output(self):
+        text = (ROOT / "scripts" / "installer_windows.py").read_text(
+            encoding="utf-8"
+        )
+        # The report has to carry what the compiler actually said, not just
+        # the exit code.
+        self.assertIn("--- stdout ---", text)
+        self.assertIn("--- stderr ---", text)
+        # And the compiler's own log, which names the file it could not open.
+        self.assertIn("Setup Log.txt", text)
+
+    def test_the_nsis_failure_is_reported_too(self):
+        text = (ROOT / "scripts" / "installer_windows.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('"NSIS failed"', text)
 
 
 if __name__ == "__main__":

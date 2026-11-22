@@ -39,18 +39,28 @@ VERSION_DOTTED = "1.0.0.0"
 
 
 def _write_summary(title: str, body: str) -> None:
-    """Append a section to the GitHub Actions job summary.
+    """Record a failure in every place a human or a bot will look for it.
 
-    The summary is the one part of a CI run that is always readable, even
-    when the log storage is not reachable, so it is where a packaging
-    failure explains itself.
+    The GitHub Actions job summary is the one part of a CI run that is
+    always readable, even when the log storage is not reachable.  The
+    ``build/build-error.log`` file is uploaded as an artifact and picked
+    up by the diagnostic reporter.  Both get the message, because a
+    failure that is only reported in one place is a failure that is
+    usually not seen at all.
     """
     path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not path:
-        return
+    if path:
+        try:
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write(f"### {title}\n\n```\n{body}\n```\n\n")
+        except OSError:
+            pass
+
     try:
-        with open(path, "a", encoding="utf-8") as handle:
-            handle.write(f"### {title}\n\n```\n{body}\n```\n\n")
+        log = ROOT / "build" / "build-error.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as handle:
+            handle.write(f"### {title}\n\n{body}\n\n")
     except OSError:
         pass
 
@@ -121,9 +131,13 @@ def inno_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> st
 
     **Relative paths.** Inno resolves them against the *script's own
     directory*, not against the working directory the compiler was started
-    in, and the script is written into ``build/``.  ``SourceDir`` points the
-    compiler back at the repository root so the relative ``Source`` entries
-    resolve to the real application.
+    in, and the script is written into ``build/``.  Every path is therefore
+    absolute.
+
+    Note that ``SourceDir`` must *not* be set here.  When it is, Inno
+    resolves the ``Source`` entries relative to it, so an absolute
+    ``Source`` would be appended to the ``SourceDir`` and nothing would be
+    found.
 
     **MAX_PATH.** Windows cannot open a path longer than 260 characters, and
     a PyInstaller tree with a bundled Python, Qt and OpenCV goes past that
@@ -133,7 +147,7 @@ def inno_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> st
     source = _win_path(app_dir or (ROOT / "dist" / app_dir_name))
     output = _win_path(ROOT / "build" / "dist")
     return f"""[Setup]
-AppId={{{BUNDLE_ID_UPPER}}}
+AppId={{{{{BUNDLE_ID_UPPER}}}}}
 AppName={APP_NAME}
 AppVersion={VERSION}
 AppVerName={APP_NAME} {VERSION}
@@ -141,16 +155,14 @@ DefaultDirName={{autopf}}\\{APP_NAME}
 DefaultGroupName={APP_NAME}
 OutputBaseFilename={APP_NAME}-Setup
 OutputDir={output}
-; The compiler resolves relative paths against the script's own directory.
-; The script lives in build/, so point the source directory at the staged
-; application explicitly.
-SourceDir={source}
 Compression=lzma2
 SolidCompression=yes
 LZMANumBlockThreads=8
 WizardStyle=modern
-ArchitecturesAllowed=x64compatible
-ArchitecturesInstallIn64BitMode=x64compatible
+; "x64compatible" needs Inno Setup 6.3 or newer.  "x64" works with every
+; 6.x release and covers both 64-bit Windows on Intel and AMD.
+ArchitecturesAllowed=x64
+ArchitecturesInstallIn64BitMode=x64
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 AllowNoIcons=yes
@@ -161,10 +173,10 @@ AppPublisher=CLIPOS Studio
 AppPublisherURL=https://github.com/Analoggeek/AiFreeClipping
 AppSupportURL=https://github.com/Analoggeek/AiFreeClipping/issues
 AppUpdatesURL=https://github.com/Analoggeek/AiFreeClipping/releases
-AppVersionInfoDescription=Turn long videos into upload-ready shorts, entirely offline.
-AppVersionInfoProductName={APP_NAME}
-AppVersionInfoProductVersion={VERSION}
-AppVersionInfoCompany=CLIPOS Studio
+VersionInfoDescription=Turn long videos into upload-ready shorts, entirely offline.
+VersionInfoProductName={APP_NAME}
+VersionInfoProductVersion={VERSION}
+VersionInfoCompany=CLIPOS Studio
 VersionInfoVersion={VERSION_DOTTED}
 SetupLogging=yes
 
@@ -387,6 +399,11 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     build_dir = ROOT / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
+    # The installer compilers write their output here.  Neither Inno Setup
+    # nor NSIS creates the directory, and they fail with a bare "Can't open
+    # output file" when it is missing -- which is exactly what happened.
+    compiler_out = build_dir / "dist"
+    compiler_out.mkdir(parents=True, exist_ok=True)
 
     # Stage the application in a short directory.  Windows cannot open a path
     # longer than 260 characters, and the Inno compiler fails with "The
@@ -399,20 +416,48 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
         iss = build_dir / "clipos.iss"
         iss.write_text(inno_script(staged.name, staged), encoding="utf-8")
         print(f"[win] using Inno Setup: {iscc}")
+        # The compiler version matters: the architecture directives and the
+        # compression behaviour both changed between the 6.x releases.
+        version = subprocess.run(
+            [iscc, "/Qp"], cwd=ROOT, capture_output=True, text=True
+        )
+        print(f"[win] Inno Setup version: {version.stdout.strip()}")
         proc = subprocess.run(
             [iscc, str(iss)], cwd=ROOT, capture_output=True, text=True
         )
         if proc.returncode == 0:
-            produced = build_dir / "dist" / f"{APP_NAME}-Setup.exe"
+            produced = compiler_out / f"{APP_NAME}-Setup.exe"
             target = output_dir / produced.name
+            if not produced.exists():
+                # The compiler said it succeeded but the file is not
+                # there.  Say so instead of failing later with a
+                # confusing error about a file that was never written.
+                raise SystemExit(
+                    f"Inno Setup reported success but did not write {produced}"
+                )
             shutil.copy2(produced, target)
             shutil.rmtree(staging_dir(), ignore_errors=True)
+            print(f"[win] installer: {target} "
+                  f"({target.stat().st_size // (1024 * 1024)} MB)")
             return target
+        # Inno Setup writes its own log next to the script when it fails.
+        # It names the exact file it could not open, which is the one
+        # piece of information needed to fix the packaging.
+        inno_log = ""
+        for candidate in (build_dir / "clipos.iss.log", build_dir / "Setup Log.txt"):
+            if candidate.exists():
+                inno_log = (
+                    f"\n\n--- {candidate.name} ---\n"
+                    f"{candidate.read_text(encoding='utf-8', errors='replace')[-6000:]}"
+                )
+                break
         report = (
             "Inno Setup failed with exit code "
-            f"{proc.returncode}\n\n--- stdout ---\n{proc.stdout[-4000:]}\n\n"
+            f"{proc.returncode}\n\n--- version ---\n{version.stdout.strip()}\n\n"
+            f"--- stdout ---\n{proc.stdout[-4000:]}\n\n"
             f"--- stderr ---\n{proc.stderr[-4000:]}\n\n--- script ---\n"
             f"{iss.read_text(encoding='utf-8', errors='replace')[:4000]}"
+            f"{inno_log}"
         )
         print("[win] Inno Setup failed:")
         print(proc.stdout[-4000:])
@@ -429,7 +474,7 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
             [makensis, str(nsi)], cwd=ROOT, capture_output=True, text=True
         )
         if proc.returncode == 0:
-            produced = build_dir / "dist" / f"{APP_NAME}-Setup.exe"
+            produced = compiler_out / f"{APP_NAME}-Setup.exe"
             target = output_dir / produced.name
             shutil.copy2(produced, target)
             shutil.rmtree(staging_dir(), ignore_errors=True)
@@ -437,6 +482,13 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
         print("[win] NSIS failed:")
         print(proc.stdout[-4000:])
         print(proc.stderr[-4000:], file=sys.stderr)
+        _write_summary(
+            "NSIS failed",
+            "NSIS failed with exit code "
+            f"{proc.returncode}\n\n--- stdout ---\n{proc.stdout[-4000:]}\n\n"
+            f"--- stderr ---\n{proc.stderr[-4000:]}\n\n--- script ---\n"
+            f"{nsi.read_text(encoding='utf-8', errors='replace')[:4000]}",
+        )
         print("[win] Trying the next installer back-end.")
 
     # The self-extracting launcher needs nothing but a C cross compiler, so

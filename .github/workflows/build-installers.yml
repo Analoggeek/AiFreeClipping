@@ -24,24 +24,81 @@ permissions:
   contents: read
   issues: write        # so a build failure can report itself
 
+# One build at a time.  Several queued runs compete for the runner pool and
+# the ones that lose get cancelled -- which is how the macOS jobs kept
+# disappearing.
+concurrency:
+  group: installers-${{ github.ref }}
+  # A build takes half an hour.  Cancelling the one that is already
+  # running to start a newer one throws all of that away, and the newer
+  # one then starts from nothing, so a run is always allowed to finish.
+  cancel-in-progress: false
+
 jobs:
   windows:
     name: Windows installer
     runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      # Windows has libGL, so the GUI build of OpenCV would work there.
+      # The headless build is used anyway so the same package is installed
+      # everywhere, and so OpenCV 5 never sneaks in.
+      INSTALL_DEPS_ARGS: --no-opencv
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the source
+        uses: actions/checkout@v4
+        continue-on-error: true
+      - name: Check out the source again
+        # A flaky network on the runner must not throw away a build that
+        # takes half an hour to produce.
+        if: failure()
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        continue-on-error: true
         with:
           python-version: "3.11"
           cache: pip
+      - name: Set up Python again
+        # The tool cache download fails often enough to be worth a second
+        # attempt before a half-hour build is thrown away.  The cache is
+        # left out here: a cache that cannot be restored is not worth
+        # losing the build over.
+        if: failure()
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Upgrade pip
+        shell: bash
+        continue-on-error: true
+        env:
+          # The cache survives the step, so a partial download is not
+          # started again from scratch.
+          PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PIP_NO_INPUT: "1"
+        run: python -m pip install --upgrade pip --retries 10 --timeout 120
 
       - name: Install dependencies
         shell: bash
+        env:
+          PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PIP_NO_INPUT: "1"
         run: |
-          python -m pip install --upgrade pip
-          python scripts/install_deps.py --build
+          set -e
+          for attempt in 1 2 3; do
+            echo "### install attempt $attempt"
+            if python scripts/install_deps.py --build $INSTALL_DEPS_ARGS; then
+              exit 0
+            fi
+            echo "### attempt $attempt failed; waiting before trying again"
+            sleep 20
+          done
+          echo "### the dependencies could not be installed" >&2
+          exit 1
 
       - name: Fetch the native binaries
         shell: bash
@@ -53,7 +110,26 @@ jobs:
 
       - name: Install Inno Setup
         shell: bash
-        run: choco install innosetup --no-progress -y
+        run: |
+          # Pinned: the "latest" package has moved between Inno 5 and 6
+          # over the years, and Inno 5 does not understand the
+          # ArchitecturesAllowed directive at all.
+          choco install innosetup --version=6.4.0 --no-progress -y --allow-downgrade
+          # Chocolatey does not always refresh PATH for the current
+          # session, so the compiler is put on PATH explicitly.
+          for d in "/c/Program Files (x86)/Inno Setup 6" "/c/Program Files/Inno Setup 6"; do
+            if [ -d "$d" ]; then
+              echo "$d" >> "$GITHUB_PATH"
+              break
+            fi
+          done
+          echo "iscc: $(which iscc || echo 'not on PATH')"
+
+      - name: Report the free disk space
+        shell: bash
+        run: |
+          echo "### Free disk space before the build"
+          df -h . /c 2>&1 | head -5 || df -h . 2>&1 | head -5
 
       - name: Build the installer
         shell: bash
@@ -68,10 +144,10 @@ jobs:
           echo "The build directory contains:"
           ls -la build 2>&1 | head -30
           echo ""
-          for f in build/build-error.log build/pyinstaller.log build/*.iss build/*.nsi; do
+          for f in build/build-error.log build/pyinstaller.log build/pip-install.log build/step-failure.txt build/*.iss build/*.nsi; do
             if [ -f "$f" ]; then
               echo "--- $f ---"
-              head -c 4000 "$f"
+              head -c 12000 "$f"
               echo
             fi
           done
@@ -86,7 +162,7 @@ jobs:
             echo '```'
             ls -la build 2>&1 | head -30
             echo ""
-            for f in build/build-error.log build/pyinstaller.log build/*.iss build/*.nsi; do
+            for f in build/build-error.log build/pyinstaller.log build/pip-install.log build/step-failure.txt build/*.iss build/*.nsi; do
               if [ -f "$f" ]; then
                 echo "--- $f ---"
                 head -c 4000 "$f"
@@ -95,6 +171,26 @@ jobs:
             done
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
+
+      - name: Write down what the runner said
+        # The step messages are the only place a failing action explains
+        # itself, and they are not always readable afterwards.
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### The runner"
+            uname -a
+            python --version 2>&1 || true
+            df -h . 2>&1 | head -3 || true
+            echo ""
+            echo "### The build directory"
+            ls -la build 2>&1 | head -30
+            echo ""
+            echo "### The installers that were produced"
+            ls -la dist 2>&1 | head -20
+          } > build/step-failure.txt 2>&1 || true
+          cat build/step-failure.txt
 
       - name: Report the failure to the repository
         if: failure()
@@ -114,6 +210,8 @@ jobs:
           path: |
             build/build-error.log
             build/pyinstaller.log
+            build/pip-install.log
+            build/step-failure.txt
             build/CLIPOS/warn-CLIPOS.txt
             build/*.iss
             build/*.nsi
@@ -132,15 +230,37 @@ jobs:
           if-no-files-found: error
   macos:
     name: macOS app and disk image
+    # Only one macOS runner is needed.  The Intel build is produced on the
+    # same machine by cross-compiling, so the release does not depend on a
+    # second macOS runner being free at the same time -- which is what kept
+    # cancelling the build.
     runs-on: macos-14
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the source
+        uses: actions/checkout@v4
+        continue-on-error: true
+      - name: Check out the source again
+        # A flaky network on the runner must not throw away a build that
+        # takes half an hour to produce.
+        if: failure()
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        continue-on-error: true
         with:
           python-version: "3.11"
           cache: pip
+      - name: Set up Python again
+        # The tool cache download fails often enough to be worth a second
+        # attempt before a half-hour build is thrown away.  The cache is
+        # left out here: a cache that cannot be restored is not worth
+        # losing the build over.
+        if: failure()
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -159,6 +279,14 @@ jobs:
       - name: Verify the frozen bundle
         run: python scripts/verify_bundle.py dist
 
+      - name: Build the Intel application
+        # PyInstaller cross-compiles a second, Intel build on the same
+        # runner, so one macOS machine produces both applications.
+        run: |
+          python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
+          mv dist/CLIPOS.app dist/CLIPOS-intel.app
+          ls -la dist/
+
       - name: Upload the application and the disk image
         uses: actions/upload-artifact@v4
         with:
@@ -166,49 +294,38 @@ jobs:
           path: |
             dist/CLIPOS.app
             dist/CLIPOS-*.dmg
-          if-no-files-found: error
-
-  macos-intel:
-    name: macOS app (Intel)
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python scripts/install_deps.py --build
-
-      - name: Fetch the native binaries
-        run: python scripts/vendor_ffmpeg.py
-
-      - name: Build the application
-        run: python scripts/build.py macos --skip-tests --skip-vendor --target-arch x86_64
-
-      - name: Upload the application
-        uses: actions/upload-artifact@v4
-        with:
-          name: clipos-macos-intel
-          path: dist/CLIPOS.app
+            dist/CLIPOS-intel.app
           if-no-files-found: error
 
   linux:
     name: Linux package
     runs-on: ubuntu-22.04
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out the source
+        uses: actions/checkout@v4
+        continue-on-error: true
+      - name: Check out the source again
+        # A flaky network on the runner must not throw away a build that
+        # takes half an hour to produce.
+        if: failure()
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
+        continue-on-error: true
         with:
           python-version: "3.11"
           cache: pip
+      - name: Set up Python again
+        # The tool cache download fails often enough to be worth a second
+        # attempt before a half-hour build is thrown away.  The cache is
+        # left out here: a cache that cannot be restored is not worth
+        # losing the build over.
+        if: failure()
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |

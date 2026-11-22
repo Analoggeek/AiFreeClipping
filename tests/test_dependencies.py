@@ -132,6 +132,140 @@ class TestWorkflows(unittest.TestCase):
         self.assertIn("QT_QPA_PLATFORM", text)
         self.assertIn("LD_LIBRARY_PATH", text)
 
+    def test_the_workflows_do_not_queue_up_more_than_one_run(self):
+        """Several runs at once starve the runner pool and the jobs that
+        lose get cancelled -- which is exactly how the macOS build kept
+        disappearing.  Every workflow therefore needs a concurrency group.
+        """
+        for workflow in self.workflows:
+            text = workflow.read_text(encoding="utf-8")
+            self.assertIn(
+                "concurrency:", text,
+                f"{workflow.name} has no concurrency group, so its runs pile up",
+            )
+
+    def test_the_release_workflow_keeps_a_finished_run_alive(self):
+        """A release run must not be cancelled half way through: the tag
+        is already published, so cancelling would leave a broken release.
+        """
+        text = (ROOT / ".github" / "workflows" / "release.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("cancel-in-progress: false", text)
+
+    def test_the_build_workflow_keeps_a_finished_run_alive(self):
+        """A build takes half an hour.  Cancelling the one that is already
+        running to start a newer one throws all of that away.
+        """
+        text = (ROOT / ".github" / "workflows" / "build-installers.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("cancel-in-progress: false", text)
+
+    def test_the_runner_context_is_not_used_at_the_job_level(self):
+        """The ``runner`` context only exists once a job has a machine.
+
+        Using it in a job level ``env`` makes GitHub reject the whole
+        workflow file, and the run fails before a single job starts --
+        which looks exactly like a build failure and is very hard to see.
+        """
+        for workflow in self.workflows:
+            text = workflow.read_text(encoding="utf-8")
+            for job in self._jobs(text):
+                # The job header is everything before the first step.
+                header = job.split("- ", 1)[0]
+                self.assertNotIn(
+                    "runner.", header,
+                    f"{workflow.name} uses the runner context in a job header",
+                )
+
+    def test_every_job_has_a_timeout(self):
+        """Without a timeout a stuck job blocks the whole release."""
+        for workflow in self.workflows:
+            text = workflow.read_text(encoding="utf-8")
+            for job in self._jobs(text):
+                self.assertIn(
+                    "timeout-minutes:", job,
+                    f"{workflow.name} has a job without a timeout",
+                )
+
+    @staticmethod
+    def _jobs(text):
+        """Return the body of every job in a workflow.
+
+        Only the blocks under the top level ``jobs:`` key are real jobs --
+        ``on:`` has its own sub-blocks that are not jobs at all.
+        """
+        blocks = []
+        lines = text.splitlines()
+        start = None
+        for index, line in enumerate(lines):
+            if line.startswith("jobs:"):
+                start = index + 1
+                break
+        if start is None:
+            return blocks
+        current = None
+        for line in lines[start:]:
+            if line and not line.startswith(" ") and not line.startswith("#"):
+                break
+            if line.startswith("  ") and not line.startswith("    ") and line.rstrip().endswith(":"):
+                if current is not None:
+                    blocks.append("\n".join(current))
+                current = [line]
+                continue
+            if current is not None:
+                current.append(line)
+        if current is not None:
+            blocks.append("\n".join(current))
+        return blocks
+
+
+class TestRepositoryIsSane(unittest.TestCase):
+    """The repository must not carry anything that breaks a checkout.
+
+    A file whose name contains backslashes -- a Windows path that was
+    used as a file name -- is one file on Linux and a directory on
+    Windows.  Git checks it out as a directory on the Windows runner,
+    and the checkout silently ends up wrong: the scripts are not there,
+    the build stops with "No such file or directory", and nothing says
+    why.
+    """
+
+    def test_no_file_has_a_backslash_in_its_name(self):
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", "HEAD"],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            self.skipTest("git is not available")
+        stray = [name for name in result.stdout.splitlines() if "\\" in name]
+        self.assertEqual(
+            stray, [],
+            "these files break the checkout on Windows: "
+            + ", ".join(stray),
+        )
+
+    def test_the_pattern_that_caused_it_is_ignored(self):
+        ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("\\\\*", ignored)
+
+    def test_the_build_scripts_are_all_there(self):
+        """The workflows call these by name, so a missing one stops the
+        build with a message that says nothing about the reason.
+        """
+        for name in ("install_deps.py", "build.py", "installer_windows.py",
+                     "installer_macos.py", "vendor_ffmpeg.py",
+                     "verify_bundle.py", "e2e_test.py", "report_diag.py",
+                     "build_gl_stubs.py", "linux_installer.py",
+                     "installer_launcher.c"):
+            self.assertTrue(
+                (ROOT / "scripts" / name).exists(),
+                f"scripts/{name} is missing",
+            )
+
 
 class TestPipelineDoesNotDownloadModels(unittest.TestCase):
     """The analysis must not reach out to the network for a model.

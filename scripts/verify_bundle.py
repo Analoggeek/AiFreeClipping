@@ -77,13 +77,19 @@ def verify(bundle: Path, binary: Path | None) -> int:
                   f"{path.stat().st_size // 1024} KB" if path.exists() else "missing")
 
     print("\n-- executable bits --")
-    for folder in sorted((res / "ffmpeg").glob("*")):
-        for exe in folder.glob("ffmpeg*"):
-            if exe.name.endswith(".exe"):
-                continue
-            mode = exe.stat().st_mode
-            check(f"{exe.relative_to(res)} is executable",
-                  bool(mode & stat.S_IXUSR))
+    # The executable bit is a Unix thing.  Windows has no such bit, and a
+    # checkout there marks every file as not executable, so the check would
+    # fail on every platform's binaries for no reason.
+    if os.name == "nt":
+        print("   (not applicable on Windows)")
+    else:
+        for folder in sorted((res / "ffmpeg").glob("*")):
+            for exe in folder.glob("ffmpeg*"):
+                if exe.name.endswith(".exe"):
+                    continue
+                mode = exe.stat().st_mode
+                check(f"{exe.relative_to(res)} is executable",
+                      bool(mode & stat.S_IXUSR))
 
     print("\n-- bundled Python modules --")
     # PyInstaller packs the application modules into a PYZ archive inside the
@@ -118,14 +124,23 @@ def verify(bundle: Path, binary: Path | None) -> int:
                 else str(stubs)
         # Remember where the log file ends, so only lines this run wrote are
         # considered — a stale "ready" line must never pass the check.
-        log_file = None
-        log_offset = 0
-        for candidate in (
+        #
+        # The file is usually not there yet on a fresh machine, and the
+        # windowed build writes nothing to the console, so every place the
+        # application could have put it is looked at afterwards.
+        log_candidates = [
             Path.home() / ".local" / "share" / "clipos" / "logs" / "clipos.log",
+            Path.home() / ".local" / "share" / "CLIPOS" / "logs" / "clipos.log",
             Path.home() / "Library" / "Application Support" / "clipos"
             / "logs" / "clipos.log",
+            Path.home() / "Library" / "Application Support" / "CLIPOS"
+            / "logs" / "clipos.log",
             Path.home() / "AppData" / "Local" / "clipos" / "logs" / "clipos.log",
-        ):
+            Path.home() / "AppData" / "Local" / "CLIPOS" / "logs" / "clipos.log",
+        ]
+        log_file = None
+        log_offset = 0
+        for candidate in log_candidates:
             if candidate.exists():
                 log_file = candidate
                 try:
@@ -146,11 +161,19 @@ def verify(bundle: Path, binary: Path | None) -> int:
         else:
             combined = (proc.stdout or "") + (proc.stderr or "")
             # The rotating file log holds the authoritative "ready" line; the
-            # console log may only carry part of it.
-            if log_file is not None:
+            # console log may only carry part of it.  The windowed build
+            # writes nothing to the console at all, so the file is the only
+            # place the answer can come from.
+            for candidate in log_candidates:
+                if not candidate.exists():
+                    continue
                 try:
-                    with log_file.open("rb") as handle:
-                        handle.seek(log_offset)
+                    size = candidate.stat().st_size
+                    offset = log_offset if candidate == log_file else 0
+                    if size <= offset:
+                        continue
+                    with candidate.open("rb") as handle:
+                        handle.seek(offset)
                         combined += "\n" + handle.read().decode(
                             "utf-8", errors="replace"
                         )
@@ -194,7 +217,23 @@ def main() -> int:
         print(f"No such path: {root}")
         return 2
     binary = Path(args.binary) if args.binary else None
-    return verify(find_bundle(root), binary)
+    result = verify(find_bundle(root), binary)
+    if result != 0:
+        # A verification failure has to be readable afterwards: the CI
+        # logs are not always reachable, so the reason is written next to
+        # the build where the diagnostic reporter picks it up.
+        try:
+            path = Path(__file__).resolve().parents[1] / "build" / "build-error.log"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            with open(path, "a", encoding="utf-8") as handle:
+                handle.write("### the frozen bundle did not pass verification\n\n")
+                for status, name, detail in results:
+                    if status == FAIL:
+                        handle.write(f"- {name}: {detail}\n")
+                handle.write("\n")
+        except OSError:
+            pass
+    return result
 
 
 if __name__ == "__main__":

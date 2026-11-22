@@ -255,8 +255,14 @@ def _make_dmg_background(width: int = 640, height: int = 400) -> Path | None:
     return out
 
 
-def build_dmg(app: Path, output_dir: Path, volume_name: str = APP_NAME) -> Path:
-    """Build a drag-to-install ``.dmg`` with a proper window layout."""
+def build_dmg(app: Path, output_dir: Path, volume_name: str = APP_NAME,
+              arch: str = "") -> Path:
+    """Build a drag-to-install ``.dmg`` with a proper window layout.
+
+    ``arch`` is appended to the file name.  One machine builds both the
+    Apple Silicon and the Intel application, and without the suffix the
+    second disk image would overwrite the first.
+    """
     if sys.platform != "darwin":
         raise SystemExit("building a .dmg requires macOS (hdiutil)")
 
@@ -269,7 +275,8 @@ def build_dmg(app: Path, output_dir: Path, volume_name: str = APP_NAME) -> Path:
     shutil.copytree(app, staging / f"{APP_NAME}.app", symlinks=True)
     os.symlink("/Applications", staging / "Applications")
 
-    dmg = output_dir / f"{APP_NAME}-{VERSION}.dmg"
+    suffix = f"-{arch}" if arch else ""
+    dmg = output_dir / f"{APP_NAME}-{VERSION}{suffix}.dmg"
     if dmg.exists():
         dmg.unlink()
 

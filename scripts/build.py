@@ -21,6 +21,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -263,9 +264,20 @@ def build_windows() -> Path:
 
     try:
         target = build_windows_installer(app_dir, DIST)
-    except SystemExit as exc:
+    except (SystemExit, Exception) as exc:
+        # Any failure here has to be readable afterwards: the CI logs are
+        # not always reachable, so the reason is written next to the
+        # build where the diagnostic reporter picks it up.
         print(f"[build] WARNING: {exc}")
         print("[build] Falling back to a portable zip.")
+        try:
+            (BUILD / "build-error.log").write_text(
+                f"building the Windows installer failed: {exc}\n\n"
+                + traceback.format_exc(),
+                encoding="utf-8",
+            )
+        except OSError:
+            pass
         import zipfile
 
         zip_path = DIST / f"{APP_NAME}-{VERSION}-portable-win.zip"
@@ -296,7 +308,10 @@ def build_macos(target_arch: str = "") -> Path:
 
     polish_app_bundle(app)
 
-    dmg = build_dmg(app, DIST)
+    # The disk image carries the architecture in its name, so an Apple
+    # Silicon build and an Intel build can live side by side.
+    arch = {"x86_64": "intel", "arm64": "arm64"}.get(target_arch, "")
+    dmg = build_dmg(app, DIST, arch=arch)
     print(f"[build] disk image: {dmg}")
     return dmg
 
