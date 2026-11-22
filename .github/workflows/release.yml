@@ -209,6 +209,26 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || true
 
+      - name: Write down what the runner said
+        # The step messages are the only place a failing action explains
+        # itself, and they are not always readable afterwards.
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### The runner"
+            uname -a
+            python --version 2>&1 || true
+            df -h . 2>&1 | head -3 || true
+            echo ""
+            echo "### The build directory"
+            ls -la build 2>&1 | head -30
+            echo ""
+            echo "### The installers that were produced"
+            ls -la dist 2>&1 | head -20
+          } > build/step-failure.txt 2>&1 || true
+          cat build/step-failure.txt
+
       - name: Report the failure to the repository
         if: failure()
         env:
@@ -218,26 +238,6 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: python scripts/report_diag.py
-
-      - name: Write down what the runner said
-        # The step messages are the only place a failing action explains
-        # itself, and they are not always readable afterwards.
-        if: failure()
-        shell: bash
-        run: |
-          {
-            echo "### The steps that ran"
-            echo ""
-            for f in build/step-summary.txt; do
-              [ -f "$f" ] && cat "$f"
-            done
-            echo ""
-            echo "### The runner"
-            uname -a
-            python --version 2>&1 || true
-            df -h . 2>&1 | head -3 || true
-          } > build/step-failure.txt 2>&1 || true
-          cat build/step-failure.txt
 
       - name: Upload the build log on failure
         if: failure()
