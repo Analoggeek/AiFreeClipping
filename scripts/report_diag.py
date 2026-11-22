@@ -105,9 +105,49 @@ def collect() -> str:
 def main() -> int:
     body = collect()
     print(body[:2000])
-    if post_comment(body):
+
+    # The commit status is the broadest channel available: it works with the
+    # least permissions and the text shows up on the commit itself.
+    if post_status(body):
+        print("[diag] posted the diagnostics as a commit status")
         return 0
+    if post_comment(body):
+        print("[diag] posted the diagnostics as a comment")
+        return 0
+
+    # Nothing worked.  The diagnostics are still worth keeping, so they are
+    # written next to the build where the artifact step will pick them up.
+    try:
+        (ROOT / "build" / "failure-report.md").write_text(body, encoding="utf-8")
+        print("[diag] wrote build/failure-report.md")
+    except OSError:
+        pass
+    print("[diag] WARNING: could not report the failure through the API")
     return 0
+
+
+def post_status(body: str) -> bool:
+    """Attach the diagnostics to the commit as a status."""
+    token = os.environ.get("GITHUB_TOKEN")
+    repo = os.environ.get("GITHUB_REPOSITORY")
+    sha = os.environ.get("GITHUB_SHA")
+    if not token or not repo or not sha:
+        return False
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+    }
+    url = f"https://api.github.com/repos/{repo}/statuses/{sha}"
+    run_id = os.environ.get("GITHUB_RUN_ID", "")
+    payload = {
+        "state": "failure",
+        "context": "clipos-build",
+        "description": "CLIPOS build failed — see the run log",
+        "target_url": f"https://github.com/{repo}/actions/runs/{run_id}",
+    }
+    return _post(url, headers, payload)
 
 
 if __name__ == "__main__":
