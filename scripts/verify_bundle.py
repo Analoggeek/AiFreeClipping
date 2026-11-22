@@ -221,6 +221,10 @@ def main() -> int:
             path.parent.mkdir(parents=True, exist_ok=True)
             with open(path, "a", encoding="utf-8") as handle:
                 handle.write("### the frozen bundle did not pass verification\n\n")
+                for status, name, detail in results:
+                    if status == FAIL:
+                        handle.write(f"- {name}: {detail}\n")
+                handle.write("\n")
         except OSError:
             pass
     return result
