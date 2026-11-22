@@ -108,6 +108,32 @@ def verify(bundle: Path, binary: Path | None) -> int:
         env = dict(os.environ)
         env.setdefault("QT_QPA_PLATFORM", "minimal")
         env.setdefault("QT_OPENGL", "software")
+        # Bare containers have no desktop libraries.  The generated GL stubs
+        # let the bundle start long enough to prove it works; on a real
+        # desktop the system libraries are present and this changes nothing.
+        stubs = Path(__file__).resolve().parents[1] / ".stublibs"
+        if stubs.is_dir():
+            existing = env.get("LD_LIBRARY_PATH", "")
+            env["LD_LIBRARY_PATH"] = f"{stubs}{os.pathsep}{existing}" if existing \
+                else str(stubs)
+        # Remember where the log file ends, so only lines this run wrote are
+        # considered — a stale "ready" line must never pass the check.
+        log_file = None
+        log_offset = 0
+        for candidate in (
+            Path.home() / ".local" / "share" / "clipos" / "logs" / "clipos.log",
+            Path.home() / "Library" / "Application Support" / "clipos"
+            / "logs" / "clipos.log",
+            Path.home() / "AppData" / "Local" / "clipos" / "logs" / "clipos.log",
+        ):
+            if candidate.exists():
+                log_file = candidate
+                try:
+                    log_offset = candidate.stat().st_size
+                except OSError:
+                    log_offset = 0
+                break
+
         try:
             proc = subprocess.run(
                 [str(binary)], env=env, capture_output=True, text=True,
@@ -121,21 +147,13 @@ def verify(bundle: Path, binary: Path | None) -> int:
             combined = (proc.stdout or "") + (proc.stderr or "")
             # The rotating file log holds the authoritative "ready" line; the
             # console log may only carry part of it.
-            log_file = None
-            for candidate in (
-                Path.home() / ".local" / "share" / "clipos" / "logs" / "clipos.log",
-                Path.home() / "Library" / "Application Support" / "clipos"
-                / "logs" / "clipos.log",
-                Path.home() / "AppData" / "Local" / "clipos" / "logs" / "clipos.log",
-            ):
-                if candidate.exists():
-                    log_file = candidate
-                    break
             if log_file is not None:
                 try:
-                    combined += "\n" + log_file.read_text(
-                        encoding="utf-8", errors="replace"
-                    )[-4000:]
+                    with log_file.open("rb") as handle:
+                        handle.seek(log_offset)
+                        combined += "\n" + handle.read().decode(
+                            "utf-8", errors="replace"
+                        )
                 except OSError:
                     pass
             started = "CLIPOS starting" in combined
