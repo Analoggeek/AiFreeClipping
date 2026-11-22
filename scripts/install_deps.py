@@ -71,10 +71,20 @@ def run(cmd: list[str], what: str) -> None:
     print(f"\n=== {what} ===")
     print(f"$ {' '.join(cmd)}", flush=True)
 
-    attempts = 3 if "pip" in " ".join(cmd) else 1
+    is_pip = "pip" in " ".join(cmd)
+    attempts = 3 if is_pip else 1
     last = 0
+    log_path = ROOT / "build" / "pip-install.log" if is_pip else None
     for attempt in range(1, attempts + 1):
-        result = subprocess.run(cmd)
+        if log_path is not None:
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(log_path, "a", encoding="utf-8", errors="replace") as log:
+                log.write(f"\n$ {' '.join(cmd)}\n")
+                log.flush()
+                result = subprocess.run(cmd, stdout=log,
+                                        stderr=subprocess.STDOUT)
+        else:
+            result = subprocess.run(cmd)
         if result.returncode == 0:
             return
         last = result.returncode
@@ -82,6 +92,16 @@ def run(cmd: list[str], what: str) -> None:
             print(f"### {what} failed with exit code {last}; "
                   f"trying again ({attempt}/{attempts - 1})", flush=True)
             time.sleep(15)
+    if is_pip:
+        # Keep what pip said: it names the package and the reason, which
+        # is exactly what is needed to fix it.
+        tail = ""
+        try:
+            tail = log_path.read_text(encoding="utf-8", errors="replace")[-6000:]
+        except OSError:
+            pass
+        _write_failure(f"{what} failed with exit code {last}\n"
+                       f"$ {' '.join(cmd)}\n\n{tail}")
     raise SystemExit(f"{what} failed with exit code {last}")
 
 
@@ -112,6 +132,27 @@ def main() -> int:
                     help="skip the OpenCV repair (Windows and macOS only)")
     args = ap.parse_args()
 
+    try:
+        return _install(args)
+    except SystemExit as exc:
+        # A failed dependency install has to be readable afterwards: the
+        # CI logs are not always reachable, so the reason is written next
+        # to the build where the diagnostic reporter picks it up.
+        _write_failure(str(exc))
+        raise
+
+
+def _write_failure(reason: str) -> None:
+    try:
+        path = Path(__file__).resolve().parents[1] / "build" / "build-error.log"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"### Installing the dependencies failed\n\n{reason}\n\n")
+    except OSError:
+        pass
+
+
+def _install(args) -> int:
     run(pip("install", "--upgrade", "pip"), "upgrading pip")
 
     packages = list(CORE)

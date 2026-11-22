@@ -89,7 +89,8 @@ def collect() -> str:
     if build.is_dir():
         listing = sorted(p.name for p in build.iterdir())
         parts.append(f"The build directory contains: {', '.join(listing)}\n")
-    for name in ("build-error.log", "pyinstaller.log", "step-failure.txt"):
+    for name in ("build-error.log", "pyinstaller.log", "step-failure.txt",
+                 "pip-install.log"):
         path = build / name
         if path.exists():
             text = path.read_text(encoding="utf-8", errors="replace")

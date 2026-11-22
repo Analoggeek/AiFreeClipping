@@ -162,7 +162,7 @@ jobs:
           echo "The build directory contains:"
           ls -la build 2>&1 | head -30
           echo ""
-          for f in build/build-error.log build/pyinstaller.log build/*.iss build/*.nsi; do
+          for f in build/build-error.log build/pyinstaller.log build/pip-install.log build/step-failure.txt build/*.iss build/*.nsi; do
             if [ -f "$f" ]; then
               echo "--- $f ---"
               head -c 12000 "$f"
@@ -180,7 +180,7 @@ jobs:
             echo '```'
             ls -la build 2>&1 | head -30
             echo ""
-            for f in build/build-error.log build/pyinstaller.log build/*.iss build/*.nsi; do
+            for f in build/build-error.log build/pyinstaller.log build/pip-install.log build/step-failure.txt build/*.iss build/*.nsi; do
               if [ -f "$f" ]; then
                 echo "--- $f ---"
                 head -c 4000 "$f"
@@ -228,6 +228,8 @@ jobs:
           path: |
             build/build-error.log
             build/pyinstaller.log
+            build/pip-install.log
+            build/step-failure.txt
             build/CLIPOS/warn-CLIPOS.txt
             build/*.iss
             build/*.nsi
