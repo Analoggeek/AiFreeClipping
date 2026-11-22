@@ -1,0 +1,21 @@
+# ---- Core UI ----
+PySide6>=6.6,<6.9
+
+# ---- Video processing ----
+# FFmpeg/FFprobe binaries are vendored by scripts/vendor_ffmpeg.py (not pip)
+
+# ---- AI / inference ----
+numpy>=1.24
+# OpenCV 5.x removed cv2.CascadeClassifier which CLIPOS uses for face detection.
+opencv-python-headless>=4.8,<5
+faster-whisper>=1.0,<2
+torch>=2.1
+scenedetect>=0.6.3
+huggingface-hub>=0.23
+
+# ---- Optional (local LLM via Ollama) ----
+requests>=2.31
+
+# ---- Packaging ----
+pyinstaller>=6.6
+pillow>=10.0
