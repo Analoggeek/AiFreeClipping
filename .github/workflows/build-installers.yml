@@ -44,9 +44,6 @@ jobs:
       # The headless build is used anyway so the same package is installed
       # everywhere, and so OpenCV 5 never sneaks in.
       INSTALL_DEPS_ARGS: --no-opencv
-      PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
-      PIP_DISABLE_PIP_VERSION_CHECK: "1"
-      PIP_NO_INPUT: "1"
     steps:
       - name: Check out the source
         uses: actions/checkout@v4
@@ -75,6 +72,12 @@ jobs:
 
       - name: Install dependencies
         shell: bash
+        env:
+          # The cache survives the step, so a partial download is not
+          # started again from scratch.
+          PIP_CACHE_DIR: ${{ runner.temp }}/pip-cache
+          PIP_DISABLE_PIP_VERSION_CHECK: "1"
+          PIP_NO_INPUT: "1"
         run: |
           set -e
           for attempt in 1 2 3; do

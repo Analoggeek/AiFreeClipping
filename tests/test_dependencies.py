@@ -162,6 +162,23 @@ class TestWorkflows(unittest.TestCase):
         )
         self.assertIn("cancel-in-progress: false", text)
 
+    def test_the_runner_context_is_not_used_at_the_job_level(self):
+        """The ``runner`` context only exists once a job has a machine.
+
+        Using it in a job level ``env`` makes GitHub reject the whole
+        workflow file, and the run fails before a single job starts --
+        which looks exactly like a build failure and is very hard to see.
+        """
+        for workflow in self.workflows:
+            text = workflow.read_text(encoding="utf-8")
+            for job in self._jobs(text):
+                # The job header is everything before the first step.
+                header = job.split("- ", 1)[0]
+                self.assertNotIn(
+                    "runner.", header,
+                    f"{workflow.name} uses the runner context in a job header",
+                )
+
     def test_every_job_has_a_timeout(self):
         """Without a timeout a stuck job blocks the whole release."""
         for workflow in self.workflows:
