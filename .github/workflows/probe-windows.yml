@@ -46,6 +46,14 @@ jobs:
           done
           echo "### the installer failed" >&2
           {
+            echo "### the network"
+            python -c "import urllib.request;print(urllib.request.urlopen('https://api.github.com',timeout=30).status)" 2>&1 || true
+            python -c "import urllib.request;print(urllib.request.urlopen('https://pypi.org/simple/',timeout=30).status)" 2>&1 || true
+            echo "### proxy"
+            echo "HTTP_PROXY=$HTTP_PROXY HTTPS_PROXY=$HTTPS_PROXY NO_PROXY=$NO_PROXY"
+            python -c "import ssl;print(ssl.OPENSSL_VERSION)" 2>&1 || true
+            python -c "import socket;print(socket.gethostbyname('api.github.com'))" 2>&1 || true
+            echo "### the report" 
             echo "### build/pip-install.log"
             echo ""
             tail -c 8000 build/pip-install.log 2>/dev/null || echo "(no pip log)"
