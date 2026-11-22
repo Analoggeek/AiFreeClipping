@@ -275,7 +275,12 @@ jobs:
         run: python scripts/vendor_ffmpeg.py
 
       - name: Run the end-to-end test
-        run: python scripts/e2e_test.py
+        run: |
+          # The output is kept so that a failure can be read afterwards:
+          # the CI log storage is not always reachable.
+          mkdir -p build
+          python scripts/e2e_test.py 2>&1 | tee build/e2e.log
+          exit "${PIPESTATUS[0]}"
 
       - name: Build the application and the disk image
         run: python scripts/build.py macos --skip-tests --skip-vendor
@@ -300,6 +305,48 @@ jobs:
             dist/CLIPOS-*.dmg
             dist/CLIPOS-intel.app
           if-no-files-found: error
+
+      - name: Write down what the runner said
+        # The step messages are the only place a failing action explains
+        # itself, and they are not always readable afterwards.
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "### The runner"
+            uname -a
+            sw_vers 2>&1 || true
+            python --version 2>&1 || true
+            df -h . 2>&1 | head -3 || true
+            echo ""
+            echo "### The build directory"
+            ls -la build 2>&1 | head -30
+            echo ""
+            echo "### What was produced"
+            ls -la dist 2>&1 | head -20
+          } > build/step-failure.txt 2>&1 || true
+          cat build/step-failure.txt
+
+      - name: Report the failure to the repository
+        if: failure()
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_SHA: ${{ github.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: python scripts/report_diag.py
+
+      - name: Upload the build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: clipos-macos-build-log
+          path: |
+            build/*.log
+            build/step-failure.txt
+          if-no-files-found: ignore
+          retention-days: 14
 
   linux:
     name: Linux package
