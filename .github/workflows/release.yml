@@ -94,6 +94,18 @@ jobs:
               ;;
           esac
 
+      - name: Upload the build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ matrix.artifact || 'windows' }}
+          path: |
+            build/build-error.log
+            build/CLIPOS/warn-CLIPOS.txt
+            build/*.iss
+            build/*.nsi
+          if-no-files-found: ignore
+
       - name: Verify the frozen bundle
         run: python scripts/verify_bundle.py dist
 
