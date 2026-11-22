@@ -228,16 +228,26 @@ class TestWorkflows(unittest.TestCase):
         application is meant to run on, so the Python that does the
         freezing has to be an Intel one.  On an Apple Silicon runner the
         Python that is already there is the wrong one.
+
+        A virtual environment made from that Python would not help: it
+        would still hold Apple Silicon wheels, and PyInstaller refuses
+        to build an Intel application out of them.  The Intel interpreter
+        itself is installed.
         """
         for name, text in self._workflows():
             self.assertIn(
-                ".venv-intel", text,
-                f"{name} builds the Intel application with the same Python "
-                f"as the Apple Silicon one",
+                "architecture: x64", text,
+                f"{name} does not install an Intel Python for the Intel "
+                f"application",
             )
             self.assertIn(
                 "CLIPOS_BUILD_PYTHON", text,
                 f"{name} does not tell the build which Python to use",
+            )
+            self.assertNotIn(
+                "virtualenv", text,
+                f"{name} makes a virtual environment for the Intel build; "
+                f"it would still hold Apple Silicon wheels",
             )
 
     def test_the_build_script_honours_the_python_it_is_given(self):
