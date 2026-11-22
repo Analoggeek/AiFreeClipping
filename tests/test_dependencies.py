@@ -221,6 +221,52 @@ class TestWorkflows(unittest.TestCase):
         return blocks
 
 
+class TestRepositoryIsSane(unittest.TestCase):
+    """The repository must not carry anything that breaks a checkout.
+
+    A file whose name contains backslashes -- a Windows path that was
+    used as a file name -- is one file on Linux and a directory on
+    Windows.  Git checks it out as a directory on the Windows runner,
+    and the checkout silently ends up wrong: the scripts are not there,
+    the build stops with "No such file or directory", and nothing says
+    why.
+    """
+
+    def test_no_file_has_a_backslash_in_its_name(self):
+        import subprocess
+
+        result = subprocess.run(
+            ["git", "ls-tree", "-r", "--name-only", "HEAD"],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            self.skipTest("git is not available")
+        stray = [name for name in result.stdout.splitlines() if "\\" in name]
+        self.assertEqual(
+            stray, [],
+            "these files break the checkout on Windows: "
+            + ", ".join(stray),
+        )
+
+    def test_the_pattern_that_caused_it_is_ignored(self):
+        ignored = (ROOT / ".gitignore").read_text(encoding="utf-8")
+        self.assertIn("\\\\*", ignored)
+
+    def test_the_build_scripts_are_all_there(self):
+        """The workflows call these by name, so a missing one stops the
+        build with a message that says nothing about the reason.
+        """
+        for name in ("install_deps.py", "build.py", "installer_windows.py",
+                     "installer_macos.py", "vendor_ffmpeg.py",
+                     "verify_bundle.py", "e2e_test.py", "report_diag.py",
+                     "build_gl_stubs.py", "linux_installer.py",
+                     "installer_launcher.c"):
+            self.assertTrue(
+                (ROOT / "scripts" / name).exists(),
+                f"scripts/{name} is missing",
+            )
+
+
 class TestPipelineDoesNotDownloadModels(unittest.TestCase):
     """The analysis must not reach out to the network for a model.
 

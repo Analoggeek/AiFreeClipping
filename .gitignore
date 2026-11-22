@@ -6,6 +6,12 @@ resources/ffmpeg/
 dist/
 *.spec
 
+# A Windows path used as a file name.  On Linux such a name is one file
+# whose name contains backslashes, and on Windows the checkout turns it
+# into a directory -- which quietly breaks the whole checkout.
+\\*
+
+
 # ---- python ----
 __pycache__/
 *.py[cod]
