@@ -63,11 +63,14 @@ jobs:
         run: |
           mkdir -p build
           {
+            echo "### the build directory"
+            ls -la build 2>&1 || echo "(no build directory)"
+            echo ""
             echo "### pip-install.log"
-            tail -c 10000 build/pip-install.log 2>/dev/null || echo "(no pip log)"
+            python -c "print(open('build/pip-install.log',encoding='utf-8',errors='replace').read()[-10000:])" 2>&1 || echo "(no pip log)"
             echo ""
             echo "### build-error.log"
-            tail -c 5000 build/build-error.log 2>/dev/null || echo "(no error log)"
+            python -c "print(open('build/build-error.log',encoding='utf-8',errors='replace').read()[-5000:])" 2>&1 || echo "(no error log)"
           } > build/probe-report.md 2>&1 || true
       - name: Post the report
         if: always()
