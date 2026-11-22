@@ -152,18 +152,41 @@ def _write_failure(reason: str) -> None:
         pass
 
 
+def _install_zig() -> bool:
+    """Install the C compiler used by the self-extracting installer.
+
+    The wheel is large and the download is the slowest part of the
+    dependency install, so a failure here is reported but does not stop
+    the build: on Windows the installer is produced by Inno Setup, and
+    the compiler is only the fallback.
+    """
+    if installed("ziglang"):
+        print("=== the C compiler is already installed ===")
+        return True
+    try:
+        run(pip("install", ZIG), "installing the C compiler")
+    except SystemExit as exc:
+        print(f"### the C compiler could not be installed: {exc}")
+        return False
+    return True
+
+
 def _install(args) -> int:
     run(pip("install", "--upgrade", "pip"), "upgrading pip")
 
     packages = list(CORE)
     if args.build:
         packages += BUILD
-        # The self-extracting Windows installer needs a C compiler.  On
-        # Windows itself Inno Setup is used instead, but the fallback has
-        # to be available too: Inno can fail on a path it cannot open, and
-        # then the build would have no installer at all.
-        packages.append(ZIG)
     run(pip("install", *packages), "installing the core packages")
+
+    if args.build:
+        # The self-extracting Windows installer needs a C compiler.  On
+        # Windows itself Inno Setup is used instead, so the compiler is
+        # only a fallback -- and the wheel is over a hundred megabytes,
+        # so a failure here must not stop the build.
+        if not _install_zig():
+            print("### the C compiler fallback is not available; "
+                  "the build will rely on Inno Setup")
 
     if not args.no_opencv:
         # scenedetect pulled in the GUI build of OpenCV.  Remove it, then
