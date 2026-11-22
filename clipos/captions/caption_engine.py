@@ -34,13 +34,91 @@ class CaptionCue:
         }
 
 
+# Caption fonts, in order of preference.  The first one that is actually
+# installed is used, so the subtitles are never rendered with a font the
+# system does not have.
+FONT_CANDIDATES = [
+    "DejaVu Sans",
+    "Arial",
+    "Helvetica",
+    "Helvetica Neue",
+    "SF Pro Display",
+    "Segoe UI",
+    "Roboto",
+    "Liberation Sans",
+    "Noto Sans",
+    "Verdana",
+]
+
+_resolved_font: str | None = None
+
+
+def system_font() -> str:
+    """The name of a caption font that is installed on this machine.
+
+    ``DejaVu Sans`` is the first choice because it is what the styles are
+    designed around, but it is not present on macOS or Windows, where
+    the subtitle filter would then fall back to something unreadable.
+    """
+    global _resolved_font
+    if _resolved_font is not None:
+        return _resolved_font
+    families: set[str] = set()
+    try:
+        from PySide6.QtGui import QFontDatabase, QGuiApplication
+
+        # The font database needs a running application.  There is none
+        # when this module is imported, and that is not an error: the
+        # styles are written out much later, when there is one.
+        if QGuiApplication.instance() is not None:
+            families = set(QFontDatabase.families())
+    except Exception:
+        families = set()
+    if families:
+        for name in FONT_CANDIDATES:
+            if name in families:
+                _resolved_font = name
+                return _resolved_font
+        # Nothing preferred is there; any family will do.
+        _resolved_font = sorted(families)[0]
+        return _resolved_font
+    # No font service: fall back to the font file we can at least find.
+    _resolved_font = FONT_CANDIDATES[0]
+    return _resolved_font
+
+
+def resolve_style_fonts() -> None:
+    """Fill in the real font name on every caption style.
+
+    The styles are built at import time, before there is a running
+    application, so the font they carry is only a guess.  Once the
+    application exists the guess is replaced with a font that is really
+    installed, which is what keeps the subtitles legible on macOS and
+    Windows.
+    """
+    name = system_font()
+    for style in list(CAPTION_STYLES.values()):
+        style.font = name
+
+
+def _caption_font() -> str:
+    """The caption font, resolved as late as possible.
+
+    The styles are built when this module is imported, which happens
+    before there is a running application, so the name that is stored is
+    only a guess.  :func:`resolve_style_fonts` corrects it once the
+    application exists.
+    """
+    return system_font()
+
+
 @dataclass
 class CaptionStyle:
     """A complete visual definition of a caption style."""
     key: str
     name: str
     description: str
-    font: str = "DejaVu Sans"
+    font: str = ""
     size: int = 58
     primary_color: str = "&H00FFFFFF"      # ASS is &HAABBGGRR
     outline_color: str = "&H00000000"
@@ -80,7 +158,7 @@ _register(CaptionStyle(
     key="mrbeast",
     name="MrBeast Style",
     description="Huge bold white text, thick black outline, punchy and loud",
-    font="DejaVu Sans", size=64, primary_color="&H00FFFFFF", outline_color="&H00000000",
+    font=_caption_font(), size=64, primary_color="&H00FFFFFF", outline_color="&H00000000",
     bold=True, uppercase=True, stroke_width=6.0, shadow=3.0, alignment=2, margin_v=260,
     highlight_color="&H0000FFFF",
 ))
@@ -88,14 +166,14 @@ _register(CaptionStyle(
     key="minimal_white",
     name="Minimal White",
     description="Clean white text on the image, thin outline, quiet and elegant",
-    font="DejaVu Sans", size=50, primary_color="&H00FFFFFF", outline_color="&H64000000",
+    font=_caption_font(), size=50, primary_color="&H00FFFFFF", outline_color="&H64000000",
     bold=False, uppercase=False, stroke_width=2.0, shadow=1.0, alignment=2, margin_v=180,
 ))
 _register(CaptionStyle(
     key="neon_gaming",
     name="Neon Gaming",
     description="Cyan neon glow with magenta highlights",
-    font="DejaVu Sans", size=56, primary_color="&H00F0F0FF", outline_color="&H00A000C0",
+    font=_caption_font(), size=56, primary_color="&H00F0F0FF", outline_color="&H00A000C0",
     bold=True, uppercase=True, stroke_width=3.5, shadow=4.0, alignment=2, margin_v=240,
     highlight_color="&H00E060FF", border_style=1,
 ))
@@ -103,7 +181,7 @@ _register(CaptionStyle(
     key="modern_podcast",
     name="Modern Podcast",
     description="Medium-weight text in a soft box, ideal for talking-head clips",
-    font="DejaVu Sans", size=52, primary_color="&H00FFFFFF", outline_color="&H30000000",
+    font=_caption_font(), size=52, primary_color="&H00FFFFFF", outline_color="&H30000000",
     bold=False, uppercase=False, stroke_width=1.5, shadow=0.0, alignment=2, margin_v=200,
     background_opacity=0.55,
 ))
@@ -111,7 +189,7 @@ _register(CaptionStyle(
     key="bold_viral",
     name="Bold Viral",
     description="Extra-bold uppercase with a thick stroke -- highest readability",
-    font="DejaVu Sans", size=62, primary_color="&H00FFFFFF", outline_color="&H00000000",
+    font=_caption_font(), size=62, primary_color="&H00FFFFFF", outline_color="&H00000000",
     bold=True, uppercase=True, stroke_width=7.0, shadow=3.0, alignment=2, margin_v=250,
     highlight_color="&H0000FFFF",
 ))
@@ -119,14 +197,14 @@ _register(CaptionStyle(
     key="cinematic",
     name="Cinematic",
     description="Letter-spaced serif-like caps, wide margins, understated",
-    font="DejaVu Serif", size=48, primary_color="&H00F0F0F0", outline_color="&H20000000",
+    font=_caption_font(), size=48, primary_color="&H00F0F0F0", outline_color="&H20000000",
     bold=False, uppercase=True, stroke_width=2.0, shadow=2.0, alignment=2, margin_v=280,
 ))
 _register(CaptionStyle(
     key="karaoke",
     name="Karaoke",
     description="Word-by-word colour fill, like a sing-along",
-    font="DejaVu Sans", size=56, primary_color="&H00FFFFFF", outline_color="&H00000000",
+    font=_caption_font(), size=56, primary_color="&H00FFFFFF", outline_color="&H00000000",
     bold=True, uppercase=False, stroke_width=4.0, shadow=2.0, alignment=2, margin_v=230,
     highlight_color="&H0000D7FF", karaoke=True,
 ))
@@ -134,7 +212,7 @@ _register(CaptionStyle(
     key="clean_professional",
     name="Clean Professional",
     description="Corporate-friendly, sentence case, light shadow",
-    font="DejaVu Sans", size=50, primary_color="&H00FFFFFF", outline_color="&H40000000",
+    font=_caption_font(), size=50, primary_color="&H00FFFFFF", outline_color="&H40000000",
     bold=False, uppercase=False, stroke_width=2.5, shadow=1.5, alignment=2, margin_v=210,
 ))
 
@@ -389,6 +467,10 @@ def write_ass(
     """Write an ASS file to disk."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    # The style may still carry the font that was guessed before the
+    # application existed; a font that is really installed is better.
+    if not style.font:
+        style.font = system_font()
     content = render_ass(cues, style, width, height, **kwargs)
     path.write_text(content, encoding="utf-8")
     return path

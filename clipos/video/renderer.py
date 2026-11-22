@@ -31,6 +31,7 @@ from ..ai.speaker_tracking import SpeakerTrack, subject_center_at
 from ..ai.visual_analysis import VisualAnalysis
 from ..captions.caption_engine import CaptionCue, CaptionStyle, get_style, write_ass
 from ..core.config import ASPECT_RATIOS
+from ..core.fonts import drawtext_font_args, fontsdir_arg
 from ..core.ffmpeg import (
     FFmpegCancelled,
     FFmpegRunner,
@@ -491,8 +492,9 @@ class ClipRenderer:
         if settings.hook_text:
             hook = settings.hook_text.replace(":", "\\:").replace("'", "")
             hook = hook.replace("%", "\\%")
+            font_arg = drawtext_font_args()
             vf_parts.append(
-                f"drawtext=text='{hook}':fontcolor=white:fontsize=54:borderw=4:"
+                f"drawtext=text='{hook}':{font_arg}fontcolor=white:fontsize=54:borderw=4:"
                 f"bordercolor=black@0.9:box=1:boxcolor=black@0.55:boxborderw=22:"
                 f"x=(w-text_w)/2:y=h*0.16:enable='lt(t,{settings.hook_duration:.2f})'"
             )
@@ -558,8 +560,10 @@ class ClipRenderer:
             input_args += ["-ss", f"{start:.3f}", "-t", f"{clip_dur:.3f}", "-i", str(source)]
             vlabel, alabel = "[v0]", "[a0]"
             if ass_path:
+                fontsdir = fontsdir_arg()
                 filter_parts.append(
-                    f"[0:v]{vf}[vbase];[vbase]ass='{_escape_ass_path(ass_path)}'[v0]"
+                    f"[0:v]{vf}[vbase];[vbase]ass='{_escape_ass_path(ass_path)}'"
+                    f"{fontsdir}[v0]"
                 )
             else:
                 filter_parts.append(f"[0:v]{vf}[v0]")
@@ -788,7 +792,10 @@ class ClipRenderer:
 
         final_v, final_a = "[vcat]", "[acat]"
         if ass_path:
-            parts.append(f"{final_v}ass='{_escape_ass_path(ass_path)}'[vout]")
+            fontsdir = fontsdir_arg()
+            parts.append(
+                f"{final_v}ass='{_escape_ass_path(ass_path)}'{fontsdir}[vout]"
+            )
             final_v = "[vout]"
 
         filter_complex = ";".join(parts)
@@ -872,7 +879,8 @@ class ClipRenderer:
             "-ss", f"{start:.3f}", "-t", f"{clip_dur:.3f}", "-i", str(source),
         ]
         if ass_path:
-            cmd += ["-vf", f"{vf},ass='{_escape_ass_path(ass_path)}'"]
+            fontsdir = fontsdir_arg()
+            cmd += ["-vf", f"{vf},ass='{_escape_ass_path(ass_path)}'{fontsdir}"]
         else:
             cmd += ["-vf", vf]
         cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-crf", str(settings.crf),
@@ -932,10 +940,11 @@ def generate_thumbnails(
         overlay = ""
         if text:
             safe = text.replace(":", "\\:").replace("'", "").replace("%", "\\%")
+            font_arg = drawtext_font_args()
             overlay = (
-                f",drawtext=text='{safe}':fontcolor={color}:fontsize={size}:borderw=6:"
-                f"bordercolor=black@0.95:box=1:boxcolor=black@0.45:boxborderw=24:"
-                f"x=(w-text_w)/2:y=h*0.78"
+                f",drawtext=text='{safe}':{font_arg}fontcolor={color}:fontsize={size}:"
+                f"borderw=6:bordercolor=black@0.95:box=1:boxcolor=black@0.45:"
+                f"boxborderw=24:x=(w-text_w)/2:y=h*0.78"
             )
         vf = (
             f"scale={out_w}:{out_h}:force_original_aspect_ratio=increase,"
