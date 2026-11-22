@@ -21,7 +21,12 @@ from typing import Callable, Optional
 
 from ..ai import audio_analysis, clip_detector, speaker_tracking, title_generator
 from ..ai import visual_analysis
-from ..ai.transcription import Transcript, TranscriptionUnavailable, transcribe
+from ..ai.transcription import (
+    Transcript,
+    TranscriptionUnavailable,
+    model_installed,
+    transcribe,
+)
 from ..captions.caption_engine import build_cues_for_clip, get_style, list_styles
 from ..core.config import ASPECT_RATIOS, CLIP_DURATION_PRESETS, PATHS
 from ..core.ffmpeg import extract_audio_wav, probe
@@ -136,21 +141,35 @@ class ClipOSPipeline:
         # -- speech ------------------------------------------------------------
         self._report("speech", 48.0, "Transcribing speech (offline)")
         if info.has_audio and wav_path.exists():
-            try:
-                result.transcript = transcribe(
-                    wav_path, model_size=stt_model, language=language or None,
-                    progress_cb=lambda p, m: self._report("speech", 48.0 + p * 0.30, m),
+            # Only try to transcribe when the model is actually on disk.
+            # Asking Whisper to load a model it has to fetch would block the
+            # whole analysis on a network download, and the app's contract is
+            # that models come from the model manager, not the pipeline.
+            if not model_installed(stt_model):
+                result.transcription_available = False
+                result.transcription_error = (
+                    f"The speech-to-text model '{stt_model}' is not installed. "
+                    "Open AI Models to download it."
                 )
-                result.transcription_available = True
-            except TranscriptionUnavailable as exc:
-                result.transcription_available = False
-                result.transcription_error = str(exc)
-                self._report("speech", 78.0, f"Speech model unavailable: {exc}")
-            except Exception as exc:
-                result.transcription_available = False
-                result.transcription_error = str(exc)
-                log.warning("transcription failed: %s", exc)
-                self._report("speech", 78.0, f"Transcription failed: {exc}")
+                self._report("speech", 78.0,
+                             f"Speech model '{stt_model}' is not installed")
+            else:
+                try:
+                    result.transcript = transcribe(
+                        wav_path, model_size=stt_model, language=language or None,
+                        progress_cb=lambda p, m: self._report(
+                            "speech", 48.0 + p * 0.30, m),
+                    )
+                    result.transcription_available = True
+                except TranscriptionUnavailable as exc:
+                    result.transcription_available = False
+                    result.transcription_error = str(exc)
+                    self._report("speech", 78.0, f"Speech model unavailable: {exc}")
+                except Exception as exc:
+                    result.transcription_available = False
+                    result.transcription_error = str(exc)
+                    log.warning("transcription failed: %s", exc)
+                    self._report("speech", 78.0, f"Transcription failed: {exc}")
         else:
             result.transcription_available = False
             result.transcription_error = "No audio track in source video"
