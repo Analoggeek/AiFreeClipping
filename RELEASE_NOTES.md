@@ -1,0 +1,74 @@
+# CLIPOS 1.0.0 — AI Automatic Video Clipping Studio
+
+**CLIPOS** is a native, offline-first desktop application that turns a long video
+into upload-ready short-form clips. It runs entirely on your own machine: import
+a file, let the local AI find the engaging moments, and export finished vertical
+videos with captions, reframing, zoom and metadata — with no cloud account and
+no upload of your media.
+
+Built with **Python** (AI + video pipeline) and **PySide6** (native desktop UI).
+Ships with genuine **FFmpeg/FFprobe** binaries for macOS (Intel + Apple Silicon)
+and Windows 10/11.
+
+## Downloads
+
+| Platform | File | Notes |
+|---|---|---|
+| Windows 10/11 | `CLIPOS-Setup.exe` | Native installer, installs and runs offline |
+| macOS (Apple Silicon) | `CLIPOS-arm64.dmg` | Drag the app to Applications |
+| macOS (Intel) | `CLIPOS-intel.dmg` | Drag the app to Applications |
+| Linux | `CLIPOS_1.0.0_amd64.deb` | Debian / Ubuntu |
+
+## The five headline features
+
+- **Virality Score** — every clip gets a 0–100 score for engagement potential.
+- **Auto Hook Generator** — a hook suggestion for the first one to three seconds.
+- **Multi-Clip Mode** — ten to twenty different shorts from one source.
+- **Speaker Tracking** — the frame follows whoever is speaking.
+- **One-Click Editing** — the AI produces a ready-to-upload video.
+
+## Everything else
+
+- Eleven working pages: Home, New Project, Auto Clip Studio, My Projects, Clip
+  Library, Templates, Caption Studio, Preview Editor, Export Center, AI Models
+  and Settings.
+- Real transcription with Faster-Whisper, real face detection, real scene
+  detection, real rendering. Nothing is simulated.
+- Clip detection weighs speech, keywords, emotion, questions, storytelling,
+  facts, humour, reactions, topic and scene changes, energy, pauses and
+  semantic context.
+- Nine caption styles with word-by-word highlighting, punctuation, sizing,
+  colour and placement.
+- A preview editor with a timeline, waveform, tracks, trim, split, merge, crop,
+  resize, speed, zoom, frame navigation and undo/redo.
+- Batch export with H.264 and H.265, 1080×1920, 30 and 60 FPS, a configurable
+  bitrate, AAC audio, a queue, cancellation and a history.
+- Real thumbnail generation with three templates.
+- Hardware detection for NVENC, Apple Silicon, Quick Sync and CPU fallback,
+  with the RAM, the GPU, the thread count and a low-memory mode all visible.
+- A model manager with downloads, progress, sizes, enable/disable, removal and
+  an offline availability indicator.
+
+## Privacy
+
+Everything stays on your machine. There is no account, no subscription, no
+automatic upload and no background transmission of your media. The application
+works fully offline once the speech-to-text model has been downloaded once.
+
+## Notes
+
+- The first run needs an internet connection **only** to download the
+  speech-to-text model. After that everything happens locally.
+- A message about blocked URLs is shown plainly when a link cannot be
+  imported; importing the file locally always works.
+- Logs are written to the application data folder and are listed in the
+  Troubleshooting section of the README.
+
+## Building from source
+
+See the *Building from source* and *Building installers* sections of the
+README. The test suite is:
+
+```
+python -m pytest tests/ -q
+```
