@@ -19,3 +19,9 @@ requests>=2.31
 # ---- Packaging ----
 pyinstaller>=6.6
 pillow>=10.0
+
+# ---- Windows installer ----
+# ziglang carries an LLVM toolchain with a Windows target, so a native
+# .exe installer can be cross-compiled from any host.  Optional: Inno Setup
+# and NSIS are used instead when they are installed.
+ziglang>=0.11; platform_system != "Windows"
