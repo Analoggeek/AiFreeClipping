@@ -98,7 +98,7 @@ jobs:
           for f in build/build-error.log build/pyinstaller.log build/*.iss build/*.nsi; do
             if [ -f "$f" ]; then
               echo "--- $f ---"
-              head -c 4000 "$f"
+              head -c 12000 "$f"
               echo
             fi
           done

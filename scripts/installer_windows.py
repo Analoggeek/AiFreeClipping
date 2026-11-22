@@ -399,6 +399,11 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     build_dir = ROOT / "build"
     build_dir.mkdir(parents=True, exist_ok=True)
+    # The installer compilers write their output here.  Neither Inno Setup
+    # nor NSIS creates the directory, and they fail with a bare "Can't open
+    # output file" when it is missing -- which is exactly what happened.
+    compiler_out = build_dir / "dist"
+    compiler_out.mkdir(parents=True, exist_ok=True)
 
     # Stage the application in a short directory.  Windows cannot open a path
     # longer than 260 characters, and the Inno compiler fails with "The
@@ -421,7 +426,7 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
             [iscc, str(iss)], cwd=ROOT, capture_output=True, text=True
         )
         if proc.returncode == 0:
-            produced = build_dir / "dist" / f"{APP_NAME}-Setup.exe"
+            produced = compiler_out / f"{APP_NAME}-Setup.exe"
             target = output_dir / produced.name
             shutil.copy2(produced, target)
             shutil.rmtree(staging_dir(), ignore_errors=True)
@@ -460,7 +465,7 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
             [makensis, str(nsi)], cwd=ROOT, capture_output=True, text=True
         )
         if proc.returncode == 0:
-            produced = build_dir / "dist" / f"{APP_NAME}-Setup.exe"
+            produced = compiler_out / f"{APP_NAME}-Setup.exe"
             target = output_dir / produced.name
             shutil.copy2(produced, target)
             shutil.rmtree(staging_dir(), ignore_errors=True)

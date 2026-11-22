@@ -423,6 +423,32 @@ class TestBuildPipeline(unittest.TestCase):
         )
         self.assertIn("suffix = f\"-{arch}\" if arch else \"\"", text)
 
+    def test_the_compiler_output_directory_is_created(self):
+        """Neither Inno Setup nor NSIS creates the directory they write
+        their installer to, and both fail with a bare "Can't open output
+        file" when it is missing.
+        """
+        text = (ROOT / "scripts" / "installer_windows.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'compiler_out = build_dir / "dist"', text,
+            "the installer compiler output directory is never created",
+        )
+        self.assertIn(
+            'compiler_out.mkdir(parents=True, exist_ok=True)', text,
+            "the installer compiler output directory is never created",
+        )
+
+    def test_the_compilers_write_into_the_created_directory(self):
+        text = (ROOT / "scripts" / "installer_windows.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn(
+            'produced = compiler_out / f"{APP_NAME}-Setup.exe"', text,
+            "the installer is read back from a directory that may not exist",
+        )
+
 
 class TestFailureReporting(unittest.TestCase):
     """A packaging failure has to say what went wrong.

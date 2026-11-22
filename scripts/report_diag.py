@@ -93,13 +93,33 @@ def collect() -> str:
         path = build / name
         if path.exists():
             text = path.read_text(encoding="utf-8", errors="replace")
-            tail = text[-3000:]
-            parts.append(f"#### {name}\n\n```\n{tail}\n```\n")
+            # The build error log holds one section per failed back-end.
+            # Keeping only the tail threw the first one away, which is
+            # where the real reason usually is, so the whole thing is kept
+            # when it fits and trimmed from the middle when it does not.
+            parts.append(f"#### {name}\n\n```\n{_trim(text)}\n```\n")
     for pattern in ("*.iss", "*.nsi"):
         for path in build.glob(pattern):
             parts.append(f"#### {path.name}\n\n```\n"
                          f"{path.read_text(encoding='utf-8', errors='replace')[:3000]}\n```\n")
     return "\n".join(parts)
+
+
+def _trim(text: str, limit: int = 24000) -> str:
+    """Keep a log readable without losing the beginning of it.
+
+    A failure report that starts halfway through the log is worse than
+    useless, so the middle is dropped rather than the start.
+    """
+    if len(text) <= limit:
+        return text
+    head = limit // 2
+    tail = limit - head
+    return (
+        text[:head]
+        + f"\n\n... {len(text) - limit} characters in the middle were left out ...\n\n"
+        + text[-tail:]
+    )
 
 
 def main() -> int:
