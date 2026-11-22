@@ -66,6 +66,75 @@ def run(cmd: list[str], **kwargs) -> None:
         raise SystemExit(f"command failed with exit code {result.returncode}: {cmd}")
 
 
+def _python_architecture(python: str) -> str:
+    """The architecture of an interpreter, or an empty string."""
+    try:
+        import subprocess
+
+        out = subprocess.run(
+            [python, "-c", "import platform; print(platform.machine())"],
+            capture_output=True, text=True, timeout=60,
+        )
+        return out.stdout.strip().lower()
+    except Exception:
+        return ""
+
+
+def find_python_for_arch(arch: str) -> str:
+    """Find an interpreter for the given architecture.
+
+    An Intel application needs an Intel Python: the extension modules
+    have to be compiled for the machine the application is meant to run
+    on.  On an Apple Silicon machine the interpreter that comes first on
+    the path is usually the wrong one, so the interpreters are looked at
+    until one reports the wanted architecture.
+    """
+    if not arch:
+        return sys.executable
+
+    wanted = "x86_64" if arch in ("x86_64", "intel") else "arm64"
+
+    # The interpreter the caller asked for, if it is the right one.
+    chosen = os.environ.get("CLIPOS_BUILD_PYTHON", "").strip()
+    if chosen and Path(chosen).exists():
+        found = _python_architecture(chosen)
+        if not found or wanted in found:
+            return chosen
+        print(f"[build] {chosen} is {found}, not {wanted}; looking further")
+
+    candidates: list[str] = []
+    # The interpreters the runner keeps in its tool cache.
+    for base in Path("/Users/runner/hostedtoolcache/Python").glob("*/*/bin/python*"):
+        if "python3" in base.name:
+            candidates.append(str(base))
+    # The framework directory the system Python lives in.
+    for base in Path("/Library/Frameworks/Python.framework/Versions").glob("*/bin/python3*"):
+        candidates.append(str(base))
+    # Everything on the path.
+    for name in ("python3.11", "python3", "python"):
+        found = shutil.which(name)
+        if found:
+            candidates.append(found)
+    candidates.append(sys.executable)
+
+    for candidate in candidates:
+        try:
+            if not Path(candidate).exists():
+                continue
+        except OSError:
+            continue
+        found = _python_architecture(candidate)
+        if found and wanted in found:
+            print(f"[build] using {candidate} for {wanted}")
+            return candidate
+
+    print(
+        f"[build] WARNING: no {wanted} interpreter was found; the build may "
+        f"fail if the extension modules are for the wrong architecture"
+    )
+    return chosen or sys.executable
+
+
 def venv_python() -> str:
     """The Python that does the freezing.
 
@@ -181,6 +250,9 @@ def freeze(target: str, target_arch: str = "") -> None:
     """
     BUILD.mkdir(parents=True, exist_ok=True)
     log_path = BUILD / "pyinstaller.log"
+    if target_arch:
+        python = find_python_for_arch(target_arch)
+        os.environ["CLIPOS_BUILD_PYTHON"] = python
     args = pyinstaller_args(target, target_arch)
     print(f"\n$ {' '.join(args)}")
     with open(log_path, "w", encoding="utf-8", errors="replace") as log:

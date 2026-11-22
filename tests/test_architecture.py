@@ -250,6 +250,19 @@ class TestWorkflows(unittest.TestCase):
                 f"it would still hold Apple Silicon wheels",
             )
 
+    def test_the_build_finds_the_interpreter_for_the_architecture(self):
+        """The interpreter has to match the architecture being built.
+
+        On an Apple Silicon machine the interpreter that comes first on
+        the path is the Apple Silicon one, and an Intel build made with
+        it produces an application with Apple Silicon extension modules.
+        The build therefore looks for an interpreter of the right
+        architecture.
+        """
+        text = (ROOT / "scripts" / "build.py").read_text(encoding="utf-8")
+        self.assertIn("find_python_for_arch", text)
+        self.assertIn("_python_architecture", text)
+
     def test_the_build_script_honours_the_python_it_is_given(self):
         text = (ROOT / "scripts" / "build.py").read_text(encoding="utf-8")
         self.assertIn("CLIPOS_BUILD_PYTHON", text)

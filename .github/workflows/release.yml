@@ -187,13 +187,24 @@ jobs:
         with:
           python-version: "3.11"
           architecture: x64
-      - name: Install the Intel dependencies
+      - name: Find the Intel Python
+        # The Intel interpreter is installed by the step above, but the
+        # path can still point at the Apple Silicon one first.  The
+        # interpreter that is actually wanted is the one that reports
+        # itself as Intel, so it is looked for.
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          python -m pip install --upgrade pip
-          python scripts/install_deps.py --build
-          python -c "import sys; print('intel python ok', sys.version.split()[0])"
+          echo "### the interpreters on the path"
+          for py in python3.11 python3 python; do
+            command -v "$py" >/dev/null 2>&1 || continue
+            echo "$py -> $(command -v "$py")"
+            "$py" -c "import platform; print('   ', platform.machine())" || true
+          done
+          echo ""
+          echo "### the interpreters in the tool cache"
+          ls -d /Users/runner/hostedtoolcache/Python/*/x64/bin 2>/dev/null || true
+          ls -d /Users/runner/hostedtoolcache/Python/*/arm64/bin 2>/dev/null || true
 
       - name: Build
         shell: bash
