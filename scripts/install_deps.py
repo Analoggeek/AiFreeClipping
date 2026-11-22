@@ -174,6 +174,12 @@ def _install_zig() -> bool:
 def _install(args) -> int:
     run(pip("install", "--upgrade", "pip"), "upgrading pip")
 
+    # OpenCV is pinned and installed on its own, before anything that
+    # depends on it.  scenedetect pulls in the GUI build of OpenCV 5,
+    # which removed CascadeClassifier and cannot be imported without
+    # libGL, so the version has to be set before the rest.
+    run(pip("install", HEADLESS_OPENCV), "pinning the OpenCV version")
+
     packages = list(CORE)
     if args.build:
         packages += BUILD

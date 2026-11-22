@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -127,22 +128,31 @@ def main() -> int:
     body = collect()
     print(body[:2000])
 
-    # The commit status is the broadest channel available: it works with the
-    # least permissions and the text shows up on the commit itself.
-    if post_status(body):
-        print("[diag] posted the diagnostics as a commit status")
-        return 0
-    if post_comment(body):
-        print("[diag] posted the diagnostics as a comment")
-        return 0
-
-    # Nothing worked.  The diagnostics are still worth keeping, so they are
-    # written next to the build where the artifact step will pick them up.
+    # The report is written to disk first.  The network calls below may
+    # all fail -- the runner's connection to the API is not always
+    # reliable -- and the file is what the artifact step uploads, so the
+    # diagnostics survive either way.
     try:
-        (ROOT / "build" / "failure-report.md").write_text(body, encoding="utf-8")
+        path = ROOT / "build" / "failure-report.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
         print("[diag] wrote build/failure-report.md")
     except OSError:
         pass
+
+    # The commit status is the broadest channel available: it works with the
+    # least permissions and the text shows up on the commit itself.
+    for attempt in range(3):
+        if post_status(body):
+            print("[diag] posted the diagnostics as a commit status")
+            return 0
+        if post_comment(body):
+            print("[diag] posted the diagnostics as a comment")
+            return 0
+        if attempt < 2:
+            print("[diag] the API did not answer; trying again")
+            time.sleep(10)
+
     print("[diag] WARNING: could not report the failure through the API")
     return 0
 
@@ -165,10 +175,27 @@ def post_status(body: str) -> bool:
     payload = {
         "state": "failure",
         "context": "clipos-build",
-        "description": "CLIPOS build failed — see the run log",
+        "description": _summary_line(body),
         "target_url": f"https://github.com/{repo}/actions/runs/{run_id}",
     }
     return _post(url, headers, payload)
+
+
+def _summary_line(body: str) -> str:
+    """One line that says what went wrong.
+
+    The status is the one piece of a failed run that is readable from
+    anywhere, so it carries the reason rather than a pointer to a log
+    that may not be reachable.
+    """
+    for line in body.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("###") and "failure" not in stripped.lower():
+            # The first real section is the one that failed.
+            name = stripped.lstrip("#").strip()
+            if name and name.lower() != "clipos build failure":
+                return f"CLIPOS build failed: {name}"[:140]
+    return "CLIPOS build failed — see the run log"
 
 
 if __name__ == "__main__":

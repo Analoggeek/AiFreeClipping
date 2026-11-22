@@ -39,6 +39,11 @@ jobs:
     name: Windows installer
     runs-on: windows-2022
     timeout-minutes: 60
+    env:
+      # Windows has libGL, so the GUI build of OpenCV would work there.
+      # The headless build is used anyway so the same package is installed
+      # everywhere, and so OpenCV 5 never sneaks in.
+      INSTALL_DEPS_ARGS: --no-opencv
     steps:
       - name: Check out the source
         uses: actions/checkout@v4
@@ -72,7 +77,7 @@ jobs:
           for attempt in 1 2 3; do
             echo "### pip install attempt $attempt"
             if python -m pip install --upgrade pip --retries 5 --timeout 60 \
-               && python scripts/install_deps.py --build; then
+               && python scripts/install_deps.py --build $INSTALL_DEPS_ARGS; then
               exit 0
             fi
             echo "### attempt $attempt failed; waiting before trying again"
