@@ -29,7 +29,10 @@ permissions:
 # disappearing.
 concurrency:
   group: installers-${{ github.ref }}
-  cancel-in-progress: true
+  # A build takes half an hour.  Cancelling the one that is already
+  # running to start a newer one throws all of that away, and the newer
+  # one then starts from nothing, so a run is always allowed to finish.
+  cancel-in-progress: false
 
 jobs:
   windows:
@@ -38,6 +41,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A flaky network on the runner must not throw away a build that
+          # takes half an hour to produce.
+          fetch-depth: 1
+          retry: 3
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -163,15 +171,15 @@ jobs:
     # same machine by cross-compiling, so the release does not depend on a
     # second macOS runner being free at the same time -- which is what kept
     # cancelling the build.
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-14
     timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        os: [macos-14]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A flaky network on the runner must not throw away a build that
+          # takes half an hour to produce.
+          fetch-depth: 1
+          retry: 3
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -220,6 +228,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A flaky network on the runner must not throw away a build that
+          # takes half an hour to produce.
+          fetch-depth: 1
+          retry: 3
 
       - name: Set up Python
         uses: actions/setup-python@v5

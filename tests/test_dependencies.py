@@ -153,6 +153,15 @@ class TestWorkflows(unittest.TestCase):
         )
         self.assertIn("cancel-in-progress: false", text)
 
+    def test_the_build_workflow_keeps_a_finished_run_alive(self):
+        """A build takes half an hour.  Cancelling the one that is already
+        running to start a newer one throws all of that away.
+        """
+        text = (ROOT / ".github" / "workflows" / "build-installers.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("cancel-in-progress: false", text)
+
     def test_every_job_has_a_timeout(self):
         """Without a timeout a stuck job blocks the whole release."""
         for workflow in self.workflows:

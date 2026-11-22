@@ -64,6 +64,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A flaky network on the runner must not throw away a build that
+          # takes half an hour to produce.
+          fetch-depth: 1
+          retry: 3
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -242,6 +247,11 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A flaky network on the runner must not throw away a build that
+          # takes half an hour to produce.
+          fetch-depth: 1
+          retry: 3
 
       - name: Download the artifacts
         uses: actions/download-artifact@v4
