@@ -32,21 +32,36 @@ BUNDLE_ID = "com.clipos.studio"
 VERSION = "1.0.0"
 
 
+def _write_summary(title: str, body: str) -> None:
+    """Append a section to the GitHub Actions job summary.
+
+    The summary is the one part of a CI run that is always readable, even
+    when the log storage is not reachable, so it is where a build failure
+    explains itself.
+    """
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"### {title}\n\n```\n{body}\n```\n\n")
+    except OSError:
+        pass
+
+
 def run(cmd: list[str], **kwargs) -> None:
     print(f"\n$ {' '.join(cmd)}")
     result = subprocess.run(cmd, cwd=ROOT, **kwargs)
     if result.returncode != 0:
-        # Write the failing command to a file so a CI job can upload it as an
-        # artifact.  Without this the only clue in the log is the exit code.
+        # Write the failing command to a file and to the job summary, so a
+        # CI job shows what went wrong instead of just the exit code.
+        message = " ".join(str(c) for c in cmd) + f"\n\nexit code: {result.returncode}\n"
         try:
             BUILD.mkdir(parents=True, exist_ok=True)
-            (BUILD / "build-error.log").write_text(
-                " ".join(str(c) for c in cmd)
-                + f"\n\nexit code: {result.returncode}\n",
-                encoding="utf-8",
-            )
+            (BUILD / "build-error.log").write_text(message, encoding="utf-8")
         except OSError:
             pass
+        _write_summary("Build failed", message)
         raise SystemExit(f"command failed with exit code {result.returncode}: {cmd}")
 
 
@@ -154,20 +169,22 @@ def freeze(target: str) -> None:
                                 stderr=subprocess.STDOUT)
     if result.returncode != 0:
         # Show the tail of the log, where the error is.
+        tail = ""
         try:
             tail = log_path.read_text(encoding="utf-8", errors="replace")
-            lines = tail.splitlines()
-            print("\n".join(lines[-60:]))
+            print("\n".join(tail.splitlines()[-60:]))
         except OSError:
             pass
+        message = (
+            " ".join(str(c) for c in args)
+            + f"\n\nexit code: {result.returncode}\n\n"
+            + "\n".join(tail.splitlines()[-60:])
+        )
         try:
-            (BUILD / "build-error.log").write_text(
-                " ".join(str(c) for c in args)
-                + f"\n\nexit code: {result.returncode}\n",
-                encoding="utf-8",
-            )
+            (BUILD / "build-error.log").write_text(message, encoding="utf-8")
         except OSError:
             pass
+        _write_summary("PyInstaller failed", message)
         raise SystemExit(
             f"PyInstaller failed with exit code {result.returncode}; "
             f"see {log_path}"

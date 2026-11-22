@@ -38,6 +38,23 @@ VERSION = "1.0.0"
 VERSION_DOTTED = "1.0.0.0"
 
 
+def _write_summary(title: str, body: str) -> None:
+    """Append a section to the GitHub Actions job summary.
+
+    The summary is the one part of a CI run that is always readable, even
+    when the log storage is not reachable, so it is where a packaging
+    failure explains itself.
+    """
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(f"### {title}\n\n```\n{body}\n```\n\n")
+    except OSError:
+        pass
+
+
 # --------------------------------------------------------------------------
 # Staging
 # --------------------------------------------------------------------------
@@ -391,9 +408,16 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
             shutil.copy2(produced, target)
             shutil.rmtree(staging_dir(), ignore_errors=True)
             return target
+        report = (
+            "Inno Setup failed with exit code "
+            f"{proc.returncode}\n\n--- stdout ---\n{proc.stdout[-4000:]}\n\n"
+            f"--- stderr ---\n{proc.stderr[-4000:]}\n\n--- script ---\n"
+            f"{iss.read_text(encoding='utf-8', errors='replace')[:4000]}"
+        )
         print("[win] Inno Setup failed:")
         print(proc.stdout[-4000:])
         print(proc.stderr[-4000:], file=sys.stderr)
+        _write_summary("Inno Setup failed", report)
         print("[win] Trying the next installer back-end.")
 
     makensis = shutil.which("makensis") or shutil.which("makensis.exe")
