@@ -1,0 +1,32 @@
+name: Probe the Windows runner
+
+# A tiny workflow used to check what the Windows runner can actually do.
+# The build kept failing in steps that do not even touch the
+# application, so this finds out whether the runner itself is healthy.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - arena/probe-windows
+    paths:
+      - .github/workflows/probe-windows.yml
+
+jobs:
+  probe:
+    name: Probe
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - name: Report the machine
+        shell: bash
+        run: |
+          echo "uname: $(uname -a)"
+          echo "--- python ---"
+          python --version
+          echo "--- pip ---"
+          python -m pip --version
+          echo "--- install a small package ---"
+          python -m pip install --retries 5 --timeout 60 "pillow>=10.0"
+          echo "--- install the heavy ones ---"
+          python -m pip install --retries 5 --timeout 60 "numpy>=1.24" "PySide6>=6.6,<6.9"
+          echo "--- done ---"
