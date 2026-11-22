@@ -50,9 +50,9 @@ jobs:
             os: macos-15
             artifact: clipos-macos
             files: |
-              dist/CLIPOS-arm64.app
+              dist/CLIPOS-arm64.app.tar.gz
               dist/CLIPOS-*.dmg
-              dist/CLIPOS-intel.app
+              dist/CLIPOS-intel.app.tar.gz
           - name: Linux
             os: ubuntu-22.04
             artifact: clipos-linux
@@ -320,6 +320,13 @@ jobs:
           else
             python scripts/verify_bundle.py dist
           fi
+
+      - name: Archive native app permissions and symlinks
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          tar -czf dist/CLIPOS-arm64.app.tar.gz -C dist CLIPOS-arm64.app
+          tar -czf dist/CLIPOS-intel.app.tar.gz -C dist CLIPOS-intel.app
 
       - name: Upload the build artifacts
         uses: actions/upload-artifact@v4

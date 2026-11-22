@@ -133,3 +133,10 @@ def test_intel_build_uses_isolated_environment():
         assert 'CLIPOS_BUILD_PYTHON="$CLIPOS_INTEL_PYTHON"' in text
     release = (root/'.github/workflows/release.yml').read_text()
     assert "if: always() && needs.build.result == 'success'" in release
+
+
+def test_release_archives_apps_before_artifact_upload():
+    root = Path(__file__).resolve().parents[1]
+    release = (root/'.github/workflows/release.yml').read_text()
+    assert 'tar -czf dist/CLIPOS-arm64.app.tar.gz -C dist CLIPOS-arm64.app' in release
+    assert release.index('Archive native app permissions') < release.index('Upload the build artifacts')
