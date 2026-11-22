@@ -56,21 +56,13 @@ jobs:
           } > build/probe-report.md 2>&1 || true
           cat build/probe-report.md
           exit 1
-      - name: Post what happened
+      - name: Upload the report
         if: failure()
-        uses: actions/github-script@v7
+        uses: actions/upload-artifact@v4
         with:
-          script: |
-            const fs = require('fs');
-            let body = '(no report)';
-            try {
-              body = fs.readFileSync('build/probe-report.md', 'utf8');
-            } catch (e) {
-              body = 'the report could not be read: ' + e.message;
-            }
-            await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'Windows probe report',
-              body: body.slice(0, 60000),
-            });
+          name: probe-report
+          path: |
+            build/probe-report.md
+            build/pip-install.log
+            build/build-error.log
+          if-no-files-found: ignore
