@@ -24,50 +24,63 @@ def post_comment(body: str) -> bool:
         print("[diag] no GITHUB_TOKEN or GITHUB_REPOSITORY; skipping")
         return False
 
-    # Prefer commenting on the run itself; fall back to an issue.
-    run_id = os.environ.get("GITHUB_RUN_ID")
-    endpoint = None
-    if run_id:
-        endpoint = (
-            f"https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs"
-        )
-    if not endpoint:
-        return False
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+    }
 
+    # Comment on the pull request the run belongs to, when there is one.
+    number = os.environ.get("PR_NUMBER", "").strip()
+    if not number:
+        number = _pull_request_number(repo, headers)
+    if number:
+        url = f"https://api.github.com/repos/{repo}/issues/{number}/comments"
+        if _post(url, headers, {"body": body}):
+            print(f"[diag] posted the diagnostics on #{number}")
+            return True
+
+    # Otherwise open an issue, which is visible to everyone with access.
+    url = f"https://api.github.com/repos/{repo}/issues"
+    title = os.environ.get("DIAG_TITLE", "CLIPOS build failure")
+    if _post(url, headers, {"title": title, "body": body}):
+        print("[diag] opened an issue with the diagnostics")
+        return True
+    return False
+
+
+def _pull_request_number(repo: str, headers: dict) -> str:
+    """The number of the pull request the current run belongs to."""
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    if not run_id:
+        return ""
+    url = f"https://api.github.com/repos/{repo}/actions/runs/{run_id}"
+    try:
+        with urllib.request.urlopen(
+            urllib.request.Request(url, headers=headers), timeout=60
+        ) as response:
+            data = json.load(response)
+    except (urllib.error.URLError, OSError):
+        return ""
+    for pull in data.get("pull_requests", []) or []:
+        number = pull.get("number")
+        if number:
+            return str(number)
+    return ""
+
+
+def _post(url: str, headers: dict, payload: dict) -> bool:
     request = urllib.request.Request(
-        endpoint, headers={"Authorization": f"Bearer {token}",
-                           "Accept": "application/vnd.github+json"}
+        url, data=json.dumps(payload).encode("utf-8"), method="POST",
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
-            data = json.load(response)
+            response.read()
+        return True
     except (urllib.error.URLError, OSError) as exc:
-        print(f"[diag] could not reach the API: {exc}")
+        print(f"[diag] could not post to {url}: {exc}")
         return False
-
-    jobs = data.get("jobs", [])
-    failed = [j for j in jobs if j.get("conclusion") == "failure"]
-    if not failed:
-        return False
-
-    for job in failed:
-        url = (f"https://api.github.com/repos/{repo}/issues/"
-               f"{job['id']}/comments")
-        payload = json.dumps({"body": body}).encode("utf-8")
-        request = urllib.request.Request(
-            url, data=payload, method="POST",
-            headers={"Authorization": f"Bearer {token}",
-                     "Accept": "application/vnd.github+json",
-                     "Content-Type": "application/json"},
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                response.read()
-            print(f"[diag] posted the diagnostics for job {job['id']}")
-            return True
-        except (urllib.error.URLError, OSError) as exc:
-            print(f"[diag] could not post the comment: {exc}")
-    return False
 
 
 def collect() -> str:
