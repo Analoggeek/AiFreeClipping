@@ -428,8 +428,17 @@ def build_windows_installer(app_dir: Path, output_dir: Path) -> Path:
         if proc.returncode == 0:
             produced = compiler_out / f"{APP_NAME}-Setup.exe"
             target = output_dir / produced.name
+            if not produced.exists():
+                # The compiler said it succeeded but the file is not
+                # there.  Say so instead of failing later with a
+                # confusing error about a file that was never written.
+                raise SystemExit(
+                    f"Inno Setup reported success but did not write {produced}"
+                )
             shutil.copy2(produced, target)
             shutil.rmtree(staging_dir(), ignore_errors=True)
+            print(f"[win] installer: {target} "
+                  f"({target.stat().st_size // (1024 * 1024)} MB)")
             return target
         # Inno Setup writes its own log next to the script when it fails.
         # It names the exact file it could not open, which is the one
