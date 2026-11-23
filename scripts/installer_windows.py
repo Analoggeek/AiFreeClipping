@@ -34,8 +34,8 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_NAME = "CLIPOS"
 BUNDLE_ID = "com.clipos.studio"
 BUNDLE_ID_UPPER = "B7C2E9A49D1F4E6B9C3A5F2D8E1B4A70"
-VERSION = "1.1.0"
-VERSION_DOTTED = "1.1.0.0"
+VERSION = "1.1.1"
+VERSION_DOTTED = "1.1.1.0"
 
 
 def _write_summary(title: str, body: str) -> None:

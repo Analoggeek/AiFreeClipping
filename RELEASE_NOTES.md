@@ -1,3 +1,41 @@
+# CLIPOS 1.1.1 — macOS installer integrity fix
+
+By **Analoggeek**.
+
+## macOS Intel and Apple Silicon
+
+- Re-sign the final application after plist/icon changes, fixing a packaging
+  defect that could invalidate the app signature.
+- Require strict signature verification before packaging.
+- Verify the actual DMG checksum and the mounted app signature, executable
+  permissions and CPU architecture.
+- Correct optional Apple notarization ZIP submission and ticket stapling.
+
+The fix passed native Intel and Apple Silicon signature/DMG regression checks
+and full Windows, Linux and macOS installer CI before release preparation.
+Release installers are rebuilt and verified separately by the release workflow.
+
+**Important:** these builds use ad-hoc signing unless a Developer ID identity is
+configured. Valid bundle integrity is **not** Apple notarization or Gatekeeper
+approval. A developer-verification warning may still occur; this release does
+not claim to resolve every Gatekeeper or older-macOS compatibility error.
+Do not disable Gatekeeper globally. See
+[macOS installation diagnostics](https://github.com/Analoggeek/AiFreeClipping/blob/main/docs/MACOS_INSTALLATION.md).
+
+## Downloads
+
+- Intel Mac: `CLIPOS-1.1.1-intel.dmg`
+- Apple Silicon Mac: `CLIPOS-1.1.1-arm64.dmg`
+- Windows 10/11: `CLIPOS-Setup.exe`
+- Linux x86_64: DEB or portable ZIP
+- Both macOS `.app` archives are also available.
+
+Back up important projects before updating. Application data is stored separately
+from the app binaries. Speech models require a one-time download; public-video
+imports and update checks require internet. No engagement guarantees.
+
+---
+
 # CLIPOS 1.1.0 — Creator workflow update
 
 By **Analoggeek**.
