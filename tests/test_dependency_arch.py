@@ -64,4 +64,4 @@ class NativeLipoTests(unittest.TestCase):
             with patch.object(verify_arch.sys,'platform','darwin'), patch.object(verify_arch.platform,'machine',return_value='x86_64'), patch.object(verify_arch.sysconfig,'get_path',return_value=folder), patch.object(verify_arch.subprocess,'run',return_value=Mock(returncode=1,stderr='wrong architecture')) as run:
                 with self.assertRaisesRegex(RuntimeError,'wrong architecture'):
                     verify_arch.verify('x86_64')
-                self.assertEqual(run.call_args.args[0], ['lipo',str(binary),'-verify_arch','x86_64'])
+                self.assertEqual(run.call_args.args[0], ['lipo',str(binary.resolve()),'-verify_arch','x86_64'])

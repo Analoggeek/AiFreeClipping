@@ -40,6 +40,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/download-artifact@v4
+        continue-on-error: true
         with:
           name: build-log-clipos-macos
           path: diagnostics
@@ -63,5 +64,13 @@ jobs:
                 }
               }
             }
-            walk('diagnostics');
+            if (fs.existsSync('diagnostics')) walk('diagnostics');
+            const run_id = Number(process.env.DIAGNOSTIC_RUN);
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({...context.repo, run_id});
+            for (const job of jobs.data.jobs.filter(j => j.conclusion === 'failure')) {
+              const logs = await github.request('GET /repos/{owner}/{repo}/actions/jobs/{job_id}/logs', {...context.repo, job_id:job.id});
+              const text = String(logs.data);
+              const start = text.indexOf('FAILURES');
+              body += '\n### Failed job log: ' + job.name + '\n```\n' + (start >= 0 ? text.slice(Math.max(0,start-100),start+20000) : text.slice(-20000)) + '\n```\n';
+            }
             await github.rest.issues.create({...context.repo, title:'Recovered macOS release diagnostics', body:body.slice(0,60000)});
