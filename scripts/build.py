@@ -444,9 +444,9 @@ def build_macos(target_arch: str = "") -> Path:
         raise SystemExit(f"PyInstaller did not produce {app}")
 
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from installer_macos import build_dmg, polish_app_bundle
+    from installer_macos import build_dmg, finalize_app_bundle
 
-    polish_app_bundle(app)
+    finalize_app_bundle(app)
 
     # The disk image carries the architecture in its name, so an Apple
     # Silicon build and an Intel build can live side by side.

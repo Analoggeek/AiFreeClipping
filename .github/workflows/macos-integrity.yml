@@ -1,0 +1,24 @@
+name: macOS packaging integrity
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/installer_macos.py'
+      - 'scripts/build.py'
+      - 'tests/test_macos_integrity.py'
+      - '.github/workflows/macos-integrity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  integrity:
+    name: Native Intel and Apple Silicon signature and DMG checks
+    runs-on: macos-15
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify final seals, notarization commands and mounted images
+        run: python3 -m unittest tests.test_macos_integrity -v

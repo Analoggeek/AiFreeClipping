@@ -453,7 +453,7 @@ class TestBuildPipeline(unittest.TestCase):
         text = (ROOT / "scripts" / "build.py").read_text(encoding="utf-8")
         self.assertIn("from installer_windows import build_windows_installer",
                       text)
-        self.assertIn("from installer_macos import build_dmg, polish_app_bundle",
+        self.assertIn("from installer_macos import build_dmg, finalize_app_bundle",
                       text)
 
     def test_build_script_no_longer_duplicates_the_installer_scripts(self):
