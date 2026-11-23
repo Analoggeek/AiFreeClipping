@@ -142,6 +142,11 @@ QWidget {{
     font-family: ".AppleSystemUIFont", "Segoe UI", "Helvetica Neue", "DejaVu Sans";
     font-size: 13px;
 }}
+QLabel {{ background: transparent; }}
+#PageSurface {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {p.bg},stop:0.55 {p.bg_elevated},stop:1 {p.bg});
+}}
+#PageContent {{ background: transparent; }}
 QToolTip {{
     background-color: {p.bg_elevated};
     color: {p.text};
@@ -171,7 +176,7 @@ QToolTip {{
 
 /* ---------- sidebar ---------- */
 #Sidebar {{
-    background-color: {p.bg_sidebar};
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {p.bg_sidebar},stop:1 {p.bg_elevated});
     border-right: 1px solid {p.border};
 }}
 #SidebarBrand {{
@@ -210,8 +215,9 @@ QPushButton#NavButton:checked {{
 
 /* ---------- cards ---------- */
 #Card {{
-    background-color: {p.bg_elevated};
-    border: 1px solid {p.border};
+    background: qlineargradient(x1:0,y1:0,x2:0.7,y2:1,stop:0 {p.bg_panel},stop:0.05 {p.bg_elevated},stop:1 {p.bg_sidebar});
+    border: 1px solid {p.border_strong};
+    border-top: 1px solid {p.border_strong};
     border-radius: {m.radius_lg}px;
 }}
 #CardTitle {{

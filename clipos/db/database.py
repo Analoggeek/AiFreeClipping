@@ -19,7 +19,6 @@ from .schema import SCHEMA, SCHEMA_VERSION
 
 log = get_logger(__name__)
 
-_local = threading.local()
 
 
 def _coerce_setting(raw: Any, default: Any) -> Any:
@@ -50,13 +49,14 @@ class Database:
 
     def __init__(self, path: str | Path | None = None) -> None:
         self.path = Path(path) if path else PATHS.db_path
+        self._local = threading.local()
         self._write_lock = threading.RLock()
         self._init_schema()
 
     # -- connection handling -----------------------------------------------------
     @property
     def conn(self) -> sqlite3.Connection:
-        conn = getattr(_local, "conn", None)
+        conn = getattr(self._local, "conn", None)
         if conn is None:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             conn = sqlite3.connect(str(self.path), timeout=30.0, check_same_thread=False)
@@ -65,7 +65,7 @@ class Database:
             conn.execute("PRAGMA synchronous=NORMAL")
             conn.execute("PRAGMA foreign_keys=ON")
             conn.execute("PRAGMA busy_timeout=30000")
-            _local.conn = conn
+            self._local.conn = conn
         return conn
 
     def _init_schema(self) -> None:
@@ -113,10 +113,10 @@ class Database:
                         log.warning("migration %s.%s failed: %s", table, col, exc)
 
     def close(self) -> None:
-        conn = getattr(_local, "conn", None)
+        conn = getattr(self._local, "conn", None)
         if conn is not None:
             conn.close()
-            _local.conn = None
+            self._local.conn = None
 
     # -- generic helpers ---------------------------------------------------------
     def query(self, sql: str, params: Sequence[Any] = ()) -> list[sqlite3.Row]:

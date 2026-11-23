@@ -50,6 +50,9 @@ log = get_logger(__name__)
 class RenderSettings:
     """User-facing editing options for one clip."""
     editing_preset: str = "clean"
+    auto_facecam: bool = True
+    gameplay_rect: tuple = (0., 0., 1., 1.)
+    gaming_enhance: bool = False
     facecam_rect: tuple = (0.0, 0.0, 0.25, 0.3)
     aspect: str = "9:16"
     width: int = 1080
@@ -480,8 +483,24 @@ class ClipRenderer:
 
         if settings.editing_preset == "gaming":
             from .presets import gaming_filter
-            vf_parts.append(gaming_filter(settings.width, settings.height, src_w, src_h, settings.facecam_rect))
-            result.steps.append("Gameplay above, selected facecam below")
+            facecam, gameplay = settings.facecam_rect, settings.gameplay_rect
+            if settings.auto_facecam:
+                from ..ai.gaming_layout import detect_layout
+                if progress_cb:
+                    progress_cb(2.0, "Finding a stable player facecam")
+                layout = detect_layout(source, start, end, cancel_cb)
+                facecam = layout.facecam if layout else None
+                gameplay = layout.gameplay if layout else gameplay
+                if layout:
+                    result.steps.append(f"Facecam confidence {layout.confidence:.0%}; {layout.observations} observations")
+                else:
+                    result.warnings.append("No stable facecam detected; gameplay-only crop used. Review framing or select a manual facecam rectangle.")
+            vf_parts.append(gaming_filter(settings.width, settings.height, src_w, src_h, facecam, gameplay))
+            if settings.gaming_enhance:
+                # Subtle SDR clarity, NOT genuine HDR conversion.
+                vf_parts.append("eq=contrast=1.04:saturation=1.06,unsharp=5:5:0.25:5:5:0")
+                result.steps.append("SDR clarity and restrained colour enhancement (not HDR)")
+            result.steps.append("Gameplay above, player below" if facecam else "Gameplay only")
         elif settings.smart_reframe and visual and speaker and visual.tracks:
             keys = _smooth_keys(
                 _subject_keyframes(speaker, visual, start, end, step=0.5)
@@ -635,7 +654,9 @@ class ClipRenderer:
         filter_complex = ";".join(filter_parts)
 
         cmd: list[str] = []
-        cmd += ["-hide_banner", "-nostdin", "-y"]
+        from ..core.hardware import suggest_worker_threads
+        threads = suggest_worker_threads(settings.threads)
+        cmd += ["-hide_banner", "-nostdin", "-y", "-threads", str(threads), "-filter_complex_threads", str(threads)]
         if len(keeps) > 1:
             cmd += seg_args
         # input_args already carries the music and sound-effect inputs, in the
@@ -657,7 +678,7 @@ class ClipRenderer:
 
         cmd += ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
         cmd += ["-movflags", "+faststart", "-pix_fmt", "yuv420p"]
-        cmd += [str(output)]
+        cmd += ["-threads", str(threads), str(output)]
 
         if progress_cb:
             progress_cb(5.0, "Rendering clip")

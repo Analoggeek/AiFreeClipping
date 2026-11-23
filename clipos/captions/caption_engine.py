@@ -399,6 +399,10 @@ def render_ass(
         align = st.alignment
         margin_v = st.margin_v
 
+    if position_override == "split":
+        align = 2
+        margin_v = height // 3 + max(12, height // 60)
+
     header = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {width}

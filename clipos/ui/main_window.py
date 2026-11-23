@@ -27,6 +27,7 @@ class NavButton(QPushButton):
     def __init__(self, icon: str, label: str, key: str, parent=None) -> None:
         super().__init__(label, parent)
         icons = {
+            "gaming": QStyle.StandardPixmap.SP_MediaPlay,
             "home": QStyle.StandardPixmap.SP_ComputerIcon,
             "new": QStyle.StandardPixmap.SP_FileDialogNewFolder,
             "studio": QStyle.StandardPixmap.SP_MediaPlay,
@@ -137,7 +138,7 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_shortcuts()
         self._apply_settings()
-        self.navigate("home")
+        self.navigate("gaming")
 
         self.status = QStatusBar()
         self.setStatusBar(self.status)
@@ -191,6 +192,7 @@ class MainWindow(QMainWindow):
         lay.addSpacing(12)
 
         nav_defs = [
+            ("gaming", "", "Gaming Studio 2.0"),
             ("home", "⌂", "Home"),
             ("new", "✦", "New Project"),
             ("studio", "✂", "Auto Clip Studio"),
@@ -233,6 +235,7 @@ class MainWindow(QMainWindow):
         from .pages.clip_library import ClipLibraryPage
         from .pages.editor import EditorPage
         from .pages.export_center import ExportCenterPage
+        from .pages.gaming_studio import GamingStudioPage
         from .pages.home import HomePage
         from .pages.my_projects import MyProjectsPage
         from .pages.new_project import NewProjectPage
@@ -240,6 +243,7 @@ class MainWindow(QMainWindow):
         from .pages.templates import TemplatesPage
 
         page_classes = [
+            ("gaming", GamingStudioPage),
             ("home", HomePage),
             ("new", NewProjectPage),
             ("studio", AutoClipStudioPage),

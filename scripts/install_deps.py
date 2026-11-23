@@ -32,6 +32,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # The packages CLIPOS actually needs, in a deliberate order.
 CORE = [
+    'google-api-python-client>=2.150,<3',
+    'google-auth-oauthlib>=1.2,<2',
+    'keyring>=25,<26',
     "yt-dlp>=2025.1.15",
     "PySide6>=6.6,<6.9",
     "numpy>=1.24",
@@ -52,7 +55,7 @@ HEADLESS_OPENCV = "opencv-python-headless>=4.8,<5"
 FORBIDDEN = ["opencv-python"]
 
 # Build-time extras.
-BUILD = ["pyinstaller>=6.6"]
+BUILD = ["pyinstaller>=6.6", "pytest>=8,<10"]
 
 # ziglang carries an LLVM toolchain with a Windows target, so a native .exe
 # installer can be cross-compiled from any host.  It is only needed to build
