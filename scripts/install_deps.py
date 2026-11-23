@@ -122,6 +122,11 @@ def python_command(*args: str) -> list[str]:
 
 
 def pip(*args: str) -> list[str]:
+    # Recent cryptography releases ship ARM-only macOS wheels. A source build
+    # launched by pip under Rosetta can still have Rust target the ARM host.
+    # Resolve the newest compatible wheel instead of silently compiling one.
+    if sys.platform == "darwin" and args and args[0] == "install":
+        args = (args[0], "--only-binary=cryptography", *args[1:])
     return python_command("-m", "pip", *args)
 
 
