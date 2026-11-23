@@ -13,6 +13,9 @@ chmod +x "$wrapper"
 "$wrapper" -m pip install --upgrade pip
 "$wrapper" scripts/install_deps.py --build
 "$wrapper" -c 'import platform, sys, PIL, PyInstaller; assert platform.machine() == "x86_64"; assert sys.prefix != sys.base_prefix; print("Isolated Intel Python:", sys.prefix, PIL.__file__)'
+# Fail early on an incompatible transitive dependency, before freezing either
+# an unusable OAuth implementation or an incorrectly labelled Intel bundle.
+"$wrapper" scripts/verify_python_arch.py x86_64
 if [[ -n "${GITHUB_ENV:-}" ]]; then
   echo "CLIPOS_INTEL_PYTHON=$wrapper" >> "$GITHUB_ENV"
 fi
