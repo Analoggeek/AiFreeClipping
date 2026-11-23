@@ -136,6 +136,13 @@ def verify(bundle: Path, binary: Path | None) -> int:
     if is_app_bundle(bundle):
         check("the application bundle has a Contents directory",
               (bundle / "Contents" / "MacOS").is_dir())
+        if sys.platform == "darwin":
+            signature = subprocess.run(
+                ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(bundle)],
+                capture_output=True, text=True,
+            )
+            check("final macOS bundle signature is valid", signature.returncode == 0,
+                  signature.stderr.strip())
     else:
         check("bundle has an _internal directory", internal.exists())
     if not internal.is_dir():

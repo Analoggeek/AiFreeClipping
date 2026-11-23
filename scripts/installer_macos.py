@@ -26,6 +26,7 @@ credentials are present:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import plistlib
 import shutil
@@ -132,19 +133,18 @@ def sign_app(app: Path, identity: str = "", hardened: bool = True) -> bool:
         print("[mac] codesign is not available (not macOS) — skipping signing")
         return False
 
-    identity = identity or os.environ.get("CLIPOS_CODESIGN_IDENTITY", "")
-    if not identity:
-        print("[mac] no signing identity supplied — skipping signing")
-        print("     set CLIPOS_CODESIGN_IDENTITY or pass --sign-identity")
-        return False
-
-    cmd = [
-        codesign, "--force", "--deep", "--options", "runtime",
-        "--timestamp", "--sign", identity, str(app),
-    ]
-    if not hardened:
-        cmd.remove("--options")
-        cmd.remove("runtime")
+    identity = identity or os.environ.get("CLIPOS_CODESIGN_IDENTITY", "") or "-"
+    # PyInstaller ad-hoc signs its output, but polish_app_bundle changes
+    # sealed files. Always re-seal the FINAL bundle, even without Developer ID.
+    cmd = [codesign, "--force", "--deep", "--sign", identity]
+    if identity != "-":
+        cmd += ["--timestamp"]
+        if hardened:
+            cmd += ["--options", "runtime"]
+    else:
+        cmd += ["--timestamp=none"]
+        print("[mac] ad-hoc signing: integrity only; NOT Apple notarization")
+    cmd.append(str(app))
     print(f"[mac] codesigning with {identity}")
     proc = subprocess.run(cmd, capture_output=True, text=True)
     if proc.returncode != 0:
@@ -153,17 +153,17 @@ def sign_app(app: Path, identity: str = "", hardened: bool = True) -> bool:
         print("[mac] WARNING: code signing failed")
         return False
 
-    # Verify the signature really is valid.
-    check = subprocess.run(
-        [codesign, "--verify", "--deep", "--strict", "--verbose=2", str(app)],
-        capture_output=True, text=True,
-    )
-    if check.returncode != 0:
-        print(check.stderr, file=sys.stderr)
-        print("[mac] WARNING: the signature does not verify")
-        return False
-    print("[mac] signature verified")
+    verify_app_signature(app)
+    print("[mac] final bundle signature verified")
     return True
+
+
+def verify_app_signature(app: Path) -> None:
+    """Fail closed on a missing or invalid seal (not a Gatekeeper assessment)."""
+    subprocess.run(
+        ["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)],
+        check=True, capture_output=True, text=True,
+    )
 
 
 def notarize_app(app: Path, dmg: Path | None = None) -> bool:
@@ -182,29 +182,74 @@ def notarize_app(app: Path, dmg: Path | None = None) -> bool:
         print("     set CLIPOS_NOTARY_PROFILE or pass --notary-profile")
         return False
 
-    target = dmg if dmg and dmg.exists() else app
-    print(f"[mac] notarising {target}")
-    submit = subprocess.run(
-        ["xcrun", "notarytool", "submit", str(target),
-         "--keychain-profile", profile, "--wait"],
-        capture_output=True, text=True,
-    )
-    if submit.returncode != 0:
-        print(submit.stdout)
-        print(submit.stderr, file=sys.stderr)
-        print("[mac] WARNING: notarisation failed")
-        return False
-
-    staple = subprocess.run(
-        ["xcrun", "notarytool", "stapler", "staple", str(target)],
-        capture_output=True, text=True,
-    )
-    if staple.returncode != 0:
-        print(staple.stderr, file=sys.stderr)
-        print("[mac] WARNING: stapling failed")
-        return False
+    # notarytool cannot submit a raw .app directory. Use a ZIP, and staple
+    # the APP before building the final disk image so the ticket travels with it.
+    with tempfile.TemporaryDirectory(prefix="clipos-notary-") as td:
+        target = dmg if dmg and dmg.exists() else Path(td) / "CLIPOS.zip"
+        if target.suffix == ".zip":
+            subprocess.run(["ditto", "-c", "-k", "--keepParent", str(app), str(target)], check=True)
+        submit = subprocess.run(
+            ["xcrun", "notarytool", "submit", str(target), "--keychain-profile", profile,
+             "--wait", "--output-format", "json"], capture_output=True, text=True,
+        )
+        if submit.returncode != 0:
+            raise RuntimeError(f"Notarization failed: {submit.stderr or submit.stdout}")
+        result = json.loads(submit.stdout)
+        if result.get("status") != "Accepted":
+            raise RuntimeError(f"Notarization was not accepted: {result}")
+    staple_target = dmg if dmg and dmg.exists() else app
+    # stapler is an xcrun tool, not a notarytool subcommand.
+    for action in ("staple", "validate"):
+        subprocess.run(["xcrun", "stapler", action, str(staple_target)], check=True)
     print("[mac] notarised and stapled")
     return True
+
+
+def finalize_app_bundle(app: Path, identity: str = "") -> None:
+    """All bundle mutations MUST precede signing and image creation."""
+    polish_app_bundle(app)
+    identity = identity or os.environ.get("CLIPOS_CODESIGN_IDENTITY", "")
+    if not sign_app(app, identity):
+        raise RuntimeError("Final macOS app signing failed; refusing to package a damaged app")
+    profile = os.environ.get("CLIPOS_NOTARY_PROFILE", "")
+    if profile:
+        if not identity or identity == "-":
+            raise RuntimeError("Apple notarization requires a Developer ID signing identity")
+        if not notarize_app(app):
+            raise RuntimeError("Notarization requested but could not be completed")
+    verify_app_signature(app)
+
+
+def verify_dmg(dmg: Path, expected_arch: str = "") -> None:
+    """Verify the actual image's app, not just the pre-copy build directory."""
+    subprocess.run(["hdiutil", "verify", str(dmg)], check=True, capture_output=True, text=True)
+    attached = subprocess.run(
+        ["hdiutil", "attach", str(dmg), "-readonly", "-nobrowse", "-plist"],
+        check=True, capture_output=True,
+    )
+    entities = plistlib.loads(attached.stdout).get("system-entities", [])
+    mounted = next((item for item in entities if item.get("mount-point")), None)
+    device = next((item["dev-entry"] for item in entities if item.get("dev-entry")), None)
+    try:
+        if not mounted:
+            raise RuntimeError("Disk image did not mount")
+        app = Path(mounted["mount-point"]) / f"{APP_NAME}.app"
+        verify_app_signature(app)
+        with open(_bundle_plist(app), "rb") as stream:
+            info = plistlib.load(stream)
+        executable = app / "Contents" / "MacOS" / info["CFBundleExecutable"]
+        if not executable.is_file() or not os.access(executable, os.X_OK):
+            raise RuntimeError("Disk image contains a missing or non-executable application")
+        if expected_arch:
+            sys.path.insert(0, str(ROOT))
+            from clipos.core.binary_arch import binary_arch
+            expected = {"intel": "x86_64"}.get(expected_arch, expected_arch)
+            if expected not in (binary_arch(executable) or "").split("|"):
+                raise RuntimeError(f"Disk image application is not {expected}")
+    finally:
+        if mounted or device:
+            subprocess.run(["hdiutil", "detach", device or mounted["mount-point"]], check=True)
+    print(f"[mac] disk image checksum, app signature and architecture verified: {dmg}")
 
 
 # --------------------------------------------------------------------------
@@ -328,6 +373,7 @@ def build_dmg(app: Path, output_dir: Path, volume_name: str = APP_NAME,
     finally:
         shutil.rmtree(mount_point, ignore_errors=True)
 
+    verify_dmg(dmg, arch)
     print(f"[mac] disk image: {dmg}")
     return dmg
 
@@ -344,16 +390,13 @@ def main() -> int:
     args = ap.parse_args()
 
     app = Path(args.app).resolve()
-    polish_app_bundle(app)
-
-    signed = sign_app(app, args.sign_identity)
+    if args.notary_profile:
+        os.environ["CLIPOS_NOTARY_PROFILE"] = args.notary_profile
+    finalize_app_bundle(app, args.sign_identity)
 
     dmg: Path | None = None
     if not args.skip_dmg:
         dmg = build_dmg(app, Path(args.output).resolve())
-
-    if signed:
-        notarize_app(app, dmg)
 
     print(f"[mac] application bundle: {app}")
     return 0
