@@ -23,6 +23,7 @@ It is safe to run more than once and it never needs root.
 from __future__ import annotations
 
 import argparse
+import platform
 import subprocess
 import sys
 import time
@@ -109,13 +110,24 @@ def run(cmd: list[str], what: str) -> None:
     raise SystemExit(f"{what} failed with exit code {last}")
 
 
+def python_command(*args: str) -> list[str]:
+    """Keep subprocesses in the current Mach-O slice of universal Python.
+
+    On Apple Silicon a Rosetta parent does not guarantee that a newly exec'd
+    universal interpreter stays x86_64. Without arch, pip can install ARM wheels
+    into the otherwise isolated Intel venv.
+    """
+    prefix = ["arch", "-" + platform.machine()] if sys.platform == "darwin" else []
+    return [*prefix, sys.executable, *args]
+
+
 def pip(*args: str) -> list[str]:
-    return [sys.executable, "-m", "pip", *args]
+    return python_command("-m", "pip", *args)
 
 
 def installed(name: str) -> bool:
     result = subprocess.run(
-        [sys.executable, "-m", "pip", "show", name],
+        pip("show", name),
         capture_output=True, text=True,
     )
     return result.returncode == 0
@@ -209,12 +221,12 @@ def _install(args) -> int:
 
     print("\n=== verifying ===")
     check = subprocess.run(
-        [sys.executable, "-c",
+        python_command("-c",
          "import cv2, numpy, PySide6; "
          "print('opencv', cv2.__version__); "
          "print('cascade  ', 'ok' if hasattr(cv2, 'CascadeClassifier') else 'MISSING'); "
          "print('numpy   ', numpy.__version__); "
-         "print('pyside6 ', PySide6.__version__)"],
+         "print('pyside6 ', PySide6.__version__)"),
         capture_output=True, text=True,
     )
     print(check.stdout.strip())

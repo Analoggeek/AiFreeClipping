@@ -45,3 +45,10 @@ macOS bundle integrity checks remain enabled. Builds are ad-hoc signed unless a
 Developer ID is configured: valid integrity does not mean Apple notarization or
 Gatekeeper approval. Do not disable system security; see the
 [macOS installation guide](https://github.com/Analoggeek/AiFreeClipping/blob/main/docs/MACOS_INSTALLATION.md).
+
+### Release packaging correction
+
+The unpublished v2.0.0 candidate was blocked by an ARM-only cryptography wheel
+in the Intel environment. Dependency subprocesses now explicitly preserve the
+current macOS architecture, and the Intel build audits native wheel slices and
+OAuth imports before packaging. The release remains gated on all native jobs.
