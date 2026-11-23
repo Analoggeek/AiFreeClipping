@@ -18,7 +18,7 @@ def verify(expected: str) -> None:
     for root in sorted(roots):
         for binary in sorted(root.rglob('*')):
             if binary.is_file() and binary.suffix in ('.so', '.dylib'):
-                result = subprocess.run(['lipo', '-verify_arch', expected, str(binary)],
+                result = subprocess.run(['lipo', str(binary), '-verify_arch', expected],
                                         capture_output=True, text=True)
                 checked += 1
                 if result.returncode:
