@@ -366,6 +366,7 @@ class ExportCenterPage(BasePage):
         rs.show_captions = self.captions_check.isChecked()
         rs.encoder_preference = self.gpu_combo.currentData()
         x, y, w, h = [spin.value()/100 for spin in self.facecam_controls]
+        rs.auto_facecam = False
         rs.facecam_rect = (min(x, .99), min(y, .99), min(w, 1-min(x, .99)), min(h, 1-min(y, .99)))
         from ...video.presets import apply_preset
         return apply_preset(rs, self.recipe_combo.currentData())

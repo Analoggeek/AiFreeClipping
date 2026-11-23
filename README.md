@@ -4,13 +4,24 @@
 into upload-ready short-form clips. It runs entirely on your own machine: import
 a file, let the local AI find the engaging moments, and export finished vertical
 videos with captions, reframing, zoom and metadata — with no cloud account and
-no upload of your media.
+no automatic upload of your media. Optional YouTube publishing in v2 requires
+explicit account authorization and upload confirmation.
 
 Built with **Python** (AI + video pipeline) and **PySide6** (native desktop UI).
 Ships with genuine **FFmpeg/FFprobe** binaries for macOS (Intel + Apple Silicon)
 and Windows 10/11.
 
 ---
+
+## New in 2.0.0 — Gaming Studio
+
+Gaming Studio opens by default: authorized link/local video → one-click edit and
+render → real MP4 playback → optional, user-confirmed YouTube upload. Automatic
+face-based player/gameplay composition, clean split-position captions, optional
+SDR clarity and glass-style native UI are included. No face found means
+ gameplay-only, not an invented player. See the [complete setup and limitations](docs/GAMING_V2.md),
+including Google Desktop OAuth setup, secure keychain requirements and upload restrictions.
+No engagement guarantees; this is not genuine HDR or native OS background blur.
 
 ## Table of contents
 

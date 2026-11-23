@@ -415,21 +415,27 @@ def sample_frames(
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH) or 0)
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT) or 0)
     total = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
-    step = max(1, int(fps / max(0.1, fps_sample)))
+    # Bound RAM on multi-hour gameplay instead of retaining every 4K frame.
+    max_frames = 180
+    duration = total / fps if total else 0
+    step = max(1, int(fps / max(.1, fps_sample)), math.ceil(total/max_frames) if total else 1)
     frames: list[np.ndarray] = []
     times: list[float] = []
-    idx = 0
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
-        if idx % step == 0:
+    try:
+        for idx in range(0, int(total) if total else step*max_frames, step):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, frame = cap.read()
+            if not ok:
+                break
+            h,w = frame.shape[:2]
+            if w > 768:
+                frame = cv2.resize(frame, (768, max(2, round(h*768/w))))
             frames.append(frame)
-            times.append(idx / fps)
-        idx += 1
-        if progress_cb and total and idx % 150 == 0:
-            progress_cb((idx / total) * 100.0, "Sampling frames")
-    cap.release()
+            times.append(idx/fps)
+            if progress_cb:
+                progress_cb(min(100., idx/max(1,total)*100), "Sampling bounded-resolution frames")
+    finally:
+        cap.release()
     return frames, times, width, height
 
 
@@ -546,8 +552,9 @@ def analyze_visual(
     frames, times, w, h = sample_frames(video_path, fps_sample, progress_cb)
     result.width, result.height = w, h
     if times:
-        result.fps = fps_sample
-        result.duration = times[-1] + 1.0 / fps_sample
+        interval = times[1]-times[0] if len(times)>1 else 1/max(.1,fps_sample)
+        result.fps = 1/max(.001,interval)
+        result.duration = times[-1] + interval
     result.keyframe_times = times
 
     # Brightness / colourfulness / motion from the sampled frames
@@ -576,7 +583,8 @@ def analyze_visual(
     if progress_cb:
         progress_cb(70.0, "Detecting faces")
     faces = detect_faces_in_frames(frames, times)
-    result.tracks = build_tracks(faces)
+    gap = (times[1]-times[0])*1.5 if len(times) > 1 else 2.
+    result.tracks = build_tracks(faces, max_gap=max(2., gap))
 
     if progress_cb:
         progress_cb(100.0, f"Visual analysis complete ({len(result.tracks)} subject tracks)")

@@ -60,6 +60,8 @@ PATHS = AppPaths()
 
 DEFAULT_SETTINGS: dict = {
     "theme": "dark",
+    "editing_preset": "gaming",
+    "gaming_enhance": False,
     "language": "en",
     "output_dir": str(PATHS.exports),
     "default_aspect": "9:16",

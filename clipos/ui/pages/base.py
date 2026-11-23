@@ -38,6 +38,7 @@ class BasePage(QWidget):
         outer.addWidget(self.scroll)
 
         self.container = QWidget()
+        self.container.setObjectName("PageSurface")
         self.layout = QVBoxLayout(self.container)
         self.layout.setContentsMargins(Metrics.xl, Metrics.xl, Metrics.xl, Metrics.xxl)
         self.layout.setSpacing(Metrics.lg)
@@ -47,6 +48,7 @@ class BasePage(QWidget):
         self.layout.addWidget(self.header)
 
         self.content = QWidget()
+        self.content.setObjectName("PageContent")
         self.content_layout = QVBoxLayout(self.content)
         self.content_layout.setContentsMargins(0, 0, 0, 0)
         self.content_layout.setSpacing(Metrics.lg)

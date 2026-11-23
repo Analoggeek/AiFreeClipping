@@ -10,7 +10,7 @@ PRESETS = {
 def apply_preset(settings, key):
     settings.editing_preset = key if key in PRESETS else "clean"
     settings.sound_effects = False  # Avoid an unrelated whoosh on every short.
-    settings.caption_style = {"podcast": "modern_podcast", "gaming": "neon_gaming",
+    settings.caption_style = {"podcast": "modern_podcast", "gaming": "clean_professional",
                               "story": "bold_viral"}.get(key, "minimal_white")
     settings.smart_reframe = key == "podcast"
     settings.auto_zoom = False
@@ -19,17 +19,27 @@ def apply_preset(settings, key):
     return settings
 
 
-def gaming_filter(width, height, source_w, source_h, facecam):
-    """Facecam is a normalised source rectangle, manually adjustable by user."""
-    x, y, w, h = facecam
+def _crop(rect, source_w, source_h):
+    x,y,w,h = rect
     if not (0 <= x < 1 and 0 <= y < 1 and w > 0 and h > 0 and x+w <= 1.001 and y+h <= 1.001):
-        raise ValueError("Facecam rectangle must fit inside the source")
+        raise ValueError("Crop rectangle must fit inside the source")
+    cw = min(source_w, max(2, int(w*source_w)//2*2))
+    ch = min(source_h, max(2, int(h*source_h)//2*2))
+    cx = min(source_w-cw, int(x*source_w)//2*2)
+    cy = min(source_h-ch, int(y*source_h)//2*2)
+    return f"crop={cw}:{ch}:{cx}:{cy}"
+
+
+def gaming_filter(width, height, source_w, source_h, facecam, gameplay=(0.,0.,1.,1.)):
+    """Fill the top gameplay panel; crop the actual facecam into the bottom."""
+    if facecam is None:
+        return (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+                f"crop={width}:{height},setsar=1")
     bottom = (height // 3) // 2 * 2
     top = height - bottom
-    cw, ch = max(2, int(w*source_w)//2*2), max(2, int(h*source_h)//2*2)
-    cx, cy = int(x*source_w)//2*2, int(y*source_h)//2*2
-    # Fit gameplay rather than arbitrarily cutting the middle of the recording.
-    return (f"split=2[game][cam];[game]scale={width}:{top}:force_original_aspect_ratio=decrease,"
-            f"pad={width}:{top}:(ow-iw)/2:(oh-ih)/2,setsar=1[upper];"
-            f"[cam]crop={cw}:{ch}:{cx}:{cy},scale={width}:{bottom}:force_original_aspect_ratio=increase,"
+    game = _crop(gameplay, source_w, source_h)
+    cam = _crop(facecam, source_w, source_h)
+    return (f"split=2[game][cam];[game]{game},scale={width}:{top}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{top},setsar=1[upper];"
+            f"[cam]{cam},scale={width}:{bottom}:force_original_aspect_ratio=increase,"
             f"crop={width}:{bottom},setsar=1[lower];[upper][lower]vstack=inputs=2")

@@ -14,7 +14,7 @@ def test_presets_are_deterministic_and_not_random_effects():
     s = apply_preset(RenderSettings(), "gaming")
     assert s.editing_preset == "gaming"
     assert not s.sound_effects and not s.smart_reframe
-    assert s.caption_style == "neon_gaming"
+    assert s.caption_style == "clean_professional"
 
 
 def test_facecam_must_be_inside_source():
@@ -72,6 +72,7 @@ def video(tmp_path):
 
 def test_real_gaming_render_has_selected_layout(video, tmp_path):
     s = apply_preset(RenderSettings(width=270, height=480, fps=15, encoder_preference='cpu', show_captions=False), 'gaming')
+    s.auto_facecam = False  # This fixture tests manual composition, not detection.
     result = ClipRenderer(tmp_path/'work').render(video, tmp_path/'game.mp4', 0, 1.5, s)
     assert result.width == 270 and result.height == 480
     assert result.duration > 1

@@ -79,6 +79,7 @@ class ClipOSPipeline:
         self.db = db
         self.project_id = project_id
         self._cancel = threading.Event()
+        self.external_cancel = None
         self._progress: Optional[Callable[[PipelineProgress], None]] = None
 
     # -- control ---------------------------------------------------------------
@@ -88,11 +89,16 @@ class ClipOSPipeline:
     def cancel(self) -> None:
         self._cancel.set()
 
+    def _cancel_requested(self) -> bool:
+        return self._cancel.is_set() or bool(self.external_cancel and self.external_cancel())
+
     def _check_cancel(self) -> None:
-        if self._cancel.is_set():
+        if self._cancel_requested():
+            self._cancel.set()
             raise PipelineCancelled("Processing cancelled")
 
     def _report(self, stage: str, pct: float, message: str = "") -> None:
+        self._check_cancel()
         if self._progress:
             self._progress(PipelineProgress(stage=stage, percent=pct, message=message))
 
@@ -228,7 +234,7 @@ class ClipOSPipeline:
             clip_id = self.db.create_clip(
                 project_id=self.project_id,
                 title=c.title or (meta.titles[0] if meta.titles else "Untitled clip"),
-                description=c.description,
+                description=meta.description or c.description,
                 start_time=c.start,
                 end_time=c.end,
                 duration=c.duration,
@@ -303,7 +309,7 @@ class ClipOSPipeline:
                 [(seg.start, seg.end, seg.speed) for seg in timeline.segments]) if settings.show_captions and analysis.transcript else []
             result = renderer.render_timeline(
                 source, output, timeline, settings, cues=edited_cues,
-                progress_cb=prog, cancel_cb=self._cancel.is_set,
+                progress_cb=prog, cancel_cb=self._cancel_requested,
             )
         else:
             result = renderer.render(
@@ -311,7 +317,7 @@ class ClipOSPipeline:
                 clip["start_time"], clip["end_time"],
                 settings, cues=cues,
                 audio=analysis.audio, visual=analysis.visual, speaker=analysis.speaker,
-                progress_cb=prog, cancel_cb=self._cancel.is_set,
+                progress_cb=prog, cancel_cb=self._cancel_requested,
             )
         self._check_cancel()
 
@@ -453,9 +459,11 @@ def run_full_analysis(
     stt_model: str = "base",
     language: str = "",
     progress_cb: Callable[[PipelineProgress], None] | None = None,
+    cancel_cb: Optional[Callable[[], bool]] = None,
 ) -> AnalysisResult:
     """Analyse a project and generate + persist clips in one call."""
     pipe = ClipOSPipeline(db, project_id)
+    pipe.external_cancel = cancel_cb
     if progress_cb:
         pipe.set_progress_callback(progress_cb)
 
@@ -499,6 +507,8 @@ def run_one_click(
     language: str = "",
     progress_cb: Callable[[PipelineProgress], None] | None = None,
     cancel_cb: Optional[Callable[[], bool]] = None,
+    recipe: str | None = None,
+    gaming_enhance: bool = False,
 ) -> dict:
     """One-click editing: analyse, cut, caption, reframe and export finished clips.
 
@@ -509,6 +519,7 @@ def run_one_click(
     ``{"analysis": AnalysisResult, "clips": [...], "exports": [...], "errors": [...]}``
     """
     pipe = ClipOSPipeline(db, project_id)
+    pipe.external_cancel = cancel_cb
     if progress_cb:
         pipe.set_progress_callback(progress_cb)
 
@@ -518,12 +529,15 @@ def run_one_click(
     analysis = run_full_analysis(
         db, project_id,
         clip_count=clip_count, duration_range=duration_range, aspect=aspect,
-        stt_model=stt_model, language=language, progress_cb=progress_cb,
+        stt_model=stt_model, language=language, progress_cb=progress_cb, cancel_cb=cancel_cb,
     )
 
     from .presets import apply_preset
-    settings = apply_preset(RenderSettings.for_aspect(aspect), db.get_setting("editing_preset", "clean"))
-    settings.caption_style = db.get_setting("caption_style", "bold_viral")
+    settings = apply_preset(RenderSettings.for_aspect(aspect), recipe or db.get_setting("editing_preset", "gaming"))
+    settings.caption_style = "clean_professional" if settings.editing_preset == "gaming" else db.get_setting("caption_style", "bold_viral")
+    settings.caption_position = "split" if settings.editing_preset == "gaming" else "bottom"
+    settings.threads = int(db.get_setting("processing_threads", 0))
+    settings.gaming_enhance = gaming_enhance or db.get_setting("gaming_enhance", "0") == "1"
     settings.caption_size = int(db.get_setting("caption_size", 58))
     settings.caption_font = db.get_setting("caption_font", "") or ""
     settings.show_captions = db.get_setting("show_captions", "1") != "0"

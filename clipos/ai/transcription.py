@@ -107,23 +107,24 @@ def faster_whisper_available() -> bool:
         return False
 
 
-def model_installed(size: str) -> bool:
-    """Check whether the whisper model exists in the local model cache."""
+def local_model_path(size: str) -> Path | None:
+    """Locate actual model files; partial downloads/cache metadata are not models."""
     repo, _ = WHISPER_SIZES.get(size, WHISPER_SIZES["base"])
     folder = "models--" + repo.replace("/", "--")
-    local_dir = PATHS.models / "whisper"
-    candidates = [local_dir / folder, local_dir / repo.replace("/", "--")]
-    try:
-        import huggingface_hub  # type: ignore
+    roots = [PATHS.models / "whisper" / repo.replace("/", "--"),
+             PATHS.models / "whisper" / folder,
+             Path(os.environ.get("HF_HOME", str(PATHS.models / "huggingface"))) / "hub" / folder]
+    required = ("model.bin", "config.json", "tokenizer.json")
+    for root in roots:
+        candidates = [root] + sorted((root / "snapshots").glob("*"))
+        for candidate in candidates:
+            if all((candidate / name).is_file() and (candidate / name).stat().st_size > 0 for name in required):
+                return candidate
+    return None
 
-        hf_home = os.environ.get("HF_HOME") or str(PATHS.models / "huggingface")
-        candidates.append(Path(hf_home) / "hub" / folder)
-    except Exception:
-        pass
-    for c in candidates:
-        if c.exists() and any(c.iterdir()):
-            return True
-    return False
+
+def model_installed(size: str) -> bool:
+    return local_model_path(size) is not None
 
 
 class _DownloadProgressBar:
@@ -208,6 +209,8 @@ def download_whisper_model(
                 ignore_patterns=["*.h5", "*.msgpack", "*.onnx", "*.tflite"],
                 tqdm_class=_DownloadProgressBar,
             )
+            if not model_installed(size):
+                raise RuntimeError("Download finished without complete speech model files")
             if progress_cb:
                 progress_cb(100.0, f"{repo} ready")
             return True
@@ -222,18 +225,11 @@ def _resolve_device(prefer: str = "auto") -> tuple[str, str]:
     """Return (device, compute_type) for faster-whisper."""
     if prefer == "cpu":
         return "cpu", "int8"
+    # CTranslate2 supports CUDA and CPU, not PyTorch's MPS device.
     try:
-        import torch  # type: ignore
-
-        if torch.cuda.is_available():
+        import ctranslate2
+        if ctranslate2.get_cuda_device_count() > 0:
             return "cuda", "float16"
-    except Exception:
-        pass
-    try:
-        import torch  # type: ignore
-
-        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
-            return "mps", "float16"
     except Exception:
         pass
     return "cpu", "int8"
@@ -262,11 +258,13 @@ def transcribe(
     if progress_cb:
         progress_cb(5.0, f"Loading model '{model_size}' on {dev}")
 
+    from ..core.hardware import suggest_worker_threads
     try:
         model = WhisperModel(
-            model_size, device=dev, compute_type=ctype,
+            str(local_model_path(model_size) or model_size), device=dev, compute_type=ctype,
             download_root=str(PATHS.models / "whisper"),
-            local_files_only=False,
+            local_files_only=True,
+            cpu_threads=suggest_worker_threads(),
         )
     except Exception as exc:
         raise TranscriptionUnavailable(f"Could not load whisper model '{model_size}': {exc}") from exc
