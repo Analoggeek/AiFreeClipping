@@ -3,6 +3,10 @@ import importlib.util
 from pathlib import Path
 from unittest.mock import patch, Mock
 import unittest
+import platform
+import sys
+import tempfile
+import subprocess
 
 
 def load(name):
@@ -44,3 +48,20 @@ class ArchitectureTests(unittest.TestCase):
         with patch.object(verify_arch.sys,'platform','darwin'), patch.object(verify_arch.platform,'machine',return_value='arm64'):
             with self.assertRaisesRegex(RuntimeError,'Expected macOS x86_64'):
                 verify_arch.verify('x86_64')
+
+
+class NativeLipoTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'darwin', 'requires Apple lipo')
+    def test_real_lipo_command_on_python(self):
+        # -verify_arch accepts multiple architectures; the input filename must
+        # precede it or Apple's lipo parses that filename as another arch.
+        subprocess.run(['lipo', sys.executable, '-verify_arch', platform.machine()], check=True)
+
+    def test_audit_supplies_input_before_variadic_architectures(self):
+        with tempfile.TemporaryDirectory() as folder:
+            binary = Path(folder)/'bad.so'
+            binary.write_bytes(b'fixture')
+            with patch.object(verify_arch.sys,'platform','darwin'), patch.object(verify_arch.platform,'machine',return_value='x86_64'), patch.object(verify_arch.sysconfig,'get_path',return_value=folder), patch.object(verify_arch.subprocess,'run',return_value=Mock(returncode=1,stderr='wrong architecture')) as run:
+                with self.assertRaisesRegex(RuntimeError,'wrong architecture'):
+                    verify_arch.verify('x86_64')
+                self.assertEqual(run.call_args.args[0], ['lipo',str(binary),'-verify_arch','x86_64'])
