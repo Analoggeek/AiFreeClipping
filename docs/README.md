@@ -6,9 +6,11 @@ tracking, external font service or mandatory JavaScript dependency.
 ## Files
 - `index.html`: product page, four platform download cards, all seven release
   assets, installation guidance and FAQ.
-- `style.css`: responsive dark/mint design and reduced-motion support.
+- `style.css`: responsive ivory/charcoal/coral design and reduced-motion support.
 - `site.js`: optional latest-stable-release discovery from GitHub.
-- `logo.svg`: original CLIPOS brand mark.
+- `logo.svg`: CLIPOS brand mark in the website accent colour.
+- `assets/creator-studio.jpg`: AI-generated editorial artwork, explicitly used as
+  an illustrative layout rather than a real app screenshot or exported video.
 
 ## Preview
 ```sh
