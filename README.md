@@ -91,7 +91,7 @@ warnings may appear; verify the source and follow your system's security policy.
 On Debian / Ubuntu:
 
 ```bash
-sudo apt install ./CLIPOS_2.5.0_amd64.deb
+sudo apt install ./CLIPOS_2.5.1_amd64.deb
 ```
 
 Alternatively, extract the Linux ZIP and launch the bundled executable on a
