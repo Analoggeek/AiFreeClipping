@@ -39,6 +39,6 @@ def test_apple_unified_memory_is_not_invented_from_gpu_core_count():
 
 def test_intel_mac_can_use_available_videotoolbox():
     profile=HardwareProfile(os_name='macOS',arch='x86_64',gpu=GPUInfo(),ffmpeg_encoders={'h264_videotoolbox':True})
-    with patch.object(hardware,'detect_hardware',return_value=profile),patch.object(hardware.platform,'system',return_value='Darwin'):
+    with patch.object(hardware,'detect_hardware',return_value=profile),patch.object(hardware.platform,'system',return_value='Darwin'),patch.object(hardware,'encoder_works',return_value=True):
         assert hardware.choose_encoder().hw_accel=='videotoolbox'
         assert hardware.choose_encoder('cpu').hw_accel=='none'

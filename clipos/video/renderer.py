@@ -673,7 +673,7 @@ class ClipRenderer:
         if enc.hw_accel == "nvenc":
             cmd += ["-c:v", enc.video_encoder, "-preset", "p5", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "videotoolbox":
-            cmd += ["-c:v", enc.video_encoder, "-b:v", f"{settings.bitrate_kbps}k"]
+            cmd += ["-c:v", enc.video_encoder, "-allow_sw", "0", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "qsv":
             cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-b:v", f"{settings.bitrate_kbps}k"]
         else:
@@ -879,7 +879,7 @@ class ClipRenderer:
         if enc.hw_accel == "nvenc":
             cmd += ["-c:v", enc.video_encoder, "-preset", "p5", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "videotoolbox":
-            cmd += ["-c:v", enc.video_encoder, "-b:v", f"{settings.bitrate_kbps}k"]
+            cmd += ["-c:v", enc.video_encoder, "-allow_sw", "0", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "qsv":
             cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-b:v",f"{settings.bitrate_kbps}k"]
         else:

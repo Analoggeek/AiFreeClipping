@@ -103,7 +103,9 @@ def test_captions_retime_after_trim_and_speed():
     assert result[0].words[0]['e'] == 1
 
 
-def test_hardware_failure_retries_with_cpu(video, tmp_path):
+@pytest.mark.parametrize('encoder,accel', [('h264_nvenc','nvenc'),
+    ('h264_videotoolbox','videotoolbox'),('h264_qsv','qsv')])
+def test_hardware_failure_retries_with_cpu(video, tmp_path, encoder, accel):
     from clipos.core.ffmpeg import FFmpegRunner
     from clipos.core.hardware import EncoderChoice
     original_run = FFmpegRunner.run
@@ -114,11 +116,13 @@ def test_hardware_failure_retries_with_cpu(video, tmp_path):
             raise RuntimeError('Device driver unavailable')
         return original_run(runner, args, **kwargs)
     with patch('clipos.video.renderer.choose_encoder', side_effect=[
-        EncoderChoice(video_encoder='h264_nvenc', hw_accel='nvenc'), EncoderChoice()]), patch.object(FFmpegRunner, 'run', run):
+        EncoderChoice(video_encoder=encoder, hw_accel=accel), EncoderChoice()]), patch.object(FFmpegRunner, 'run', run):
         result = ClipRenderer(tmp_path/'work').render(video, tmp_path/'fallback.mp4', 0, 1,
             RenderSettings(width=270, height=480, fps=15, show_captions=False, sound_effects=False))
     assert len(calls) == 2
-    assert 'libx264' in calls[1] and 'h264_nvenc' not in calls[1]
+    assert 'libx264' in calls[1] and encoder not in calls[1]
+    if accel=='videotoolbox':
+        assert calls[0][calls[0].index('-allow_sw')+1]=='0'
     assert result.size_bytes > 0
 
 

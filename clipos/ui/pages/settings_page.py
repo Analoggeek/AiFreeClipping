@@ -515,7 +515,7 @@ class SettingsPage(BasePage):
             f"CPU: {prof.cpu_name} — {prof.cpu_cores} cores / {prof.cpu_threads} threads\n"
             f"RAM: {prof.ram_total_mb} MB total, {prof.ram_available_mb} MB available\n"
             f"GPU: {prof.gpu.label} (vendor: {prof.gpu.vendor or 'none'})\n"
-            f"Auto encoder: {choose_encoder().description} (CPU retry on failure)\n"
+            f"Encoder candidate: {choose_encoder(verify=False).description} (unverified; tested at export, CPU fallback)\n"
             f"Automatic worker budget now: {suggest_worker_threads()} threads\n"
             f"Torch: {'available' if prof.torch_available else 'not installed'}"
             f"{' (CUDA)' if prof.torch_cuda else ''}{' (Metal)' if prof.torch_mps else ''}\n"

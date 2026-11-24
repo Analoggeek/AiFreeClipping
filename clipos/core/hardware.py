@@ -13,11 +13,12 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from .ffmpeg import list_encoders
+from .ffmpeg import list_encoders, require_ffmpeg, FFmpegError
 from .logging_setup import get_logger
 
 log = get_logger(__name__)
@@ -340,13 +341,61 @@ class EncoderChoice:
         return self.hw_accel != "none"
 
 
+# Small, bounded session cache; both failures and successes expire so a temporarily
+# busy device is retried. Binary identity prevents reuse after FFmpeg replacement.
+@lru_cache(maxsize=32)
+def _probe_encoder(binary: str, identity: tuple, name: str, epoch: int) -> bool:
+    allowed = {
+        "h264_nvenc", "hevc_nvenc", "h264_qsv", "hevc_qsv",
+        "h264_videotoolbox", "hevc_videotoolbox",
+    }
+    if name not in allowed:
+        return False
+    args = [binary, "-hide_banner", "-nostdin", "-v", "error",
+            "-f", "lavfi", "-i", "color=c=black:s=256x256:r=30",
+            "-frames:v", "3", "-an", "-pix_fmt", "yuv420p", "-c:v", name]
+    if name.endswith("videotoolbox"):
+        # A software VideoToolbox session is not proof of a working hardware GPU.
+        args += ["-allow_sw", "0"]
+    args += ["-b:v", "1M", "-f", "null", "-"]
+    try:
+        result = subprocess.run(
+            args, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, timeout=8,
+            creationflags=0x08000000 if sys.platform == "win32" else 0,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        log.warning("Encoder preflight unavailable for %s: %s", name, type(exc).__name__)
+        return False
+    if result.returncode != 0:
+        log.warning("Encoder preflight failed for %s (exit %s)", name, result.returncode)
+    return result.returncode == 0
+
+
+def encoder_works(name: str) -> bool:
+    """Hardware-only tiny encode check; not proof a full-size render will succeed.
+
+    Uses CLIPOS's resolved/bundled FFmpeg, no files or network. Results live at
+    most 60 seconds. The existing full-render CPU retry is still mandatory.
+    """
+    try:
+        binary = require_ffmpeg()
+        stat = Path(binary).stat()
+        identity = (stat.st_mtime_ns, stat.st_size)
+    except (OSError, FFmpegError):
+        return False
+    return _probe_encoder(binary, identity, name, int(time.monotonic() // 60))
+
+
 def choose_encoder(preference: str = "auto", codec: str = "h264",
-                   low_memory: bool = False) -> EncoderChoice:
+                   low_memory: bool = False, *, verify: bool = True) -> EncoderChoice:
     """Pick the best available encoder.
 
     ``preference`` is one of: auto, cpu, nvidia, intel, apple, nvenc, qsv, videotoolbox.
     Falls back to CPU whenever the requested accelerator is unavailable -- we never
-    hand ffmpeg an encoder it does not have.
+    hand ffmpeg an encoder it does not have. Hardware candidates must also pass
+    a tiny runtime encode. ``verify=False`` is for nonblocking diagnostics only;
+    such a choice is an unverified candidate, not a usable hardware claim.
     """
     prof = detect_hardware()
     enc = prof.ffmpeg_encoders or {}
@@ -369,7 +418,7 @@ def choose_encoder(preference: str = "auto", codec: str = "h264",
     # NVENC
     nvenc_name = "hevc_nvenc" if want_hevc else "h264_nvenc"
     if preference in ("auto", "nvidia", "nvenc", "gpu"):
-        if enc.get(nvenc_name) and prof.gpu.cuda_available:
+        if enc.get(nvenc_name) and prof.gpu.cuda_available and (not verify or encoder_works(nvenc_name)):
             return EncoderChoice(
                 video_encoder=nvenc_name, audio_encoder="aac", hw_accel="nvenc",
                 extra_args=["-preset", "p4" if want_hevc else "p5", "-tune", "hq"],
@@ -379,17 +428,17 @@ def choose_encoder(preference: str = "auto", codec: str = "h264",
     # Apple VideoToolbox
     vt_name = "hevc_videotoolbox" if want_hevc else "h264_videotoolbox"
     if preference in ("auto", "apple", "videotoolbox", "gpu"):
-        if platform.system() == "Darwin" and enc.get(vt_name):
+        if platform.system() == "Darwin" and enc.get(vt_name) and (not verify or encoder_works(vt_name)):
             return EncoderChoice(
                 video_encoder=vt_name, audio_encoder="aac", hw_accel="videotoolbox",
-                extra_args=["-b:v", "10M", "-allow_sw", "1"],
+                extra_args=["-b:v", "10M", "-allow_sw", "0"],
                 description="Apple VideoToolbox (hardware)",
             )
 
     # Intel QSV
     qsv_name = "hevc_qsv" if want_hevc else "h264_qsv"
     if preference in ("auto", "intel", "qsv", "gpu"):
-        if enc.get(qsv_name) and prof.gpu.qsv_available:
+        if enc.get(qsv_name) and prof.gpu.qsv_available and (not verify or encoder_works(qsv_name)):
             return EncoderChoice(
                 video_encoder=qsv_name, audio_encoder="aac", hw_accel="qsv",
                 extra_args=["-preset", "medium", "-look_ahead", "0"],

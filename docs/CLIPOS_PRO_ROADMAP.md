@@ -115,3 +115,12 @@ replacement for those detectors.
 The complete PRO label/release must wait for all gates. The absence of a cloud API
 key alone is not an offline acceptance test. Passing fixture/protocol tests alone
 is not evidence of autonomous editing quality.
+
+### Encoder reliability follow-up
+
+Hardware export selection now requires a bounded, cached three-frame runtime
+encode (NVENC/QSV/VideoToolbox, H.264/HEVC), rather than advertised availability
+alone. VideoToolbox software fallback cannot be labelled hardware. Full-render
+CPU retry remains. Diagnostics show an unverified candidate without UI-thread
+probing. Source suite: 331 passed / 9 skipped; generated-video E2E: 35/35.
+These policy/integration results do not establish native GPU or PRO completion.

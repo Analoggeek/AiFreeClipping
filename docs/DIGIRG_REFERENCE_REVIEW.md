@@ -13,7 +13,7 @@ Reference: [DIGIRGCLOUD/DIGIRGCLIPPINGFREE](https://github.com/DIGIRGCLOUD/DIGIR
 | Ollama refinement | `smart.py`: local model selection, transcript JSON scoring/titles/hooks and evidence checks, deterministic fallback | **Existing CLIPOS title path plus prior foundation** strict loopback transport and bounded reviewed edit plans; rejects proxies/redirects/cloud model references | No newly ported evidence-validated semantic highlight reranker. Reviewed agent changes supported settings/ranges, not arbitrary multitrack edits or vision |
 | Gameplay/facecam layouts | `layouts.py`: crop/scale/overlay, masks, blur; independent camera/game source rectangles | **Previously adapted with MIT attribution**; existing native crop controls, FFmpeg composition and presets retained. New panel refinement feeds the existing path | Real rendering, not semantic player extraction. Manual crop override remains important; existing adjustable/split/PIP options are not a newly built professional compositing engine |
 | Animated ASS captions | `captions.py` / `subtitles.py`: grouped word events, full-line/highlight/build-up/pop styles, ASS transforms/fades | **Existing CLIPOS ASS/caption pipeline retained** | This patch does not deliver or certify >=30 distinct functioning animated presets, multilingual editorial UI or caption timeline automation |
-| Local processing / hardware fallback | `encoders.py`: advertised encoder discovery plus cached tiny test encode; CPU-last retry | **Existing CLIPOS hardware selection/render retry retained**, strict local-AI boundary from prior foundation | Advertised hardware availability is not runtime proof. Upstream preflight smoke encode is a useful remaining improvement, not implemented here. No native driver/performance claim from Linux tests |
+| Local processing / hardware fallback | `encoders.py`: advertised encoder discovery plus cached tiny test encode; CPU-last retry | **Improved with independently implemented runtime preflight** for NVENC, QSV and VideoToolbox, H.264 and HEVC; existing full-render CPU retry retained | Three-frame local encode, eight-second timeout per candidate, bounded cache keyed by binary identity and 60-second epoch. VideoToolbox software fallback is disabled to avoid labelling a software session as hardware. No native driver/performance claim from Linux policy tests |
 | Subject association | Upstream facecam sampling is not a continuous multiperson tracker | **Improved** `build_tracks`: one-to-one per timestamp, bounded velocity prediction, size gating, shot-cut retirement, stable IDs, observed-interval duration | Spatial sampled face association only; not biometric identity, YOLO, ByteTrack, person/body tracking or speaker diarization |
 
 The previous frame-difference motion list was N-1 values and unused in ranking. It is now aligned one-to-one with keyframe timestamps, begins with zero evidence, and contributes to actual candidate generation and scores. Loudness preprocessing is reused across candidate scoring rather than recalculated for each candidate. A static loud soundtrack alone is not a loudness-rise event. Modest activity weights preserve transcript-led ranking; no claim of validated editorial quality is made.
@@ -32,7 +32,7 @@ The previous frame-difference motion list was N-1 values and unused in ranking. 
 | Local editing agent | Prior foundation validates/reviews/applies supported settings and ranges transactionally | Vision-guided autonomous modes, arbitrary timeline operations and real installed-LLM acceptance |
 | Advanced audio | Existing analysis/render filters retained | Validated denoising, separation, sync, VAD-driven editing, track ducking/automation workflow |
 | AI scene understanding | Existing cuts/text heuristics and measured activity | Installed local vision-language model, explicit model management, grounded semantic evidence |
-| GPU video rendering | Existing platform encoder selection and CPU retry | Runtime preflight, actual native GPU acceptance/performance tests |
+| GPU video rendering | Platform encoder selection, new runtime preflight, and full-render CPU retry | Actual native GPU acceptance/performance tests; preflight does not establish full-size/filter-graph success |
 | Project saving / recovery | Existing persisted project/settings/ranges and prior atomic plan application retained | Professional timeline schema, media relink, crash journal/autosave/recovery acceptance |
 | Fully disconnected professional acceptance | Existing local transport/installed-model restrictions and test fixtures | Real model weights + OS-level disconnected gaming import→detect→captions→timeline edit→save/reopen→1080x1920 export on macOS Intel/ARM and Windows |
 
@@ -43,3 +43,29 @@ No current feature was intentionally removed. No upstream web-server architectur
 Command: `LD_LIBRARY_PATH=$PWD/.stublibs QT_QPA_PLATFORM=minimal .venv/bin/python -m pytest -q`.
 
 Result: **312 passed, 9 skipped** in 74.19 seconds. New tests cover simultaneous-face exclusivity, shot/gap retirement, measured audio/motion ranking and activity anchors, static/pan/local-motion/cut/sparse flow, face-confirmed panel boundaries and abstention without repeated faces. Existing gaming integration suite: **10 passed**, including real YuNet/decoded-video/FFmpeg composition coverage. New panel/flow fixtures are synthetic algorithm tests, not a real-world gaming quality benchmark. No new real speech/LLM-weight, native OS, driver or physical installation test was run. See `CLIPOS_PRO_ROADMAP.md` for the broader incomplete acceptance ledger.
+
+### Follow-up: runtime encoder preflight
+
+The next increment closes the preflight gap identified above. Export selection now
+checks an actual three-frame 256×256 YUV420P encode with CLIPOS's resolved FFmpeg
+before returning a hardware choice. Each candidate has an eight-second timeout;
+missing binary, nonzero exit, driver error and timeout reject it. Automatic mode
+tries eligible alternatives and ends at CPU. Explicit CPU mode never probes.
+Successful and failed checks are cached for at most 60 seconds; binary size/mtime
+changes invalidate the cached identity. No input media, network or output file is
+needed. VideoToolbox uses `-allow_sw 0` both in the check and the two rendering paths.
+A successful tiny encode still cannot prove a long/4K render will work: the full
+render CPU retry remains intact.
+
+Settings diagnostics deliberately request an **unverified candidate**, explicitly
+labelled as such, instead of synchronously probing drivers on the UI thread.
+No new dependency or model download was introduced.
+
+Follow-up validation: **331 passed, 9 skipped** (74.98 s) for the full pytest suite;
+real generated-video integration script **35/35 passed**. New policy tests cover
+all six encoder/codec pairs, bounded subprocess invocation, cached failure,
+expiry/replacement, timeout/error handling, alternate selection, explicit CPU
+and nonblocking diagnostics. The real FFmpeg CPU-retry integration now exercises
+simulated failure for NVENC, QSV and VideoToolbox; these simulated failures are
+not evidence of successful native GPU encoding. Native macOS/Windows GPU tests,
+physical installation and real-weight disconnected PRO acceptance remain pending.
