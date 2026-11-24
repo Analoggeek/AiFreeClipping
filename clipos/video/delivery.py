@@ -8,6 +8,8 @@ from .pipeline import _safe_folder
 
 def deliver_clips(db, project_id, clip_ids, root, cancel_cb=None):
     project = db.get_project(project_id)
+    if project is None:raise ValueError('Project not found')
+    if not str(root).strip():raise ValueError('Choose an export folder')
     folder = Path(root) / datetime.now().strftime('%Y-%m-%d') / _safe_folder(project['name'])
     folder.mkdir(parents=True, exist_ok=True)
     results = []
@@ -17,6 +19,7 @@ def deliver_clips(db, project_id, clip_ids, root, cancel_cb=None):
         source = Path(clip['output_path']) if clip else Path('')
         item = {'clip_id':cid,'error':''}
         try:
+            if clip and clip['project_id'] != project_id:raise ValueError('Clip belongs to a different project')
             if not clip or not clip['output_path'] or not source.is_file() or source.stat().st_size == 0:
                 raise RuntimeError('This clip has no finished edit. Run Edit before exporting.')
             target = folder / f'clip_{cid:03d}_{_safe_folder(clip["title"])}.mp4'
@@ -28,6 +31,7 @@ def deliver_clips(db, project_id, clip_ids, root, cancel_cb=None):
                 finally:
                     partial.unlink(missing_ok=True)
             item.update(output_path=str(target),size_bytes=target.stat().st_size)
+            db.update_clip(cid,status='exported')
             db.create_export(project_id=project_id,clip_id=cid,output_path=str(target),status='done',size_bytes=target.stat().st_size)
         except Exception as exc:
             item['error']=str(exc)

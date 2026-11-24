@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
         self.current_key = "home"
         self._busy = False
 
-        self.setWindowTitle("CLIPOS 2.5 — Video Clip Editor")
+        self.setWindowTitle("CLIPOS 2.5.1 — Video Clip Editor")
         self.setMinimumSize(1180, 760)
         self.resize(1440, 900)
 

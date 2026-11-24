@@ -147,3 +147,35 @@ side-by-side columns (11 choices including the original default).
 
 Upstream and full MIT license: see `THIRD_PARTY_NOTICES.md`, also included in
 frozen application data. Native installer verification remains a separate gate.
+
+
+## 2.5.1 crop, player, preset and delivery fixes
+
+- Select PLAYER (pink) or GAMEPLAY (cyan), then drag on the source. Both labelled
+  rectangles remain visible when switching targets, during playback and after
+  reopening the project. Small accidental clicks restore the previous region.
+- Live decoded source frames feed the selection canvas and a side-by-side
+  composition view (GUI conversion capped at 15 fps / 1280×720). No frame-by-frame
+  FFmpeg subprocesses are spawned. The composition uses the shared layout geometry.
+- Caption text in that live view is explicitly a **style sample**, not a speech
+  transcript. Blur is a low-cost approximation. Use Preview recipe for actual
+  FFmpeg composition/colour, then Edit all clips for captions, cuts and AI framing.
+- Camera source-placement presets (top/bottom left/right/centre) set both source
+  regions as editable starting points, not a claim of automatic face detection.
+- Selecting a camera crop or studio layout activates the Gameplay recipe, rather
+  than silently ignoring it under a different recipe. Style/layout/camera-size/
+  caption/count/duration changes persist immediately and survive navigation.
+- Recipe rendering now respects the chosen output aspect rather than always using
+  a 9:16 preview. Playback handles are cleared before edit/delivery file operations.
+- Export copies the **checked rendered versions**. Changing a control no longer
+  blocks delivery with a full-settings-signature mismatch or an unrelated missing
+  manual camera selection. Run Edit all clips again to apply changed styles to
+  outputs; delivery does not pretend to apply new effects. A successful export
+  updates clip status and records the actual copied file size.
+- If speech download/transcription fails, an explicit Retry without speech
+  captions action disables captions and re-runs editing. Captions are never
+  fabricated or silently claimed successful.
+
+The exact installed-app export failure still requires its logs to diagnose. These
+fixes address reproduced control/data-flow defects, not every possible source,
+filesystem, codec, model-download or GPU-driver failure.

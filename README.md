@@ -1,4 +1,4 @@
-# CLIPOS 2.5 — Offline-first Video Clip Editor
+# CLIPOS 2.5.1 — Offline-first Video Clip Editor
 
 **CLIPOS**, developed by **Analoggeek**, is a native desktop application for
 turning long recordings into edited short-form videos. Import a recording,
@@ -6,22 +6,30 @@ select moments and framing, apply editing presets and captions, review the
 rendered videos, and export the batch. Processing runs locally with **Python,
 PySide6, Faster-Whisper and FFmpeg**—no mandatory cloud account or subscription.
 
-**v2.5.0 is released.** YouTube publishing/account connection and the separate
+**v2.5.1 is released.** YouTube publishing/account connection and the separate
 Gaming Studio 2.0 navigation have been removed; authorised URL import remains.
 
-## Download v2.5.0
+## Download v2.5.1
 
 | Platform | Installer |
 | --- | --- |
-| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS-Setup.exe) |
-| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS-2.5.0-arm64.dmg) |
-| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS-2.5.0-intel.dmg) |
-| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS_2.5.0_amd64.deb) |
-| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS-2.5.0-linux-x86_64.zip) |
+| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS-Setup.exe) |
+| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS-2.5.1-arm64.dmg) |
+| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS-2.5.1-intel.dmg) |
+| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS_2.5.1_amd64.deb) |
+| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS-2.5.1-linux-x86_64.zip) |
 
-[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v2.5.0)
+[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v2.5.1)
 · [Release notes](RELEASE_NOTES.md)
 · [Detailed workflow guide](docs/WORKFLOW_V25.md)
+
+### Fixed in 2.5.1
+
+PLAYER (pink) and GAMEPLAY (cyan) regions now stay visible together, with live
+source-frame composition and editable camera-placement presets. Layout/caption
+controls persist across navigation. Changing controls no longer blocks exporting
+checked rendered clips; re-edit explicitly to apply new effects. Speech-model
+errors offer an explicit retry without captions. See [release notes](RELEASE_NOTES.md).
 
 ## Contents
 
@@ -291,7 +299,16 @@ and preserves application permissions/symlinks in release archives.
 
 ## Validation and limitations
 
-For the v2.5 release work:
+For the v2.5.1 fixes:
+
+- Local full suite: **270 passed, 9 skipped**; E2E: **35/35 passed**.
+- Real GUI source-region drags, persistence, source playback, pixel-checked recipe
+  rendering and playable delivery after changed controls have regression tests.
+- [Native v2.5.1 release checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45376503798)
+  passed Windows, macOS Intel/Apple Silicon and Linux; all seven assets uploaded.
+  Windows/macOS CI requires real Qt source-frame playback, not a mocked player.
+
+Earlier v2.5.0 validation:
 
 - Local full suite: **263 passed, 8 skipped**.
 - Real FFmpeg tests cover five-clip captioned batch export, GUI
