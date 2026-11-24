@@ -198,3 +198,20 @@ count check. Three new actual MP4 export tests exercise new styles through the
 existing renderer. This is not full-suite/native acceptance. Multilingual visual
 review, editable word-timing workflow, native live ASS preview, advanced audio,
 continuous person tracking and professional multitrack work remain pending.
+
+### Audio mixing follow-up
+
+Implemented actual source-waveform-driven music ducking in both range and edited
+segment exports. Music now loops/trims to edited duration; music gain no longer
+attenuates foreground speech. Shared mix graph compensates amix averaging and
+limits peaks without auto-boost. Local file selection, level and ducking toggle
+are connected to shared saved settings. Missing selected files fail actionably.
+See [AUDIO_DUCKING.md](AUDIO_DUCKING.md) for DSP behavior and limits.
+
+Validation: **189 passed, 2 deselected** in the selected regression suite, including
+real PCM spectral evidence of ducking/recovery/preserved source amplitude and
+four actual range/timeline exports. Two Qt-import tests remain blocked by native
+libGL absence; no fresh native UI/full-suite claim. Loud game effects also key
+the compressor: this is not VAD/voice separation or semantic speech enhancement.
+Professional multitrack audio, automation, synchronization and native listening
+acceptance remain pending.

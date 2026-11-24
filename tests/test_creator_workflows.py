@@ -208,3 +208,40 @@ def test_new_animated_caption_styles_reach_real_clip_export(video,tmp_path,style
         assert '\\move(' in content
     else:
         assert '\\t(' in content or '\\fad(' in content
+
+
+@pytest.mark.parametrize('timeline_mode',[False,True])
+@pytest.mark.parametrize('ducking',[False,True])
+def test_music_is_mixed_into_actual_range_and_timeline_exports(video,tmp_path,timeline_mode,ducking):
+    import numpy as np
+    from clipos.core.ffmpeg import require_ffmpeg,probe
+    ffmpeg=require_ffmpeg()
+    music=tmp_path/'music.wav'
+    subprocess.run([ffmpeg,'-v','error','-f','lavfi','-i',
+        'sine=frequency=1000:sample_rate=48000:duration=0.7','-y',str(music)],
+        check=True,capture_output=True,timeout=15)
+    settings=RenderSettings(width=270,height=480,fps=15,show_captions=False,
+        normalize_audio=False,noise_reduction=False,sound_effects=False,encoder_preference='cpu',
+        background_music=str(music),bgm_volume=.5,bgm_ducking=ducking)
+    output=tmp_path/'mixed.mp4'
+    renderer=ClipRenderer(tmp_path/'work')
+    if timeline_mode:
+        timeline=Timeline.from_clip(0,2,source_duration=2)
+        timeline.split_at(1)
+        timeline.set_speed(timeline.segments[0].id,2)
+        result=renderer.render_timeline(video,output,timeline,settings)
+        expected_duration=1.5
+    else:
+        result=renderer.render(video,output,0,2,settings)
+        expected_duration=2
+    assert result.size_bytes>0
+    assert any('Background music:' in step for step in result.steps)
+    assert probe(output).duration==pytest.approx(expected_duration,abs=.2)
+    decoded=subprocess.run([ffmpeg,'-v','error','-i',str(output),'-vn','-ac','1',
+        '-ar','48000','-f','f32le','-'],check=True,capture_output=True,timeout=15)
+    samples=np.frombuffer(decoded.stdout,dtype='<f4')
+    segment=samples[round(.9*48000):round(1.3*48000)]
+    # Music remains measurable beyond its 0.7 s source: looping really executes.
+    t=np.arange(len(segment))/48000
+    amplitude=2*abs(np.mean(segment*np.exp(-2j*np.pi*1000*t)))
+    assert amplitude>.001

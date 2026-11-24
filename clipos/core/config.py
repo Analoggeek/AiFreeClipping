@@ -84,6 +84,8 @@ DEFAULT_SETTINGS: dict = {
     "llm_model": "llama3.1:8b",
     "ollama_host": "http://127.0.0.1:11434",
     "bgm_volume": 0.12,
+    "background_music": "",
+    "bgm_ducking": True,
     "sfx_enabled": True,
     "silence_threshold_db": -32.0,
     "min_silence_duration": 0.35,

@@ -23,7 +23,7 @@ ENUMS={'editing_preset':set(PRESETS),'studio_layout':{x[0] for x in CATALOG},
 NUMBERS={'default_clip_count':(1,30,int),'caption_size':(20,100,int),
          'camera_size':(.2,.5,float),'silence_threshold_db':(-60,-10,float),
          'min_silence_duration':(.1,3,float),'bgm_volume':(0,1,float)}
-BOOLEANS={'remove_silence','auto_caption','gaming_enhance','normalize_audio','noise_reduction'}
+BOOLEANS={'remove_silence','auto_caption','gaming_enhance','normalize_audio','noise_reduction','bgm_ducking'}
 
 
 @dataclass(frozen=True)

@@ -85,6 +85,7 @@ class RenderSettings:
     noise_reduction: bool = True
     background_music: str = ""
     bgm_volume: float = 0.12
+    bgm_ducking: bool = True
     sound_effects: bool = True
     transitions: bool = True
     transition_duration: float = 0.35
@@ -373,14 +374,9 @@ def _build_audio_filter(s: RenderSettings, music_path: str = "") -> str:
     if s.noise_reduction:
         parts.append("afftdn=nf=-25")
     if s.normalize_audio:
-        # NB: `loudnorm` is a two-pass filter.  In single-pass mode it buffers
-        # the whole signal to measure the loudness, which means it emits nothing
-        # when it is combined with `amix` (the mix waits for a stream that never
-        # arrives).  `dynaudnorm` does the same job in a single pass and mixes
-        # cleanly, so that is what we use here.
+        # Dynamic gain normalization, not a measured two-pass LUFS target.
         parts.append("dynaudnorm=f=250:g=15:p=0.9:m=10")
-    if music_path and Path(music_path).exists():
-        parts.append(f"volume={s.bgm_volume:.3f}")
+    # Background level belongs to the separate music branch, never source audio.
     return ",".join(parts)
 
 
@@ -461,6 +457,9 @@ class ClipRenderer:
         import time
 
         t_start = time.time()
+        if settings.background_music and not Path(settings.background_music).is_file():
+            raise FileNotFoundError("Background music is missing; choose local audio or clear the music setting: "
+                                    + str(settings.background_music))
         source = Path(source)
         output = Path(output)
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -634,12 +633,13 @@ class ClipRenderer:
         if settings.background_music and Path(settings.background_music).exists():
             music_idx = 1
             input_args += ["-stream_loop", "-1", "-i", str(settings.background_music)]
-            filter_parts.append(
-                f"[{music_idx}:a]volume={settings.bgm_volume:.3f},"
-                f"atrim=0:{clip_dur:.2f},asetpts=N/SR/TB[bgm]"
-            )
-            filter_parts.append(f"[{final_a[1:-1]}][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]")
-            final_a = "[aout]"
+            from .audio_mix import music_mix_parts
+            music_parts, final_a = music_mix_parts(final_a, music_idx,
+                sum(ke-ks for ks,ke in keeps),settings.bgm_volume,
+                settings.bgm_ducking,has_audio)
+            filter_parts.extend(music_parts)
+            result.steps.append("Background music: source-driven ducking" if settings.bgm_ducking and has_audio
+                                else "Background music: fixed level")
 
         # Sound effect at the start
         if settings.sound_effects:
@@ -753,6 +753,9 @@ class ClipRenderer:
         a speed other than 1x are retimed with ``setpts``/``atempo``; segments
         with extra zoom or a moved crop centre get their own crop filter.
         """
+        if settings.background_music and not Path(settings.background_music).is_file():
+            raise FileNotFoundError("Background music is missing; choose local audio or clear the music setting: "
+                                    + str(settings.background_music))
         source = Path(source)
         output = Path(output)
         segments = list(timeline.segments)
@@ -868,6 +871,17 @@ class ClipRenderer:
                 f"{final_v}{_ass_filter(ass_path)}[vout]"
             )
             final_v = "[vout]"
+
+        if settings.background_music and Path(settings.background_music).exists():
+            from .audio_mix import music_mix_parts
+            music_idx = len(segments)
+            input_args += ["-stream_loop", "-1", "-i", str(settings.background_music)]
+            music_parts, final_a = music_mix_parts(final_a,music_idx,
+                sum(seg.duration for seg in segments),settings.bgm_volume,
+                settings.bgm_ducking,has_audio)
+            parts.extend(music_parts)
+            result.steps.append("Background music: source-driven ducking" if settings.bgm_ducking and has_audio
+                                else "Background music: fixed level")
 
         filter_complex = ";".join(parts)
 

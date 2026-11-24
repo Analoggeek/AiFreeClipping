@@ -101,3 +101,13 @@ actual MP4 export cases verify renderer integration. Selected regression:
 174 passed / 2 Qt-dependent tests deselected; generated-video E2E: 35/35 passed.
 This does not establish native real-time ASS preview or multilingual/editorial
 acceptance. Professional timeline and continuous YOLO/ByteTrack remain pending.
+
+### Follow-up: actual music ducking and shared export mixing
+
+Independent improvement beyond the reference: source-signal music sidechain
+compression, independent foreground/music gain, edited-duration looping and
+shared range/timeline audio mix. The previous source-attenuation bug and omitted
+timeline music are fixed. Persisted local selection/level/ducking controls are
+connected. `AUDIO_DUCKING.md` records measured PCM and real MP4 evidence:
+189 selected tests passed / 2 Qt-dependent tests deselected. This is not speaker
+recognition, VAD, source separation or completed multitrack audio editing.

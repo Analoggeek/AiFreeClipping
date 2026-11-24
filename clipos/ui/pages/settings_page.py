@@ -219,6 +219,29 @@ class SettingsPage(BasePage):
         )
         form3.addRow("Minimum silence", self.min_sil_spin)
 
+        self.music_path_label = QLabel(settings.get("background_music", "") or "No background music")
+        self.music_path_label.setWordWrap(True)
+        music_row = QHBoxLayout()
+        music_row.addWidget(self.music_path_label, 1)
+        choose_music = QPushButton("Choose local audio…")
+        choose_music.clicked.connect(self._choose_music)
+        music_row.addWidget(choose_music)
+        clear_music = QPushButton("Clear")
+        clear_music.clicked.connect(lambda: self._set_music(""))
+        music_row.addWidget(clear_music)
+        form3.addRow("Background music", music_row)
+        self.music_volume_spin = QDoubleSpinBox()
+        self.music_volume_spin.setRange(0., 1.)
+        self.music_volume_spin.setSingleStep(.02)
+        self.music_volume_spin.setValue(float(settings.get("bgm_volume", .12)))
+        self.music_volume_spin.valueChanged.connect(lambda v: self._save("bgm_volume", v))
+        form3.addRow("Music level (0–1)", self.music_volume_spin)
+        self.music_duck_check = QCheckBox("Lower music when source audio is loud")
+        self.music_duck_check.setToolTip("Signal-driven ducking; loud game sounds also lower music. Not speaker identification.")
+        self.music_duck_check.setChecked(enabled(settings.get("bgm_ducking", True)))
+        self.music_duck_check.toggled.connect(lambda v: self._save("bgm_ducking", int(v)))
+        form3.addRow("Music ducking", self.music_duck_check)
+
         caps.add_layout(form3)
         self.content_layout.addWidget(caps)
 
@@ -443,6 +466,16 @@ class SettingsPage(BasePage):
         self.db.set_setting("theme", theme)
         apply_theme(self.window, theme)
 
+    def _set_music(self, path: str) -> None:
+        self._save("background_music", path)
+        self.music_path_label.setText(path or "No background music")
+
+    def _choose_music(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Choose local background audio", "",
+                                             "Audio (*.wav *.mp3 *.m4a *.aac *.flac *.ogg);;All files (*)")
+        if path:
+            self._set_music(path)
+
     def _choose_output(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Choose output folder")
         if path:
@@ -492,14 +525,15 @@ class SettingsPage(BasePage):
                 idx=widget.findData(values.get(key, values.get('default_aspect','9:16') if key=='aspect_ratio' else None))
                 if idx>=0:
                     widget.blockSignals(True);widget.setCurrentIndex(idx);widget.blockSignals(False)
-        for name,key in [('count_spin','default_clip_count'),('threads_spin','processing_threads'),('cap_size_spin','caption_size'),('silence_spin','silence_threshold_db'),('min_sil_spin','min_silence_duration')]:
+        for name,key in [('count_spin','default_clip_count'),('threads_spin','processing_threads'),('cap_size_spin','caption_size'),('silence_spin','silence_threshold_db'),('min_sil_spin','min_silence_duration'),('music_volume_spin','bgm_volume')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setValue(values[key]);widget.blockSignals(False)
-        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode')]:
+        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)
+        self.music_path_label.setText(values.get('background_music','') or 'No background music')
         self.out_path_label.setText(values.get('output_dir',''))
         stats = self.db.stats()
         self.storage_label.setText(
