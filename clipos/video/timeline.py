@@ -14,9 +14,12 @@ import json
 import math
 import os
 import tempfile
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Callable, Iterable
+
+
+HISTORY_LIMIT = 50
 
 
 @dataclass
@@ -105,7 +108,7 @@ class Timeline:
         return cls._from_data(json.loads(raw))
 
     @classmethod
-    def _from_data(cls, data: dict) -> "Timeline":
+    def _from_data(cls, data: dict, *, read_history: bool = True) -> "Timeline":
         if not isinstance(data, dict):
             raise ValueError("Timeline must be an object")
         if type(data.get("version", 1)) is not int or data.get("version", 1) != 1:
@@ -148,7 +151,54 @@ class Timeline:
         tl._counter = max([int(sid[3:]) for sid in ids
                            if sid.startswith("seg") and sid[3:].isascii()
                            and sid[3:].isdigit()] + [0])
+        if read_history:
+            history = data.get("history", {})
+            if not isinstance(history, dict):
+                raise ValueError("Invalid timeline history")
+            stacks = [history.get("undo", []), history.get("redo", [])]
+            if any(not isinstance(stack, list) for stack in stacks):
+                raise ValueError("Invalid timeline history stacks")
+            if sum(map(len, stacks)) > HISTORY_LIMIT:
+                raise ValueError("Timeline history limit exceeded")
+            parsed = []
+            for stack in stacks:
+                operations = []
+                for op in stack:
+                    if not isinstance(op, dict):
+                        raise ValueError("Invalid edit operation")
+                    kind, label = op.get("kind"), op.get("label")
+                    if not isinstance(kind, str) or not 1 <= len(kind) <= 64:
+                        raise ValueError("Invalid edit kind")
+                    if not isinstance(label, str) or not 1 <= len(label) <= 256:
+                        raise ValueError("Invalid edit label")
+                    snapshots = []
+                    for key in ("before", "after"):
+                        snapshot = cls._from_data({"source_duration": duration,
+                            "segments": op.get(key)}, read_history=False)
+                        tl._counter = max(tl._counter, snapshot._counter)
+                        snapshots.append([s.to_dict() for s in snapshot.segments])
+                    operations.append(EditOperation(kind, label, *snapshots))
+                parsed.append(operations)
+            tl._undo, tl._redo = parsed
+            # Undo stack is oldest->newest, redo is popped from its end. Each
+            # recorded step must connect to the current saved state exactly.
+            state = [s.to_dict() for s in tl.segments]
+            for op in reversed(tl._undo):
+                if op.after != state:
+                    raise ValueError("Disconnected undo history")
+                state = op.before
+            state = [s.to_dict() for s in tl.segments]
+            for op in reversed(tl._redo):
+                if op.before != state:
+                    raise ValueError("Disconnected redo history")
+                state = op.after
         return tl
+
+    def _save_data(self) -> dict:
+        return {"version": 1, "source_duration": self.source_duration,
+                "segments": [s.to_dict() for s in self.segments],
+                "history": {"undo": [asdict(op) for op in self._undo],
+                            "redo": [asdict(op) for op in self._redo]}}
 
     @classmethod
     def load(cls, path: str | Path) -> "Timeline":
@@ -189,11 +239,9 @@ class Timeline:
 
     def save(self, path: str | Path) -> Path:
         path = Path(path)
-        from dataclasses import asdict
         self._from_data({"source_duration": self.source_duration,
                          "segments": [asdict(s) for s in self.segments]})
-        data = {"version": 1, "source_duration": self.source_duration,
-                "segments": [s.to_dict() for s in self.segments]}
+        data = self._save_data()
         self._from_data(data)  # Do not overwrite valid edits with invalid state.
         payload = json.dumps(data, indent=2, allow_nan=False).encode("utf-8")
         if len(payload) > 8 * 1024 * 1024:
@@ -205,8 +253,7 @@ class Timeline:
             except (ValueError, OSError):
                 previous = None  # Never rotate corrupt data over a valid backup.
             if previous is not None:
-                backup = json.dumps({"version": 1, "source_duration": previous.source_duration,
-                    "segments": [s.to_dict() for s in previous.segments]}, allow_nan=False).encode("utf-8")
+                backup = json.dumps(previous._save_data(), allow_nan=False).encode("utf-8")
                 self._atomic_write(self.backup_path(path), backup)
         self._atomic_write(path, payload)
         self.recovered_from = None
@@ -269,6 +316,7 @@ class Timeline:
         after = [s.to_dict() for s in new_segments]
         self.segments = new_segments
         self._undo.append(EditOperation(kind=kind, label=label, before=before, after=after))
+        del self._undo[:-HISTORY_LIMIT]
         self._redo.clear()
 
     def _snapshot(self) -> list[Segment]:

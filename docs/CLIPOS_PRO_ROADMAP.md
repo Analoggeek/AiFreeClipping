@@ -151,3 +151,28 @@ for existing segment edits, **not** multitrack project recovery, persisted undo
 history, cross-process locking, media relinking or a power-loss guarantee on every
 filesystem. A first save has no previous revision to recover; `.bak` appears on
 a subsequent save. No new UI mockup or model dependency was introduced.
+
+### Persisted undo/redo follow-up
+
+The next increment adds saved undo/redo to the existing single-source timeline,
+superseding the previous increment's "not persisted undo history" limitation.
+The existing editor buttons use the restored stacks without a new mock UI.
+Both primary and previous-revision backup include history. Legacy files without
+history still open normally. A new edit after undo clears the obsolete redo
+branch; new segment IDs also account for IDs in retained history snapshots.
+
+At most **50 operations total** are retained across undo/redo, and the existing
+**8 MiB file limit** remains. Every before/after snapshot is validated using the
+same duration/ID/numeric rules as the live state. Undo and redo chains must
+connect exactly to the saved current state; malformed or disconnected history
+rejects that save and uses valid backup recovery where available. Saving invalid
+live history cannot replace a good saved file. Undo history is a convenience,
+not an unlimited audit log, multitrack model or crash journal.
+
+Validation: **93 targeted tests passed** (59.39 s), covering timeline operations,
+save/recovery/history, legacy compatibility, limits, invalid history, branch
+replacement and real FFmpeg rendering. A new integration test reopens a saved
+speed edit, undoes it and renders a 2-second file, saves/reopens again, redoes it
+and renders a 1-second file. The attempted full suite was blocked during
+collection by missing environment dependencies (`yaml`, native `libGL.so.1`);
+there is no new full-suite/native acceptance claim for this increment.

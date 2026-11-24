@@ -165,3 +165,23 @@ def test_recovered_timeline_reopens_and_really_renders(video,tmp_path):
     info=probe(tmp_path/'restored.mp4')
     assert (info.video.width,info.video.height)==(270,480)
     assert info.duration==pytest.approx(1,abs=.2)
+
+
+def test_reopened_undo_redo_changes_real_export_duration(video,tmp_path):
+    from clipos.core.ffmpeg import probe
+    path=tmp_path/'history.json'
+    timeline=Timeline.from_clip(0,2,source_duration=2)
+    timeline.set_speed(timeline.segments[0].id,2)
+    timeline.save(path)
+    restored=Timeline.load(path)
+    settings=RenderSettings(width=270,height=480,fps=15,show_captions=False,
+                            sound_effects=False,encoder_preference='cpu')
+    renderer=ClipRenderer(tmp_path/'work')
+    assert restored.undo()
+    renderer.render_timeline(video,tmp_path/'undone.mp4',restored,settings)
+    assert probe(tmp_path/'undone.mp4').duration==pytest.approx(2,abs=.2)
+    restored.save(path)
+    restored=Timeline.load(path)
+    assert restored.redo()
+    renderer.render_timeline(video,tmp_path/'redone.mp4',restored,settings)
+    assert probe(tmp_path/'redone.mp4').duration==pytest.approx(1,abs=.2)

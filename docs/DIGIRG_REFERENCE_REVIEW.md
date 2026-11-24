@@ -79,3 +79,15 @@ and export both discover backup-only saves. See `CLIPOS_PRO_ROADMAP.md` for exac
 limits. Targeted validation: **78 passed**, including an actual recovered timeline
 render. Professional multitrack persistence/recovery remains pending; this is not
 a claim that the reference provides a professional timeline engine.
+
+### Follow-up: persistent edit history
+
+New independent editor work: the current segment timeline's undo and redo stacks
+now persist through save/reopen and backup recovery. Latest 50 operations are
+retained, snapshots and chain continuity are validated, legacy saves still load,
+and editing after undo clears the old redo branch. This supersedes only the
+previous persisted-undo limitation, not the pending professional multitrack
+scope. Validation: **93 targeted tests passed**, including actual exports whose
+duration changes correctly after reopened undo/redo. Full-suite collection was
+blocked by missing `yaml`/native `libGL.so.1` in this environment; no new full-suite
+result or native UI acceptance is claimed. See `CLIPOS_PRO_ROADMAP.md`.
