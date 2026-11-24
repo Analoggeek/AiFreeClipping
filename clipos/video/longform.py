@@ -124,7 +124,7 @@ def export(plan_path,output,*,cancel_cb=None,progress_cb=None,width=1920,height=
         listing=root/'parts.txt';listing.write_text(''.join(f"file '{part.name}'\n" for part in parts))
         target=root/'complete.mp4'
         FFmpegRunner(total_duration=timeline.duration,cancel_cb=cancel_cb).run([
-            '-f','concat','-safe','1','-i',str(listing),'-c','copy','-movflags','+faststart',str(target)])
+            '-f','concat','-safe','1','-i',listing.as_posix(),'-c','copy','-movflags','+faststart',str(target)])
         result=probe(target)
         if not result.has_video or not result.has_audio or abs(result.duration-timeline.duration)>max(.25,len(parts)*.07):
             raise ValueError('Long-form output duration/streams do not match plan')

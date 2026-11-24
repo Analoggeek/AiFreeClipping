@@ -85,3 +85,21 @@ def test_native_longform_plan_edit_save_reopen(tmp_path,monkeypatch):
         with pytest.raises(ValueError):page._write(saved)
         assert saved.read_bytes()==before
     finally:page.shutdown();page.deleteLater();app.processEvents()
+
+
+def test_longform_concat_list_uses_forward_slash_path_for_windows(tmp_path):
+    from pathlib import PureWindowsPath
+    # FFmpeg's concat demuxer resolves relative entries against the slash-based
+    # dirname of its input URL, not Windows native backslashes.
+    assert PureWindowsPath(r'C:\Users\name\export\parts.txt').as_posix()=='C:/Users/name/export/parts.txt'
+    source=fixture_video(tmp_path);plan=tmp_path/'plan.json';longform.analyse(source,plan)
+    from clipos.core.ffmpeg import FFmpegRunner
+    original=FFmpegRunner.run;concat=[]
+    def run(self,args,*a,**kw):
+        if 'concat' in args:
+            listing=args[args.index('-i')+1];concat.append(listing)
+            assert '\\' not in listing
+        return original(self,args,*a,**kw)
+    with patch.object(FFmpegRunner,'run',run):
+        longform.export(plan,tmp_path/'fixed.mp4',width=160,height=90)
+    assert len(concat)==1

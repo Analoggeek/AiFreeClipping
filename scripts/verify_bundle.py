@@ -78,25 +78,22 @@ def resource_root(bundle: Path) -> Path:
         internal / "resources",
         internal / "clipos" / "resources",
         bundle / "resources",
+        bundle / "Contents" / "Resources" / "resources",
+        bundle / "Contents" / "Frameworks" / "resources",
         bundle / "Contents" / "Resources",
     ]
-    for candidate in candidates:
-        if not candidate.is_dir():
-            continue
-        for marker in _RESOURCE_MARKERS:
-            if (candidate / marker).is_dir():
-                return candidate
-        # The resources may be one level further down.
-        for child in sorted(candidate.iterdir()):
-            if not child.is_dir():
-                continue
-            for marker in _RESOURCE_MARKERS:
-                if (child / marker).is_dir():
-                    return child
+    # OCR and other dependencies also ship a `models` folder. Never accept
+    # the first such dependency as the application's own resource root.
+    expanded = list(candidates)
     for candidate in candidates:
         if candidate.is_dir():
-            return candidate
+            expanded.extend(child for child in sorted(candidate.iterdir()) if child.is_dir())
+    ranked = [(sum((candidate / marker).is_dir() for marker in _RESOURCE_MARKERS),-index,candidate)
+              for index,candidate in enumerate(expanded) if candidate.is_dir()]
+    if ranked:
+        return max(ranked,key=lambda row:(row[0],row[1]))[2]
     return internal / "resources"
+
 
 
 def check_architecture(bundle: Path, binary: Path | None) -> None:
