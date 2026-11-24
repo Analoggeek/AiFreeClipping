@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate macOS wheel architecture and the OAuth imports before freezing."""
+"""Validate macOS wheel architecture and native runtime imports before freezing."""
 from __future__ import annotations
 
 import platform
@@ -18,19 +18,17 @@ def verify(expected: str) -> None:
     for root in sorted(roots):
         for binary in sorted(root.rglob('*')):
             if binary.is_file() and binary.suffix in ('.so', '.dylib'):
-                result = subprocess.run(['lipo', '-verify_arch', expected, str(binary)],
+                result = subprocess.run(['lipo', str(binary), '-verify_arch', expected],
                                         capture_output=True, text=True)
                 checked += 1
                 if result.returncode:
                     failures.append(f'{binary}: {result.stderr.strip()}')
     if failures:
         raise RuntimeError('Incompatible wheel binaries:\n' + '\n'.join(failures))
-    # Exercise the modules whose architecture mismatch originally broke Intel.
-    import cryptography.hazmat.bindings._rust  # noqa: F401
-    import google.auth.crypt  # noqa: F401
-    import google_auth_oauthlib.flow  # noqa: F401
-    import keyring  # noqa: F401
-    print(f'Validated {checked} native wheel binaries and OAuth imports for {expected}')
+    # Publishing/OAuth dependencies were removed in v2.5. Exercise the actual
+    # editor runtime instead; all binary slices are still audited above.
+    import cv2, numpy, PIL, PySide6, faster_whisper  # noqa: F401
+    print(f'Validated {checked} native wheel binaries and editor imports for {expected}')
 
 
 if __name__ == '__main__':

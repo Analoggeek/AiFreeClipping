@@ -351,25 +351,20 @@ class ExportCenterPage(BasePage):
             self.out_label.setText(f"Output: {path}")
 
     def _render_settings(self) -> RenderSettings:
-        ratio = self.aspect_combo.currentData()
-        w, h = ASPECT_RATIOS.get(ratio, ASPECT_RATIOS["9:16"])
-        rs = RenderSettings(
-            aspect=ratio, width=w, height=h,
-            fps=self.fps_combo.currentData(),
-            codec=self.codec_combo.currentData(),
-            bitrate_kbps=self.bitrate_spin.value(),
-        )
-        db_settings = self.db.get_settings()
-        rs.caption_style = db_settings.get("caption_style", "bold_viral")
-        rs.caption_size = int(db_settings.get("caption_size", 58))
-        rs.caption_font = db_settings.get("caption_font", "")
-        rs.show_captions = self.captions_check.isChecked()
-        rs.encoder_preference = self.gpu_combo.currentData()
-        x, y, w, h = [spin.value()/100 for spin in self.facecam_controls]
+        from ...core.editing import render_settings
+        overrides = {
+            "aspect_ratio": self.aspect_combo.currentData(),
+            "editing_preset": self.recipe_combo.currentData(),
+            "fps": self.fps_combo.currentData(), "codec": self.codec_combo.currentData(),
+            "bitrate_kbps": self.bitrate_spin.value(),
+            "auto_caption": self.captions_check.isChecked(),
+            "encoder": self.gpu_combo.currentData(),
+        }
+        rs = render_settings(self.db, overrides)
+        x,y,w,h = [spin.value()/100 for spin in self.facecam_controls]
         rs.auto_facecam = False
-        rs.facecam_rect = (min(x, .99), min(y, .99), min(w, 1-min(x, .99)), min(h, 1-min(y, .99)))
-        from ...video.presets import apply_preset
-        return apply_preset(rs, self.recipe_combo.currentData())
+        rs.facecam_rect = (min(x,.99),min(y,.99),min(w,1-min(x,.99)),min(h,1-min(y,.99)))
+        return rs
 
     def _preview_recipe(self):
         if not self.project_id or not self.queue.count():
@@ -437,13 +432,15 @@ class ExportCenterPage(BasePage):
 
     def _on_clip_failed(self, index: int, message: str) -> None:
         self.progress_label.setText(f"Clip {index + 1} failed: {message}")
+        self.progress_label.setToolTip(message)
+        self._last_export_error = message
 
     def _on_all_done(self, ok: int, failed: int) -> None:
         self.export_btn.setEnabled(True)
         self.cancel_btn.setVisible(False)
         self.progress.setValue(100 if ok else 0)
         self.progress_label.setText(
-            f"Export complete — {ok} succeeded" + (f", {failed} failed" if failed else "")
+            f"Export complete — {ok} succeeded" + (f", {failed} failed. {getattr(self, '_last_export_error', '')}" if failed else "")
         )
         self.window.notify(f"Exported {ok} clips")
         self._load_history()
@@ -473,6 +470,7 @@ class ExportCenterPage(BasePage):
             item = QListWidgetItem(
                 f"{name}   ·  {e['status']}  ·  {format_size(e['size_bytes'])}"
             )
+            item.setToolTip(e["error"] or e["output_path"])
             self.history.addItem(item)
 
     def _export_zip(self) -> None:

@@ -27,7 +27,7 @@ class NavButton(QPushButton):
     def __init__(self, icon: str, label: str, key: str, parent=None) -> None:
         super().__init__(label, parent)
         icons = {
-            "gaming": QStyle.StandardPixmap.SP_MediaPlay,
+            "workflow": QStyle.StandardPixmap.SP_MediaPlay,
             "home": QStyle.StandardPixmap.SP_ComputerIcon,
             "new": QStyle.StandardPixmap.SP_FileDialogNewFolder,
             "studio": QStyle.StandardPixmap.SP_MediaPlay,
@@ -40,7 +40,8 @@ class NavButton(QPushButton):
             "models": QStyle.StandardPixmap.SP_DriveHDIcon,
             "settings": QStyle.StandardPixmap.SP_FileDialogInfoView,
         }
-        self.setIcon(self.style().standardIcon(icons[key]))
+        from .widgets.icons import navigation_icon
+        self.setIcon(navigation_icon(key))
         self.setIconSize(QSize(16, 16))
         self.setObjectName("NavButton")
         self.setCheckable(True)
@@ -121,7 +122,10 @@ class TitleBar(QFrame):
 
 
 class MainWindow(QMainWindow):
-    """The application shell."""
+    """The application shell with shared project and preference events."""
+    project_changed = Signal(int)
+    settings_changed = Signal()
+    data_changed = Signal()
 
     def __init__(self, db: Database | None = None) -> None:
         super().__init__()
@@ -131,20 +135,27 @@ class MainWindow(QMainWindow):
         self.current_key = "home"
         self._busy = False
 
-        self.setWindowTitle("CLIPOS — AI Automatic Video Clipping Studio")
+        self.setWindowTitle("CLIPOS 2.5 — Video Clip Editor")
         self.setMinimumSize(1180, 760)
         self.resize(1440, 900)
 
         self._build_ui()
         self._build_shortcuts()
         self._apply_settings()
-        self.navigate("gaming")
+        self.navigate("workflow")
 
         self.status = QStatusBar()
         self.setStatusBar(self.status)
         self.status.showMessage("Ready — everything stays on this device")
 
         self.toast = Toast(self)
+        from .widgets.usage import UsageWorker
+        self.usage_label = QLabel('Measuring real hardware usage…')
+        self.status.addPermanentWidget(self.usage_label)
+        self.usage_worker = UsageWorker(self)
+        self.usage_worker.sample.connect(self.usage_label.setText)
+        self.usage_worker.start()
+        self.data_changed.connect(self._refresh_visible)
 
     # -- construction ------------------------------------------------------------
     def _build_ui(self) -> None:
@@ -192,18 +203,13 @@ class MainWindow(QMainWindow):
         lay.addSpacing(12)
 
         nav_defs = [
-            ("gaming", "", "Gaming Studio 2.0"),
-            ("home", "⌂", "Home"),
-            ("new", "✦", "New Project"),
-            ("studio", "✂", "Auto Clip Studio"),
-            ("projects", "▤", "My Projects"),
-            ("library", "▶", "Clip Library"),
-            ("templates", "◫", "Templates"),
-            ("captions", "☰", "Caption Studio"),
-            ("editor", "◫", "Preview Editor"),
-            ("export", "↓", "Export Center"),
-            ("models", "◈", "AI Models"),
-            ("settings", "⚙", "Settings"),
+            ("workflow", "", "Create clips"),
+            ("projects", "", "Projects"),
+            ("library", "", "Clip library"),
+            ("editor", "", "Advanced editor"),
+            ("templates", "", "Presets & captions"),
+            ("models", "", "AI models"),
+            ("settings", "", "Settings"),
         ]
         self._nav_group = QButtonGroup(self)
         self._nav_group.setExclusive(True)
@@ -235,7 +241,7 @@ class MainWindow(QMainWindow):
         from .pages.clip_library import ClipLibraryPage
         from .pages.editor import EditorPage
         from .pages.export_center import ExportCenterPage
-        from .pages.gaming_studio import GamingStudioPage
+        from .pages.workflow import WorkflowPage
         from .pages.home import HomePage
         from .pages.my_projects import MyProjectsPage
         from .pages.new_project import NewProjectPage
@@ -243,10 +249,7 @@ class MainWindow(QMainWindow):
         from .pages.templates import TemplatesPage
 
         page_classes = [
-            ("gaming", GamingStudioPage),
-            ("home", HomePage),
-            ("new", NewProjectPage),
-            ("studio", AutoClipStudioPage),
+            ("workflow", WorkflowPage),
             ("projects", MyProjectsPage),
             ("library", ClipLibraryPage),
             ("templates", TemplatesPage),
@@ -295,15 +298,21 @@ class MainWindow(QMainWindow):
 
     # -- navigation --------------------------------------------------------------
     def navigate(self, key: str) -> None:
+        requested = key
+        key = {"gaming":"workflow", "home":"workflow", "new":"workflow", "studio":"workflow", "export":"workflow"}.get(key,key)
         if key not in self.pages:
             return
         self.current_key = key
         page = self.pages[key]
         self.stack.setCurrentWidget(page)
+        if key == 'editor' and getattr(self,'active_project',None) and page.project_id != self.active_project:
+            page.load_project(self.active_project)
         btn = self.nav_buttons.get(key)
         if btn:
             btn.setChecked(True)
         self.titlebar.subtitle.setText(getattr(page, "subtitle_text", ""))
+        if key == "workflow" and requested in ("home", "new", "studio", "export"):
+            page.go({"home":0,"new":0,"studio":2,"export":3}[requested])
         if hasattr(page, "refresh"):
             try:
                 page.refresh()
@@ -336,17 +345,31 @@ class MainWindow(QMainWindow):
 
     def open_project(self, project_id: int) -> None:
         """Open a project in the Auto Clip Studio page."""
-        page = self.pages.get("studio")
-        if page is None:
+        page = self.pages.get("workflow")
+        if page is not None:
+            page.load_project(project_id)
+            self.navigate("workflow")
+            page.go(1)
+
+    def set_active_project(self, project_id):
+        if getattr(self, 'active_project', None) == project_id:
             return
-        page.load_project(project_id)
-        self.navigate("studio")
+        self.active_project = project_id
+        self.db.set_setting('active_project', project_id)
+        self.project_changed.emit(project_id)
+
+    def _refresh_visible(self):
+        page = self.pages.get(self.current_key)
+        if page and self.current_key != 'workflow':
+            page.refresh()
+        self._update_storage_label()
 
     def open_in_editor(self, project_id: int, clip_id: int | None = None) -> None:
         """Open a project (and optionally a clip) in the Preview Editor."""
         page = self.pages.get("editor")
         if page is None:
             return
+        self.set_active_project(project_id)
         page.load_project(project_id)
         if clip_id is not None:
             page.load_clip(clip_id)
@@ -380,4 +403,7 @@ class MainWindow(QMainWindow):
                     shutdown()
                 except Exception as exc:
                     log.warning("page shutdown failed: %s", exc)
+        if hasattr(self, 'usage_worker'):
+            self.usage_worker.stop_event.set()
+            self.usage_worker.wait(3000)
         event.accept()

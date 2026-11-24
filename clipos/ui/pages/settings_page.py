@@ -8,9 +8,10 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout,
-    QLabel, QPushButton, QMessageBox, QSpinBox, QVBoxLayout, QWidget,
+    QLabel, QPushButton, QMessageBox, QSpinBox, QDoubleSpinBox, QVBoxLayout, QWidget,
 )
 
+from ...core.editing import enabled
 from ...core.config import ASPECT_RATIOS, CLIP_DURATION_PRESETS, PATHS
 from ...core.hardware import detect_hardware
 from ...core.logging_setup import get_logger
@@ -52,7 +53,7 @@ class SettingsPage(BasePage):
         from ...video.presets import PRESETS
         recipes = Card()
         recipes.add(SectionHeader("One-click editing recipe", "Original offline presets, not engagement guarantees"))
-        recipe = QComboBox()
+        recipe = self.recipe_combo = QComboBox()
         for key, (name, detail) in PRESETS.items():
             recipe.addItem(name + " — " + detail, key)
         recipe.setCurrentIndex(max(0, recipe.findData(settings.get("editing_preset", "clean"))))
@@ -74,19 +75,20 @@ class SettingsPage(BasePage):
         form.addRow("Theme", self.theme_combo)
 
         self.lang_combo = QComboBox()
+        self.lang_combo.addItem("Auto-detect", "")
         for code, label in (
             ("en", "English"), ("es", "Español"), ("fr", "Français"),
             ("de", "Deutsch"), ("pt", "Português"), ("hi", "हिन्दी"),
             ("zh", "中文"), ("ja", "日本語"),
         ):
             self.lang_combo.addItem(label, code)
-        idx = self.lang_combo.findData(settings.get("language", "en"))
+        idx = self.lang_combo.findData(settings.get("stt_language", ""))
         if idx >= 0:
             self.lang_combo.setCurrentIndex(idx)
         self.lang_combo.currentIndexChanged.connect(
-            lambda i: self._save("language", self.lang_combo.currentData())
+            lambda i: self._save("stt_language", self.lang_combo.currentData())
         )
-        form.addRow("Language", self.lang_combo)
+        form.addRow("Speech language", self.lang_combo)
 
         appear.add_layout(form)
         self.content_layout.addWidget(appear)
@@ -207,7 +209,7 @@ class SettingsPage(BasePage):
         )
         form3.addRow("Silence threshold", self.silence_spin)
 
-        self.min_sil_spin = QSpinBox()
+        self.min_sil_spin = QDoubleSpinBox()
         self.min_sil_spin.setRange(0.1, 3.0)
         self.min_sil_spin.setSingleStep(0.05)
         self.min_sil_spin.setSuffix(" s")
@@ -246,7 +248,7 @@ class SettingsPage(BasePage):
         form4.addRow("Ollama host", self.ollama_host)
 
         self.use_llm_check = QCheckBox("Use the local LLM for titles and descriptions")
-        self.use_llm_check.setChecked(settings.get("use_llm", "0") == "1")
+        self.use_llm_check.setChecked(enabled(settings.get("use_llm", "0")))
         self.use_llm_check.toggled.connect(
             lambda v: self._save("use_llm", int(v))
         )
@@ -282,19 +284,19 @@ class SettingsPage(BasePage):
         storage.add_layout(out_row)
 
         self.offline_check = QCheckBox("Offline mode — never contact the network")
-        self.offline_check.setChecked(settings.get("offline_mode", "1") == "1")
+        self.offline_check.setChecked(enabled(settings.get("offline_mode", "1")))
         self.offline_check.toggled.connect(lambda v: self._save("offline_mode", int(v)))
         storage.add(self.offline_check)
 
         self.restore_check = QCheckBox("Reopen the last project on launch")
-        self.restore_check.setChecked(settings.get("restore_on_launch", "1") == "1")
+        self.restore_check.setChecked(enabled(settings.get("restore_on_launch", "1")))
         self.restore_check.toggled.connect(
             lambda v: self._save("restore_on_launch", int(v))
         )
         storage.add(self.restore_check)
 
         self.low_mem_check = QCheckBox("Low-memory mode (slower, smaller footprint)")
-        self.low_mem_check.setChecked(settings.get("low_memory_mode", "0") == "1")
+        self.low_mem_check.setChecked(enabled(settings.get("low_memory_mode", "0")))
         self.low_mem_check.toggled.connect(
             lambda v: self._save("low_memory_mode", int(v))
         )
@@ -374,6 +376,8 @@ class SettingsPage(BasePage):
     # -- handlers ------------------------------------------------------------------
     def _save(self, key: str, value) -> None:
         self.db.set_setting(key, value)
+        if hasattr(self.window, 'settings_changed'):
+            self.window.settings_changed.emit()
 
     def _export_settings(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -477,6 +481,22 @@ class SettingsPage(BasePage):
         self.refresh()
 
     def refresh(self) -> None:
+        values=self.db.get_settings()
+        for name,key in [('recipe_combo','editing_preset'),('aspect_combo','aspect_ratio'),('duration_combo','default_clip_duration'),('stt_combo','stt_model'),('gpu_combo','use_gpu'),('cap_style_combo','caption_style')]:
+            widget=getattr(self,name,None)
+            if widget is not None:
+                idx=widget.findData(values.get(key, values.get('default_aspect','9:16') if key=='aspect_ratio' else None))
+                if idx>=0:
+                    widget.blockSignals(True);widget.setCurrentIndex(idx);widget.blockSignals(False)
+        for name,key in [('count_spin','default_clip_count'),('threads_spin','processing_threads'),('cap_size_spin','caption_size'),('silence_spin','silence_threshold_db'),('min_sil_spin','min_silence_duration')]:
+            widget=getattr(self,name,None)
+            if widget is not None:
+                widget.blockSignals(True);widget.setValue(values[key]);widget.blockSignals(False)
+        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode')]:
+            widget=getattr(self,name,None)
+            if widget is not None:
+                widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)
+        self.out_path_label.setText(values.get('output_dir',''))
         stats = self.db.stats()
         self.storage_label.setText(
             f"{stats['projects']} projects · {stats['clips']} clips · "

@@ -30,7 +30,7 @@ BUILD = ROOT / "build"
 
 APP_NAME = "CLIPOS"
 BUNDLE_ID = "com.clipos.studio"
-VERSION = "2.0.0"
+VERSION = "2.5.0"
 
 
 def _write_summary(title: str, body: str) -> None:
@@ -352,11 +352,6 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
     for src, dest in bundles:
         args += ["--add-data", f"{ROOT / src}{sep}{dest}"]
     args += [
-        "--collect-all", "googleapiclient", "--collect-all", "google_auth_oauthlib",
-        "--collect-all", "google.auth", "--collect-all", "keyring",
-        "--collect-submodules", "keyring.backends",
-        "--hidden-import", "google_auth_httplib2",
-        "--hidden-import", "google.oauth2.credentials",
         "--collect-all", "yt_dlp", "--hidden-import", "clipos",
         "--collect-submodules", "clipos",
         "--collect-all", "faster_whisper",

@@ -364,6 +364,7 @@ class TimelineRenderWorker(QThread):
         self.settings = settings
         self.work_dir = work_dir
         self._cancel = False
+        self.cues = []
 
     def cancel(self) -> None:
         self._cancel = True
@@ -373,6 +374,7 @@ class TimelineRenderWorker(QThread):
             renderer = ClipRenderer(self.work_dir)
             result = renderer.render_timeline(
                 self.source, self.target, self.timeline, self.settings,
+                cues=getattr(self, 'cues', []),
                 progress_cb=lambda pct, msg: self.progress.emit(pct, msg),
                 cancel_cb=lambda: self._cancel,
             )
@@ -386,7 +388,7 @@ class EditorPage(BasePage):
     """The functional preview editor."""
 
     page_title = "Preview Editor"
-    page_subtitle = "Trim, split, retime and render your clip"
+    page_subtitle = "Advanced source timeline. Review the finished composition in Create clips."
 
     def __init__(self, window) -> None:
         self.project_id: int | None = None
@@ -943,12 +945,12 @@ class EditorPage(BasePage):
         out_dir.mkdir(parents=True, exist_ok=True)
         target = out_dir / f"edited_{self.clip_id}_{int(time.time())}.mp4"
 
-        settings = RenderSettings.for_aspect("9:16")
-        db_settings = self.window.db.get_settings()
-        settings.caption_style = db_settings.get("caption_style", "bold_viral")
-        settings.show_captions = False
-        settings.auto_zoom = False
-        settings.smart_reframe = False
+        from ...core.editing import render_settings
+        state=json.loads(self.window.db.get_setting(f'workflow:{self.project_id}','{}') or '{}')
+        overrides={}
+        if state.get('facecam'):
+            overrides={'facecam_rect':state['facecam'],'gameplay_rect':state.get('gameplay',(0.,0.,1.,1.)),'framing_mode':'manual'}
+        settings=render_settings(self.window.db,overrides)
 
         from ...core.config import PATHS
 
@@ -957,6 +959,14 @@ class EditorPage(BasePage):
             str(self.source), target, self.timeline, settings,
             PATHS.cache / "work", parent=self,
         )
+        if settings.show_captions:
+            from ...ai.transcription import Transcript, Segment, Word
+            from ...captions.caption_engine import build_cues, retime_cues
+            saved=self.window.db.get_transcript(self.project_id)
+            if saved:
+                segments=[Segment(s['start'],s['end'],s['text'],[Word(w['w'],w['s'],w['e'],w.get('p',1.)) for w in s.get('words',[])]) for s in json.loads(saved['segments'] or '[]')]
+                transcript=Transcript(language=saved['language'],duration=saved['duration'],text=saved['full_text'],segments=segments,model=saved['model'])
+                worker.cues=retime_cues(build_cues(transcript,0,transcript.duration),[(s.start,s.end,s.speed) for s in self.timeline.segments])
         worker.progress.connect(self._on_render_progress)
         worker.finished_ok.connect(self._on_render_done)
         worker.failed.connect(self._on_render_failed)
@@ -981,7 +991,7 @@ class EditorPage(BasePage):
             return
         target = self._render_target
         if self.clip_id:
-            self.window.db.update_clip(self.clip_id, output_path=str(target))
+            self.window.db.update_clip(self.clip_id, output_path=str(target), status="rendered")
             self.window.db.create_export(
                 project_id=self.project_id, clip_id=self.clip_id,
                 output_path=str(target), status="done",
@@ -1004,3 +1014,4 @@ class EditorPage(BasePage):
         self.btn_render.setEnabled(True)
         self.btn_cancel_render.setVisible(False)
         self.window.set_busy(False)
+        self.window.data_changed.emit()

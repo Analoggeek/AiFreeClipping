@@ -125,7 +125,9 @@ def _trim(text: str, limit: int = 24000) -> str:
 
 
 def main() -> int:
-    body = collect()
+    # GitHub issue/comment bodies have a 65,536-character limit. Preserve
+    # beginning and end rather than losing the entire report to HTTP 422.
+    body = _trim(collect(), 60000)
     print(body[:2000])
 
     # The report is written to disk first.  The network calls below may

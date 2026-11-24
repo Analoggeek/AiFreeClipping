@@ -384,7 +384,7 @@ def choose_encoder(preference: str = "auto", codec: str = "h264",
     # Apple VideoToolbox
     vt_name = "hevc_videotoolbox" if want_hevc else "h264_videotoolbox"
     if preference in ("auto", "apple", "videotoolbox", "gpu"):
-        if prof.is_apple_silicon and (enc.get(vt_name) or platform.system() == "Darwin"):
+        if platform.system() == "Darwin" and enc.get(vt_name):
             return EncoderChoice(
                 video_encoder=vt_name, audio_encoder="aac", hw_accel="videotoolbox",
                 extra_args=["-b:v", "10M", "-allow_sw", "1"],

@@ -198,6 +198,7 @@ class SectionHeader(QWidget):
         self.title.setObjectName("SectionTitle")
         left.addWidget(self.title)
         self.subtitle = QLabel(subtitle)
+        self.subtitle.setWordWrap(True)
         self.subtitle.setObjectName("CardSubtitle")
         self.subtitle.setVisible(bool(subtitle))
         left.addWidget(self.subtitle)

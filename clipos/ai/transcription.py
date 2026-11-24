@@ -242,6 +242,7 @@ def transcribe(
     device: str = "auto",
     progress_cb: Callable[[float, str], None] | None = None,
     vad: bool = True,
+    threads: int = 0,
 ) -> Transcript:
     """Transcribe an audio file offline. Raises TranscriptionUnavailable if not possible."""
     audio_path = Path(audio_path)
@@ -264,7 +265,7 @@ def transcribe(
             str(local_model_path(model_size) or model_size), device=dev, compute_type=ctype,
             download_root=str(PATHS.models / "whisper"),
             local_files_only=True,
-            cpu_threads=suggest_worker_threads(),
+            cpu_threads=suggest_worker_threads(threads),
         )
     except Exception as exc:
         raise TranscriptionUnavailable(f"Could not load whisper model '{model_size}': {exc}") from exc

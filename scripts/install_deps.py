@@ -33,9 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # The packages CLIPOS actually needs, in a deliberate order.
 CORE = [
-    'google-api-python-client>=2.150,<3',
-    'google-auth-oauthlib>=1.2,<2',
-    'keyring>=25,<26',
+    "psutil>=6,<8",
     "yt-dlp>=2025.1.15",
     "PySide6>=6.6,<6.9",
     "numpy>=1.24",
@@ -122,6 +120,11 @@ def python_command(*args: str) -> list[str]:
 
 
 def pip(*args: str) -> list[str]:
+    # Recent cryptography releases ship ARM-only macOS wheels. A source build
+    # launched by pip under Rosetta can still have Rust target the ARM host.
+    # Resolve the newest compatible wheel instead of silently compiling one.
+    if sys.platform == "darwin" and args and args[0] == "install":
+        args = (args[0], "--only-binary=cryptography", *args[1:])
     return python_command("-m", "pip", *args)
 
 

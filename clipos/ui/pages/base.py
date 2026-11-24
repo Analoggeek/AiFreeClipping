@@ -68,6 +68,7 @@ class BasePage(QWidget):
         lay.addWidget(self.title_label)
 
         self.subtitle_label = self._label(self.page_subtitle, "PageSubtitle")
+        self.subtitle_label.setWordWrap(True)
         lay.addWidget(self.subtitle_label)
 
         self.subtitle_text = self.page_subtitle

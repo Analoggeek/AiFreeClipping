@@ -11,6 +11,7 @@
 #
 # ---- Core UI ----
 PySide6>=6.6,<6.9
+psutil>=6,<8
 
 # ---- Video processing ----
 # FFmpeg/FFprobe binaries are vendored by scripts/vendor_ffmpeg.py (not pip)
@@ -65,8 +66,3 @@ ziglang>=0.11; platform_system != "Windows"
 
 # Public video imports (user-authorised content only)
 yt-dlp>=2025.1.15
-
-# YouTube v2 publishing (explicit user consent + OS keychain)
-google-api-python-client>=2.150,<3
-google-auth-oauthlib>=1.2,<2
-keyring>=25,<26

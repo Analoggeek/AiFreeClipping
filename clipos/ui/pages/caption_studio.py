@@ -319,6 +319,7 @@ class CaptionStudioPage(BasePage):
             "caption_shadow": int(self.preview.shadow),
             "caption_background": int(self.preview.background),
         })
+        self.window.settings_changed.emit()
         self.window.notify(f"'{get_style(key).name}' saved as the default caption style")
 
     def _apply_all(self) -> None:

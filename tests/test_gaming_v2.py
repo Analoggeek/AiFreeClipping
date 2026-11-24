@@ -1,4 +1,4 @@
-"""Gaming v2 behaviour; no real YouTube uploads or credentials in tests."""
+"""Facecam and offline inference regressions retained from v2."""
 from pathlib import Path
 from unittest.mock import patch, Mock
 import json
@@ -8,7 +8,6 @@ import numpy as np
 
 from clipos.ai.gaming_layout import infer_layout, GamingLayout
 from clipos.ai.visual_analysis import Face
-from clipos.core.youtube_publish import upload_metadata, publish, DISCLAIMER
 from clipos.video.presets import gaming_filter
 
 
@@ -40,53 +39,6 @@ def test_gameplay_is_crop_fill_not_letterboxed():
     assert 'pad=' not in graph and 'force_original_aspect_ratio=increase' in graph
     assert 'vstack=inputs=2' in graph
     assert 'split=' not in gaming_filter(270,480,640,360,None)
-
-
-def test_youtube_body_enforces_limits_and_relevant_disclosure():
-    body = upload_metadata('Title'*80, 'हिंदी'*4000, ['gaming','gaming','my game']*100,
-        'https://youtu.be/abcdef', made_for_kids=False)
-    assert len(body['snippet']['title']) <= 100
-    assert len(body['snippet']['description'].encode()) <= 5000
-    assert DISCLAIMER in body['snippet']['description']
-    assert 'Source: https://youtu.be/' in body['snippet']['description']
-    assert body['status']['privacyStatus'] == 'private'
-    assert body['status']['selfDeclaredMadeForKids'] is False
-    assert len(body['snippet']['tags']) == 2
-
-
-def test_audience_and_visibility_must_be_valid():
-    with pytest.raises(ValueError):
-        upload_metadata('title','text')
-    with pytest.raises(ValueError):
-        upload_metadata('title','text',privacy='viral',made_for_kids=False)
-
-
-def test_publish_cannot_upload_nonexistent_or_cancelled_video(tmp_path):
-    with pytest.raises(ValueError):
-        publish(tmp_path/'missing.mp4',{})
-    video = tmp_path/'clip.mp4'
-    video.write_bytes(b'existing')
-    with pytest.raises(RuntimeError, match='cancelled'):
-        publish(video,{},cancel=lambda:True)
-
-
-def test_credentials_never_fall_back_to_plaintext_keyring():
-    from clipos.core.youtube_publish import _keyring
-    with patch('keyring.get_keyring', return_value=Mock()):
-        with pytest.raises(RuntimeError,match='secure OS keychain'):
-            _keyring()
-
-
-def test_mock_resumable_upload_returns_only_actual_api_id(tmp_path):
-    video = tmp_path/'clip.mp4'; video.write_bytes(b'media')
-    request = Mock()
-    request.next_chunk.return_value = (None, {'id':'real-api-response'})
-    service = Mock()
-    service.videos.return_value.insert.return_value = request
-    with patch('clipos.core.youtube_publish.credentials', return_value=Mock()), patch('google_auth_httplib2.AuthorizedHttp'), patch('googleapiclient.http.MediaFileUpload'), patch('googleapiclient.discovery.build', return_value=service):
-        result = publish(video, upload_metadata('title','description',made_for_kids=False))
-    assert result['id'] == 'real-api-response'
-    service.close.assert_called_once()
 
 
 def test_no_mps_is_returned_for_ctranslate2():

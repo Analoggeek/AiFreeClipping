@@ -1,3 +1,5 @@
+> Historical v2.0 documentation. YouTube publishing and this page were removed in v2.5. Use [the v2.5 workflow](WORKFLOW_V25.md).
+
 # CLIPOS 2.0.0 — Gaming Studio
 
 ## One-click workflow

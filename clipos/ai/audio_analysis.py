@@ -133,8 +133,7 @@ def _frames(data: np.ndarray, sr: int) -> np.ndarray:
     if win <= 0 or len(data) < win:
         return np.zeros((0, max(win, 1)), dtype=np.float32)
     n_frames = 1 + (len(data) - win) // hop
-    idx = np.arange(win)[None, :] + hop * np.arange(n_frames)[:, None]
-    return data[idx]
+    return np.lib.stride_tricks.sliding_window_view(data, win)[::hop]
 
 
 def analyze_audio(
@@ -167,7 +166,9 @@ def analyze_audio(
         fr = data.reshape(1, -1)
 
     # --- RMS energy in dBFS -------------------------------------------------------
-    rms = np.sqrt(np.maximum((fr.astype(np.float64) ** 2).mean(axis=1), 1e-12))
+    # Bound temporary RMS allocations to a few MB, even for hour-long recordings.
+    rms = np.concatenate([np.sqrt(np.maximum(np.mean(fr[i:i+2048].astype(np.float64)**2, axis=1), 1e-12))
+                          for i in range(0, len(fr), 2048)])
     rms_db = 20.0 * np.log10(rms)
     result.rms_db = [float(v) for v in rms_db]
     result.mean_db = float(np.mean(rms_db))
@@ -243,7 +244,7 @@ def _estimate_pitch(fr: np.ndarray, sr: int, rms_db: np.ndarray) -> float:
     max_lag = min(fr.shape[1] - 1, int(sr / 70))
     if max_lag <= min_lag:
         return 0.0
-    for frame in fr:
+    for frame in fr[::max(1, len(fr)//240)]:
         if len(frame) < max_lag + 1:
             break
         if np.sqrt(np.mean(frame.astype(np.float64) ** 2)) <= 10 ** ((thr - 60) / 20):

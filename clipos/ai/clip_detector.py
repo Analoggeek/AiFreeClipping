@@ -499,6 +499,7 @@ def detect_clips(
     max_duration: float = 45.0,
     target_count: int = 10,
     progress_cb: Callable[[float, str], None] | None = None,
+    selected_ranges: list[tuple[float, float]] | None = None,
 ) -> list[ClipCandidate]:
     """Rank candidate windows and return the best ``target_count`` distinct clips."""
     if duration <= 0:
@@ -508,6 +509,23 @@ def detect_clips(
     max_dur = max(min_dur + 1.0, float(max_duration))
 
     windows = _candidate_windows(duration, min_dur, max_dur, transcript, visual, audio)
+    if selected_ranges:
+        limited = set()
+        for left, right in selected_ranges:
+            left, right = max(0., float(left)), min(duration, float(right))
+            if right <= left:
+                raise ValueError("Selected source ranges must have a positive duration")
+            # Add windows inside each user selection, even if the full-video
+            # candidate generator had no speech/scene boundary in that region.
+            span = min(max_dur, right-left)
+            cursor = left
+            while cursor < right - min(5., span) + 0.001:
+                limited.add((round(cursor,3), round(min(right,cursor+span),3)))
+                cursor += max(5., span*.65)
+            for s,e in windows:
+                s,e = max(left,s), min(right,e)
+                if e-s >= min(min_dur,right-left): limited.add((s,e))
+        windows = sorted(limited)
     if progress_cb:
         progress_cb(20.0, f"Scoring {len(windows)} candidate windows")
 

@@ -1,54 +1,32 @@
-# CLIPOS 2.0.0 — Gaming Studio
+# CLIPOS 2.5.0 — connected editing and reliable batch export
 
 By **Analoggeek**.
 
-## Gaming-first native editor
+- Replaced Gaming Studio 2.0 with Import → Select & style → Edit & review → Export.
+- Removed YouTube publishing/account controls and their API dependencies.
+- Added source playback/range selection, visual manual player/gameplay crops,
+  preset/caption thumbnails and real short recipe rendering before batch editing.
+- Kept one-click import and automatic editing, plus review of actual rendered MP4s.
+- Fixed captioned FFmpeg export failure: the `fontsdir` option was accidentally
+  appended to the subtitle filename. Fixed all captioned render paths.
+- Batch exports share `YYYY-MM-DD / recording name / all clips`, include manifests
+  and visible per-clip errors, continue after a failure and preserve cancellations.
+- Unified shared settings/project events; respected custom export folders and
+  selected captions rather than overwriting them when applying presets.
+- Reduced long-recording audio-analysis memory, bounded pitch sampling, and used
+  a single source decoder for automatic silence-cut renders.
+- Added native macOS VideoToolbox / Windows NVENC-QSV-CPU capability-based paths,
+  bounded CPU fallback, low-memory render mode and live measured CPU/RAM usage.
+- Simplified navigation and added consistent vector icons.
 
-- New default Gaming Studio: authorised link or local recording → one-click
-  highlight selection/edit/captions/render → actual MP4 preview and seek.
-- Face-based automatic layout places detected player below gameplay, with a
-  gameplay-only fallback and warnings when detection is uncertain. Manual layout
-  overrides remain available in Export Center.
-- Clean Professional captions above the panel split and optional restrained SDR
-  clarity. This is not HDR and does not guarantee viral or editorially perfect clips.
-- Layered glass-style gradients, borders and transparent labels throughout the
-  desktop UI; not native OS background blur.
-- Bounded visual sampling, CPU thread budgets and correct CTranslate2 CUDA/CPU
-  selection. Fixed per-instance database connection isolation.
-- Complete locally downloaded speech model discovery, with first-run setup and
-  offline subsequent editing. Real progress/errors; no simulated render success.
+See [the 2.5 workflow guide](https://github.com/Analoggeek/AiFreeClipping/blob/main/docs/WORKFLOW_V25.md).
 
-## Optional YouTube publishing
+Automatic camera/highlight detection remains heuristic: review results, or use
+manual crops. Preset tiles are visual previews; real recipe previews render your
+source. GPU counters are shown only where supported. No claims of genuine HDR,
+perfect editing, native OS background blur or guaranteed engagement.
 
-- Connect your own Google Desktop OAuth client/account using the OS secure
-  keychain. Review editable generated metadata, rights, audience, visibility and
-  disclosure; confirm before uploading checked rendered clips.
-- Real resumable API upload with cancellation, error reporting and recorded-file
-  duplicate protection. No automatic publishing during import or editing.
-- Google API setup, verification/audit restrictions, quota and account permissions
-  apply. Disclaimers and attribution do not grant copyright permission.
-- See [Gaming Studio setup](https://github.com/Analoggeek/AiFreeClipping/blob/arena/c30e6e2b-aifreeclipping/docs/GAMING_V2.md).
-
-## Downloads and compatibility
-
-Native Windows 10/11 EXE, genuine macOS Intel and Apple Silicon APP/DMG, plus Linux
-packages are built by release CI. All native jobs must pass before publication.
-The existing website design is unchanged. Existing project/model data is stored
-separately from binaries; back it up before upgrading.
-
-Automated Linux validation: **205 passed, 7 skipped**, plus **35/35** end-to-end
-checks. Includes actual face detection/FFmpeg render; Google API tests are mocked.
-Live account uploads, physical-device installs and real-world gameplay variety
-still require validation. No claim of completed physical Mac/Windows testing.
-
-macOS bundle integrity checks remain enabled. Builds are ad-hoc signed unless a
-Developer ID is configured: valid integrity does not mean Apple notarization or
-Gatekeeper approval. Do not disable system security; see the
-[macOS installation guide](https://github.com/Analoggeek/AiFreeClipping/blob/main/docs/MACOS_INSTALLATION.md).
-
-### Release packaging correction
-
-The unpublished v2.0.0 candidate was blocked by an ARM-only cryptography wheel
-in the Intel environment. Dependency subprocesses now explicitly preserve the
-current macOS architecture, and the Intel build audits native wheel slices and
-OAuth imports before packaging. The release remains gated on all native jobs.
+Native CI must pass before publication. Automated tests do not replace physical
+Windows/Mac installation or driver-specific playback testing. macOS builds remain
+ad-hoc signed unless Developer ID signing is configured; bundle integrity is not
+Apple notarization/Gatekeeper approval. Do not disable system security.
