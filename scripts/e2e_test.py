@@ -92,8 +92,14 @@ def main() -> int:
         scores = [c["virality_score"] for c in clips]
         check("virality scores are in range", all(0 <= s <= 100 for s in scores),
               f"min {min(scores):.0f} max {max(scores):.0f}")
-        check("virality scores are differentiated", len(set(scores)) > 1,
-              f"{len(set(scores))} distinct values")
+        # A 16-second fixture cannot honestly supply six distinct 15-second
+        # clips. Strict automatic selection must not pad with overlapping copies
+        # or invent different scores merely to satisfy the requested count.
+        selection=json.loads((PATHS.projects/str(pid)/"analysis"/"selection.json").read_text())
+        check("short source yields one distinct clip with an explicit shortfall",
+              len(clips)==1 and selection["selected_count"]==1 and
+              selection["requested"]==6 and bool(selection["warnings"]),
+              f"{len(clips)} genuine clip; no duplicate-count padding")
 
         eng = [c["engagement_score"] for c in clips]
         check("engagement scores are in range", all(0 <= e <= 100 for e in eng),

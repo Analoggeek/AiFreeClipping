@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout,
-    QLabel, QPushButton, QMessageBox, QSpinBox, QDoubleSpinBox, QVBoxLayout, QWidget,
+    QLabel, QLineEdit, QPushButton, QMessageBox, QSpinBox, QDoubleSpinBox, QVBoxLayout, QWidget,
 )
 
 from ...core.editing import enabled
@@ -316,6 +316,21 @@ class SettingsPage(BasePage):
         )
         form4.addRow("", self.use_llm_check)
 
+        self.automatic_selection_check=QCheckBox('Strict automatic clip selection (no duplicate-count padding)')
+        self.automatic_selection_check.setChecked(enabled(settings.get('automatic_selection','1')))
+        self.automatic_selection_check.toggled.connect(lambda v:self._save('automatic_selection',int(v)))
+        form4.addRow('',self.automatic_selection_check)
+        self.selection_rerank_check=QCheckBox('Rerank up to 24 finalists with installed local model')
+        self.selection_rerank_check.setChecked(enabled(settings.get('selection_local_rerank','0')))
+        self.selection_rerank_check.toggled.connect(lambda v:self._save('selection_local_rerank',int(v)))
+        form4.addRow('',self.selection_rerank_check)
+        for label,key,limit in [('Prefer transcript phrases (comma-separated)','selection_include',2000),
+                                ('Exclude transcript phrases (comma-separated)','selection_exclude',2000),
+                                ('Selection direction (requires local reranking)','selection_direction',1000)]:
+            field=QLineEdit(str(settings.get(key,'')));field.setMaxLength(limit)
+            field.editingFinished.connect(lambda k=key,f=field:self._save(k,f.text()))
+            setattr(self,key+'_field',field);form4.addRow(label,field)
+        llm.add(QLabel('Phrases match transcript words, not unseen visuals. Missing local model keeps measured ranking.'))
         llm.add_layout(form4)
         self.llm_status = QLabel("")
         self.llm_status.setObjectName("CardSubtitle")
@@ -591,10 +606,14 @@ class SettingsPage(BasePage):
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setValue(values[key]);widget.blockSignals(False)
-        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe')]:
+        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe'),('automatic_selection_check','automatic_selection'),('selection_rerank_check','selection_local_rerank')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)
+        for key in ('selection_include','selection_exclude','selection_direction'):
+            widget=getattr(self,key+'_field',None)
+            if widget is not None:
+                widget.blockSignals(True);widget.setText(str(values.get(key,'')));widget.blockSignals(False)
         self._update_diarization_label()
         self.person_model_label.setText(values.get('person_model_path','') or 'Disabled — select installed local YOLOX ONNX weights')
         self.music_path_label.setText(values.get('background_music','') or 'No background music')

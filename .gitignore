@@ -50,3 +50,6 @@ desktop.ini
 # ---- sandbox / CI helpers (generated, not source) ----
 .stublibs/
 .fontconfig/
+
+# Local reference checkouts and model-acceptance scratch data (never shipped).
+.local/

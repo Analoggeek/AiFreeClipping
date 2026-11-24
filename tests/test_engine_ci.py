@@ -9,7 +9,7 @@ MODULES=(
     'test_creator_workflows.py','test_timeline.py','test_timeline_history.py',
     'test_timeline_recovery.py','test_timeline_integrity.py','test_animated_captions.py',
     'test_audio_ducking.py','test_encoder_preflight.py','test_reference_enhancements.py',
-    'test_multitrack.py','test_graphical_multitrack.py','test_waveform.py','test_diarization.py',
+    'test_automatic_selection.py','test_tightening.py','test_multitrack.py','test_graphical_multitrack.py','test_waveform.py','test_diarization.py',
 )
 
 

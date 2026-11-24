@@ -249,3 +249,13 @@ All links below refer to the inspected commit rather than moving main:
 - [Semantic game audio](https://github.com/ColinGPT9/clips-studio/blob/bd39d8bc675db91d5a2092a472be0dcb5409ddb5/analysis/game_audio.py)
 - [Edit time model](https://github.com/ColinGPT9/clips-studio/blob/bd39d8bc675db91d5a2092a472be0dcb5409ddb5/video_editor/timeline.py)
 - [Preference learning](https://github.com/ColinGPT9/clips-studio/blob/bd39d8bc675db91d5a2092a472be0dcb5409ddb5/creator/learning.py)
+
+## Implementation follow-up
+
+The first independently implemented selection/cleanup engines are documented in
+[AUTOMATIC_EDITING_ENGINE.md](AUTOMATIC_EDITING_ENGINE.md): source-wide bounded
+shortlisting, strict temporal/text diversity, explicit transcript preferences/
+exclusions, optional local exact-ID reranking with truthful fallback, atomic
+selection reports and measured-silence proposals reviewable/applicable in the
+existing editor. Full local suite 556 passed / 10 skipped; generated-video E2E
+35/35. This does not mark all items above implemented or real models accepted.

@@ -58,6 +58,8 @@ class AnalysisResult:
     transcription_available: bool = True
     transcription_error: str = ""
     diarization: dict = field(default_factory=dict)
+    selection: dict = field(default_factory=dict)
+    source_signature: str = ""
     clips: list = field(default_factory=list)
     elapsed: float = 0.0
 
@@ -67,6 +69,7 @@ class AnalysisResult:
             "transcription_available": self.transcription_available,
             "transcription_error": self.transcription_error,
             "diarization": self.diarization,
+            "selection": self.selection,
             "clips": len(self.clips),
             "person_tracking": self.visual.person_tracking if self.visual else {},
             "elapsed": round(self.elapsed, 2),
@@ -119,6 +122,8 @@ class ClipOSPipeline:
         t0 = time.time()
         source = Path(source)
         result = AnalysisResult()
+        from .waveform import source_signature
+        result.source_signature=source_signature(source)
 
         self._report("probe", 2.0, "Reading media information")
         info = probe(source)
@@ -227,6 +232,7 @@ class ClipOSPipeline:
 
         # -- clip detection -----------------------------------------------------
         self._report("clips", 84.0, "Scoring moments for engagement")
+        if source_signature(source)!=result.source_signature:raise RuntimeError('Source changed during analysis; rerun before editing')
         result.elapsed = time.time() - t0
         return result
 
@@ -240,7 +246,19 @@ class ClipOSPipeline:
     ) -> list:
         """Run clip detection over an analysis result."""
         self._report("clips", 86.0, "Scoring candidate moments")
+        from ..ai.automatic_selection import SelectionPolicy
+        from ..core.editing import enabled
+        policy=None
+        if enabled(self.db.get_setting('automatic_selection','1')):
+            phrases=lambda key:tuple(p.strip() for p in self.db.get_setting(key,'').split(',') if p.strip())
+            policy=SelectionPolicy(include=phrases('selection_include'),exclude=phrases('selection_exclude'),
+                direction=self.db.get_setting('selection_direction',''),
+                local_rerank=enabled(self.db.get_setting('selection_local_rerank','0'))).validate()
+        selection_report={}
         clips = clip_detector.detect_clips(
+            selection_policy=policy,selection_report=selection_report,
+            selection_host=self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
+            selection_model=self.db.get_setting('llm_model','llama3.1:8b'),cancel_cb=self._cancel_requested,
             duration=analysis.duration,
             selected_ranges=selected_ranges,
             audio=analysis.audio or audio_analysis.AudioAnalysis(),
@@ -252,6 +270,34 @@ class ClipOSPipeline:
             target_count=target_count,
             progress_cb=lambda p, m: self._report("clips", 86.0 + p * 0.12, m),
         )
+        self._check_cancel()
+        analysis.selection=selection_report
+        if selection_report:
+            from .timeline import Timeline
+            selection_report['project_id']=self.project_id
+            selection_report['selected_source_ranges']=[list(pair) for pair in selected_ranges] if selected_ranges is not None else None
+            selection_report['source_signature']=analysis.source_signature
+            artifact=PATHS.projects/str(self.project_id)/'analysis'/'selection.json'
+            artifact.parent.mkdir(parents=True,exist_ok=True)
+            Timeline._atomic_write(artifact,json.dumps(selection_report,allow_nan=False).encode())
+            self.db.log_activity(self.project_id,'selection',
+                f"Automatic selection: {len(clips)}/{target_count}; rerank {selection_report['rerank']['status']}")
+        if analysis.audio is not None and analysis.source_signature:
+            from ..ai.tightening import propose
+            from .timeline import Timeline
+            from .waveform import source_signature
+            project=self.db.get_project(self.project_id)
+            source=Path(project['source_path'])
+            if source_signature(source)!=analysis.source_signature:raise RuntimeError('Source changed; cleanup proposals withheld')
+            proposals=[]
+            for candidate in clips:
+                self._check_cancel()
+                words=analysis.transcript.words_between(candidate.start,candidate.end) if analysis.transcript else []
+                proposals.append(propose(candidate.start,candidate.end,analysis.audio.silence_ranges,words))
+            artifact=PATHS.projects/str(self.project_id)/'analysis'/'tightening.json'
+            artifact.parent.mkdir(parents=True,exist_ok=True)
+            Timeline._atomic_write(artifact,json.dumps({'schema':'clipos.tightening.v1',
+                'source_signature':analysis.source_signature,'proposals':proposals},allow_nan=False).encode())
         analysis.clips = clips
         return clips
 
