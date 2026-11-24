@@ -150,6 +150,7 @@ def main() -> int:
     ap.add_argument("--no-opencv", action="store_true",
                     help="kept for compatibility; the OpenCV version is "
                          "always pinned")
+    ap.add_argument("--tracking", action="store_true", help="install optional local YOLOX/ByteTrack runtime (no model downloads)")
     args = ap.parse_args()
 
     try:
@@ -204,6 +205,13 @@ def _install(args) -> int:
     if args.build:
         packages += BUILD
     run(pip("install", *packages), "installing the core packages")
+
+    if getattr(args, "tracking", False):
+        run(pip("install", "scipy>=1.10,<2", "matplotlib>=3.7,<4", "defusedxml>=0.7", "pyyaml>=6", "tqdm>=4.65"),
+            "installing tracking support")
+        # supervision normally requests GUI OpenCV. Use the tested headless
+        # implementation below instead, never overwrite it with OpenCV 5.
+        run(pip("install", "--no-deps", "supervision==0.27.0"), "installing ByteTrack runtime")
 
     if args.build:
         # The self-extracting Windows installer needs a C compiler.  On

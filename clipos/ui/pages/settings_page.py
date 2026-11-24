@@ -245,6 +245,22 @@ class SettingsPage(BasePage):
         caps.add_layout(form3)
         self.content_layout.addWidget(caps)
 
+        tracking = Card()
+        tracking.add(SectionHeader("Continuous person tracking (optional)",
+            "Local YOLOX raw-head COCO ONNX + ByteTrack · CPU · body evidence, not speaker identity"))
+        self.person_model_label = QLabel(settings.get("person_model_path", "") or "Disabled — select installed local YOLOX ONNX weights")
+        self.person_model_label.setWordWrap(True)
+        tracking.add(self.person_model_label)
+        tracking_row = QHBoxLayout()
+        select_model = QPushButton("Select installed model…")
+        select_model.clicked.connect(self._choose_person_model)
+        tracking_row.addWidget(select_model)
+        clear_model = QPushButton("Disable")
+        clear_model.clicked.connect(lambda:self._set_person_model(""))
+        tracking_row.addWidget(clear_model)
+        tracking.add_layout(tracking_row)
+        self.content_layout.addWidget(tracking)
+
         # ---------------- local LLM ----------------
         llm = Card()
         llm.add(SectionHeader("Local LLM (optional)", "Local Ollama — metadata and bounded edit plans; loopback only"))
@@ -466,6 +482,15 @@ class SettingsPage(BasePage):
         self.db.set_setting("theme", theme)
         apply_theme(self.window, theme)
 
+    def _set_person_model(self, path: str) -> None:
+        self._save("person_model_path", path)
+        self.person_model_label.setText(path or "Disabled — select installed local YOLOX ONNX weights")
+
+    def _choose_person_model(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Select trusted local raw-head YOLOX COCO model", "", "ONNX weights (*.onnx)")
+        if path:
+            self._set_person_model(path)
+
     def _set_music(self, path: str) -> None:
         self._save("background_music", path)
         self.music_path_label.setText(path or "No background music")
@@ -533,6 +558,7 @@ class SettingsPage(BasePage):
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)
+        self.person_model_label.setText(values.get('person_model_path','') or 'Disabled — select installed local YOLOX ONNX weights')
         self.music_path_label.setText(values.get('background_music','') or 'No background music')
         self.out_path_label.setText(values.get('output_dir',''))
         stats = self.db.stats()

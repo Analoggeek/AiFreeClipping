@@ -22,7 +22,7 @@ The previous frame-difference motion list was N-1 values and unused in ranking. 
 
 | Requested capability | Implemented/retained | Remaining work (not shipped by this patch) |
 |---|---|---|
-| Continuous YOLO + ByteTrack; dynamic face/body/person tracking | Sampled YuNet and improved spatial associations | Explicit model installation/licensing, actual body detector + ByteTrack runtime, occlusion/reidentification tests and continuous decode scheduling |
+| Continuous YOLO + ByteTrack; dynamic face/body/person tracking | New opt-in continuous local YOLOX ONNX + actual supervision ByteTrack; existing YuNet remains | Real detector weights acceptance, occlusion/VFR benchmarks, body-aware reframing integration and native performance validation |
 | Gameplay and player separation | Independent source rectangles, face-supported crop and new static-edge refinement | Semantic gameplay understanding, foreground segmentation, moving/resizing-camera benchmark |
 | Multiple speakers | Existing audio-energy/face-prominence heuristic | Actual diarization, audiovisual active-speaker identity, overlap handling |
 | Dynamic vertical / subject-aware reframing | Existing FFmpeg crop/layout/subject-follow paths retained | Continuous body-aware composition and editable motion-keyframe timeline |
@@ -127,3 +127,15 @@ run: development PyYAML/CTranslate2 and the existing headless GL stub utility
 allowed the full suite to execute. Stubs are not native graphics/playback proof.
 No new AI weights or genuine disconnected-model acceptance occurred. Latest
 native CI results remain pending, and the main PRO engines remain incomplete.
+
+### Continuous person tracking first slice
+
+New independent optional YOLOX ONNX + actual supervision ByteTrack engine now
+runs every decoded frame and streams body tracks to an atomic artifact. Settings,
+analysis pipeline, CLI and optional dependency setup are connected; YuNet/legacy
+features remain. This is more than sampled face association, but not completed
+body-aware reframing or speaker identity. Full local suite: 485 passed / 9 skipped;
+actual ByteTrack tests use synthetic detections, not trained detector evidence.
+Real YOLOX weights download and OS network isolation were blocked in this sandbox.
+See `PRO_INTEGRATED_MILESTONE.md` for exact commands, formats, limits and remaining
+multitrack/diarization/disconnected native gates.

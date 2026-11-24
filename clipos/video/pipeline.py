@@ -31,7 +31,7 @@ from ..ai.transcription import (
 )
 from ..captions.caption_engine import build_cues_for_clip, get_style, list_styles
 from ..core.config import ASPECT_RATIOS, CLIP_DURATION_PRESETS, PATHS
-from ..core.ffmpeg import extract_audio_wav, probe
+from ..core.ffmpeg import extract_audio_wav, probe, FFmpegCancelled
 from ..core.logging_setup import get_logger
 from ..db.database import Database
 from ..video.renderer import ClipRenderer, RenderSettings, generate_thumbnails
@@ -66,6 +66,7 @@ class AnalysisResult:
             "transcription_available": self.transcription_available,
             "transcription_error": self.transcription_error,
             "clips": len(self.clips),
+            "person_tracking": self.visual.person_tracking if self.visual else {},
             "elapsed": round(self.elapsed, 2),
         }
 
@@ -145,6 +146,21 @@ class ClipOSPipeline:
             progress_cb=lambda p, m: self._report("visual", 18.0 + p * 0.27, m),
         )
         self._check_cancel()
+
+        person_model = self.db.get_setting("person_model_path", "")
+        if person_model:
+            from ..ai.person_tracking import write_tracks
+            artifact = PATHS.projects / str(self.project_id) / "analysis" / "person_tracks.jsonl"
+            try:
+                result.visual.person_tracking = write_tracks(source, person_model, artifact,
+                    scene_cuts=result.visual.scenes.times, cancel_cb=self._cancel_requested,
+                    progress_cb=lambda p,m:self._report("visual", 45. + p*.025, m))
+            except FFmpegCancelled as exc:
+                raise PipelineCancelled("Person tracking cancelled") from exc
+            result.visual.person_tracking["artifact"] = str(artifact)
+            # Body tracks are kept distinct from face/speaker identities. They
+            # are evidence, not automatically promoted to active-speaker labels.
+            self._check_cancel()
 
         # -- speech ------------------------------------------------------------
         self._report("speech", 48.0, "Transcribing speech (offline)")

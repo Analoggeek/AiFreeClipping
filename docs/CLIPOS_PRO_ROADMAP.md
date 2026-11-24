@@ -249,3 +249,29 @@ body detection, identity-aware multiple speakers, semantic scene perception,
 professional multitrack/live playback, advanced source separation and real-weight
 OS-level disconnected acceptance remain open. The earlier verified additions
 must not be mistaken for completion of these separate engines.
+
+### Integrated-engine milestone: continuous tracking first slice
+
+User selected validation on Windows, Apple Silicon and Intel Mac one by one;
+anonymous A/B diarization plus active-speaker association is the chosen speaker
+policy (not enrolled/named biometric identity). New consolidated status and
+acceptance blockers: [PRO_INTEGRATED_MILESTONE.md](PRO_INTEGRATED_MILESTONE.md).
+
+Added an opt-in real YOLO-family/ByteTrack runtime: local raw-head COCO YOLOX
+ONNX preprocessing/decoding with CPU ONNX Runtime; supervision 0.27.0's actual
+ByteTrack association on every decoded frame. Settings/pipeline and CLI are
+connected. Body observations stream to an atomic per-project JSONL artifact with
+terminal summary/model hash; scene cuts reset IDs without reuse. Empty model
+selection preserves the existing pipeline. No implicit download or fabricated
+body/speaker fallback is added. Optional tracking setup and native regression
+gates preserve headless OpenCV <5. Body observations are deliberately not passed
+off as faces, speaker identities or automatically completed subject reframing.
+
+Validation: **485 passed / 9 skipped**, complete local suite, including actual
+ByteTrack on decoded frames with explicitly synthetic detection fixtures.
+**Real YOLO model acceptance is NOT complete**: official model download redirects
+to a host blocked by sandbox egress. OS-level network namespace isolation also
+failed (`Operation not permitted`). Real-model disconnected acceptance therefore
+remains blocked; socket fixtures are not equivalent. Genuine professional
+multitrack/live playback and actual local diarization still need implementation.
+No new installer/native success, complete PRO milestone, merge or release claim.
