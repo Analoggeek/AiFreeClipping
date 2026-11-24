@@ -353,3 +353,78 @@ def test_native_keyframe_controls_drive_model_recovery_and_undo(media,tmp_path,m
         assert page.project.lanes[1].items[0].gain_keys==[[.5,2.]]
     finally:
         page.shutdown();page.deleteLater();app.processEvents()
+
+
+def test_linked_av_timing_edits_split_and_undo_are_single_transactions(media,tmp_path):
+    project=MultitrackProject(width=160,height=90,fps=10);project.import_media(media[0])
+    lane=project.lanes[0];item=lane.items[0]
+    assert item.group_id and item.group_id==project.lanes[1].items[0].group_id
+    before=project.to_dict()
+    project.change_item(lane.id,item.id,linked=True,at=.3,source_in=.2,length=1.6)
+    assert all((l.items[0].at,l.items[0].source_in,l.items[0].length)==(.3,.2,1.6) for l in project.lanes)
+    project.undo();assert project.to_dict()==before
+    project.redo();moved=project.to_dict()
+    project.split(lane.id,item.id,1.1,linked=True)
+    assert [len(l.items) for l in project.lanes]==[2,2]
+    left,right=project.lanes[0].items
+    assert right.group_id==project.lanes[1].items[1].group_id and right.group_id!=left.group_id
+    project.change_item(project.lanes[0].id,right.id,linked=True,at=1.4)
+    assert project.lanes[1].items[1].at==1.4
+    path=tmp_path/'linked.json';project.save(path)
+    assert MultitrackProject.load(path).to_dict()==project.to_dict()
+    project.undo();project.undo();assert project.to_dict()==moved
+
+
+def test_linked_locked_or_desynchronized_sibling_never_partially_changes(media):
+    project=MultitrackProject();project.import_media(media[0])
+    lane=project.lanes[0];item=lane.items[0];audio=project.lanes[1]
+    project.lane_state(audio.id,locked=True);before=project.to_dict()
+    for operation in (lambda:project.change_item(lane.id,item.id,linked=True,at=1.),
+                      lambda:project.split(lane.id,item.id,1.,linked=True),
+                      lambda:project.remove(lane.id,item.id,linked=True)):
+        with pytest.raises(ValueError,match='locked'):operation()
+        assert project.to_dict()==before
+    project.lane_state(audio.id,locked=False)
+    project.change_item(lane.id,item.id,source_in=.2,length=1.8)
+    before=project.to_dict()
+    with pytest.raises(ValueError,match='aligned'):project.change_item(lane.id,item.id,linked=True,length=1.)
+    with pytest.raises(ValueError,match='aligned'):project.split(lane.id,item.id,1.,linked=True)
+    assert project.to_dict()==before
+
+
+def test_linked_split_delete_ripple_keeps_siblings_and_curves_aligned(media):
+    project=MultitrackProject();project.import_media(media[0]);lane=project.lanes[0];item=lane.items[0]
+    for track in project.lanes:
+        for moment,value in [(0.,0.),(2.,1.)]:project.keyframe(track.id,track.items[0].id,moment,value)
+    project.split(lane.id,item.id,1.,linked=True)
+    before=project.to_dict()
+    project.remove(lane.id,item.id,linked=True,ripple=True)
+    assert all(len(track.items)==1 and track.items[0].at==0 for track in project.lanes)
+    assert project.lanes[0].items[0].opacity_keys==project.lanes[1].items[0].gain_keys
+    project.undo();assert project.to_dict()==before
+
+
+def test_native_waveform_worker_delivers_real_envelope_without_blocking_ui(media,tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QEventLoop,QTimer
+    from clipos.db.database import Database
+    from clipos.ui.pages import multitrack as ui
+    app=QApplication.instance() or QApplication([])
+    monkeypatch.setattr(ui,'PATHS',SimpleNamespace(projects=tmp_path/'projects',cache=tmp_path/'cache'))
+    page=ui.MultitrackPage(SimpleNamespace(db=Database(tmp_path/'ui.db')))
+    page.project=layered(media)
+    try:
+        page._changed();page.table.setCurrentCell(1,3);page._waveform()
+        loop=QEventLoop();page.waveform_worker.ready.connect(loop.quit)
+        page.waveform_worker.failed.connect(loop.quit);QTimer.singleShot(5000,loop.quit);loop.exec()
+        app.processEvents()
+        media_id=page.project.lanes[1].items[0].media_id
+        assert media_id in page.timeline.waveforms,page.status.text()
+        assert max(page.timeline.waveforms[media_id]['peaks'])>.05
+        # Repainting exercises source-time envelope mapping under speed and trim.
+        page.timeline.resize(700,250);page.timeline.show();page.timeline.grab()
+        page.project.media[0].path=str(tmp_path/'missing.wav');page.timeline.set_project(page.project)
+        assert media_id not in page.timeline.waveforms
+    finally:
+        page.shutdown();page.deleteLater();app.processEvents()

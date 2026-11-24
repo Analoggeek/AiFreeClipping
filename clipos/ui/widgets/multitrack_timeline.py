@@ -1,7 +1,7 @@
 """Native graphical track editor; gestures commit validated model transactions.
 
 No rendered thumbnails or waveforms are fabricated. Horizontal scale is explicit
-pixels/second; drags affect one independent item, not implied linked tracks.
+pixels/second; the containing editor controls linked timing transactions.
 """
 from __future__ import annotations
 
@@ -21,12 +21,21 @@ class MultitrackTimeline(QWidget):
     def __init__(self,parent=None):
         super().__init__(parent)
         self.project=None;self.position=0.;self.scale=60.;self.snap=True
-        self.selection=None;self.drag=None
+        self.selection=None;self.drag=None;self.waveforms={}
         self.setMinimumHeight(150);self.setMouseTracking(True)
-        self.setToolTip('Drag clip to move; drag left/right edge to trim. Shift bypasses snapping. Tracks remain independent.')
+        self.setToolTip('Drag clip to move; drag left/right edge to trim. Shift bypasses snapping. Linked A/V setting controls paired timing edits.')
 
     def set_project(self,project):
         self.project=project;self.drag=None
+        from ...video.waveform import source_signature
+        retained={}
+        for media in project.media:
+            if media.id not in self.waveforms:continue
+            try:
+                data=self.waveforms[media.id]
+                if data['source_signature']==source_signature(media.path):retained[media.id]=data
+            except OSError:pass
+        self.waveforms=retained
         self.setMinimumSize(max(700,round(self.LABEL+(project.duration+2)*self.scale)),
                             max(150,self.RULER+len(project.lanes)*self.ROW))
         self.update()
@@ -138,6 +147,22 @@ class MultitrackTimeline(QWidget):
                 painter.setBrush(color)
                 painter.setPen(QPen(QColor('#f1d58b' if self.selection==(lane.id,item.id) else '#69758d'),2))
                 painter.drawRoundedRect(rect,5,5)
+                waveform=self.waveforms.get(item.media_id) if lane.kind=='audio' else None
+                if waveform:
+                    peaks=waveform['peaks'];step=waveform['bin_seconds']
+                    painter.save();painter.setClipRect(rect)
+                    painter.setPen(QColor('#85d1be'))
+                    left=max(round(rect.left()),clip.left());right=min(round(rect.right()),clip.right())
+                    for px in range(left,right+1,2):
+                        start=item.source_in+max(0,(px-rect.left())/self.scale)*item.speed
+                        if start>=waveform['duration']:continue
+                        stop=min(item.source_in+item.length,start+2/self.scale*item.speed)
+                        a=max(0,min(len(peaks)-1,int(start/step)))
+                        b=max(a+1,min(len(peaks),int(stop/step)+1))
+                        amplitude=max(peaks[a:b],default=0)*(rect.height()/2-3)
+                        mid=rect.center().y()
+                        painter.drawLine(px,round(mid-amplitude),px,round(mid+amplitude))
+                    painter.restore()
                 painter.setPen(QColor('white'))
                 painter.save();painter.setClipRect(rect.adjusted(5,0,-5,0))
                 painter.drawText(rect.adjusted(7,0,-5,0),Qt.AlignmentFlag.AlignVCenter,f'{item.at:.2f}s · {item.duration:.2f}s')

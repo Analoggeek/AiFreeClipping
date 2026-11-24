@@ -46,6 +46,7 @@ class Item:
     fade_out: float = 0.
     opacity_keys: list = field(default_factory=list)
     gain_keys: list = field(default_factory=list)
+    group_id: str = ""
 
     @property
     def duration(self):
@@ -102,6 +103,7 @@ class MultitrackProject:
             number(media.duration,.001,1e7)
             if type(media.has_video) is not bool or type(media.has_audio) is not bool:raise ValueError('Invalid source type')
             sources[media.id]=media
+        groups={}
         for lane in self.lanes:
             identity(lane.id)
             if lane.kind not in ('video','audio'):raise ValueError('Unsupported track kind')
@@ -110,6 +112,11 @@ class MultitrackProject:
             for item in lane.items:
                 identity(item.id)
                 if item.media_id not in sources:raise ValueError('Missing media reference')
+                if not isinstance(item.group_id,str) or len(item.group_id)>128:raise ValueError('Invalid link group')
+                if item.group_id:
+                    source,lanes=groups.setdefault(item.group_id,(item.media_id,set()))
+                    if source!=item.media_id or lane.id in lanes:raise ValueError('Link group must contain same-source items on separate tracks')
+                    lanes.add(lane.id)
                 media=sources[item.media_id]
                 if not (media.has_video if lane.kind=='video' else media.has_audio):raise ValueError('Media has no required stream')
                 number(item.at,0,1e7);number(item.source_in,0,media.duration)
@@ -212,21 +219,41 @@ class MultitrackProject:
         if not path.is_file():raise FileNotFoundError(f'Media file not found: {path}')
         info=probe(path)
         media=Media(uid(),str(path),info.duration,info.has_video,info.has_audio)
+        group=uid() if info.has_video and info.has_audio else ''
         def operation(project):
             project.media.append(media)
             for kind,available in [('video',media.has_video),('audio',media.has_audio)]:
                 if available:project.lanes.append(Lane(uid(),path.stem+' · '+kind,kind,
-                    [Item(uid(),media.id,at,0,media.duration)]))
+                    [Item(uid(),media.id,at,0,media.duration,group_id=group)]))
         self.edit(operation)
         return media.id
 
-    def change_item(self,lane_id,item_id,**values):
+    def _linked_targets(self,lane_id,item_id):
+        _,selected=self.find(lane_id,item_id)
+        targets=[(lane,item) for lane in self.lanes for item in lane.items
+                 if item.id==item_id or (selected.group_id and item.group_id==selected.group_id)]
+        if any(lane.locked for lane,item in targets):raise ValueError('A linked track is locked; no items changed')
+        return targets
+
+    def change_item(self,lane_id,item_id,*,linked=False,**values):
         allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)
             if lane.locked:raise ValueError('Track is locked')
-            for key,value in values.items():setattr(item,key,value)
+            timing={'at','source_in','length','speed'} & values.keys()
+            targets=project._linked_targets(lane_id,item_id) if linked and timing else [(lane,item)]
+            # Source trims/speed require aligned siblings; never pretend an already
+            # independently edited pair is in sync. Pure moves preserve offsets.
+            if timing-{'at'}:
+                for _,other in targets:
+                    if any(abs(getattr(other,key)-getattr(item,key))>1e-6 for key in ('at','source_in','length','speed')):
+                        raise ValueError('Linked items are not aligned; edit independently or undo earlier unlinked changes')
+            offsets={key:values[key]-getattr(item,key) for key in timing}
+            for _,other in targets:
+                for key,delta in offsets.items():setattr(other,key,getattr(other,key)+delta)
+            for key,value in values.items():
+                if key not in timing:setattr(item,key,value)
         self.edit(operation)
 
     def find(self,lane_id,item_id):
@@ -253,7 +280,23 @@ class MultitrackProject:
             setattr(item,field,keys)
         self.edit(operation)
 
-    def split(self,lane_id,item_id,time):
+    def split(self,lane_id,item_id,time,*,linked=False):
+        if linked:
+            def grouped(project):
+                targets=[(lane.id,item.id) for lane,item in project._linked_targets(lane_id,item_id)]
+                selected=project.find(lane_id,item_id)[1]
+                for lane_key,item_key in targets:
+                    other=project.find(lane_key,item_key)[1]
+                    if any(abs(getattr(other,key)-getattr(selected,key))>1e-6 for key in ('at','source_in','length','speed')):
+                        raise ValueError('Linked items are not aligned; split independently or restore alignment first')
+                right_ids=[]
+                for lane_key,item_key in targets:
+                    project.split(lane_key,item_key,time)
+                    lane,item=project.find(lane_key,item_key)
+                    right_ids.append((lane_key,lane.items[lane.items.index(item)+1].id))
+                group=uid() if len(right_ids)>1 else ''
+                for lane_key,item_key in right_ids:project.find(lane_key,item_key)[1].group_id=group
+            return self.edit(grouped)
         def operation(project):
             lane,item=project.find(lane_id,item_id)
             if lane.locked:raise ValueError('Track is locked')
@@ -262,7 +305,7 @@ class MultitrackProject:
             if elapsed<item.fade_in or elapsed>item.duration-item.fade_out:
                 raise ValueError('Split inside fade is not supported; move cursor or remove fade first')
             used=elapsed*item.speed
-            right=Item(**{**asdict(item),'id':uid(),'at':time,'source_in':item.source_in+used,'length':item.length-used,'fade_in':0.})
+            right=Item(**{**asdict(item),'id':uid(),'at':time,'source_in':item.source_in+used,'length':item.length-used,'fade_in':0.,'group_id':''})
             for field in ('opacity_keys','gain_keys'):
                 keys=getattr(item,field)
                 if keys:
@@ -273,7 +316,17 @@ class MultitrackProject:
             lane.items.insert(lane.items.index(item)+1,right)
         self.edit(operation)
 
-    def remove(self,lane_id,item_id,ripple=False):
+    def remove(self,lane_id,item_id,ripple=False,*,linked=False):
+        if linked:
+            def grouped(project):
+                targets=[(lane.id,item.id) for lane,item in project._linked_targets(lane_id,item_id)]
+                if ripple:
+                    selected=project.find(lane_id,item_id)[1]
+                    if any(abs(project.find(a,b)[1].at-selected.at)>1e-6 or
+                           abs(project.find(a,b)[1].duration-selected.duration)>1e-6 for a,b in targets):
+                        raise ValueError('Linked ripple requires aligned start/duration; no items changed')
+                for lane_key,item_key in targets:project.remove(lane_key,item_key,ripple=ripple)
+            return self.edit(grouped)
         def operation(project):
             lane,item=project.find(lane_id,item_id)
             if lane.locked:raise ValueError('Track is locked')

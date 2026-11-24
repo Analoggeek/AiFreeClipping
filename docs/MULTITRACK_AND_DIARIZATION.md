@@ -254,3 +254,51 @@ host is not reachable under this sandbox's egress policy. New CI runs preserve
 pytest failure status while emitting bounded JUnit failure annotations directly
 into check results, so the next failure should be diagnosable without pretending
 Intel passed. This does not fix an unknown native failure preemptively.
+
+## Linked timing edits and actual source waveforms
+
+New imports with both video/audio streams assign a persisted `group_id` to the
+separate A/V items. **Linked A/V timing edits** is enabled by default in the new
+workspace: moves, source trim/speed changes, split and delete affect the pair in
+one validated transaction and one undo step. Both table timing edits and graphical
+gestures use this path. Uncheck it for independent edits. Existing project files
+without group IDs remain independent; same-source items are not silently grouped
+on load. These are explicit A/V pairs, not arbitrary multi-selection groups.
+
+Moving a pair preserves its current relative offsets. Trim/speed/split require
+aligned source ranges and start times; if earlier independent editing broke that
+alignment, the operation rejects with an explanatory error. Locked siblings block
+the whole grouped timing transaction, including disabled lanes. Gain/opacity,
+keyframes, fades and track state remain individual properties. A grouped split
+creates a separate linked pair on the right, preserving automation boundaries.
+Grouped delete removes siblings together; ripple applies once on each affected
+track and rejects mismatched pair start/duration. Other tracks do not ripple.
+Reopen retains groups; undo/redo remains in-memory, as documented above.
+
+**Analyze selected source waveform** explicitly decodes real local source audio
+in a cancellable background worker. The timeline draws a source-amplitude overview
+on audio tracks mapped through source trim, item speed and timeline placement.
+No placeholder waveform is shown before analysis. It is a mono 8-kHz peak overview
+before gain, fades, automation, mixing or limiting—not a LUFS meter, sample-accurate
+waveform, final output waveform, or exact original-bandwidth peak measurement.
+Stereo is downmixed; phase cancellation and downsampling can change displayed
+amplitudes. Sources without audio and files over 30 minutes are explicitly rejected
+by this first bounded overview engine.
+
+Cached envelopes use path/size/mtime signatures, at most 60,000 bins, atomic JSON
+writes and validation on reuse. Cache identity is freshness metadata, not a
+cryptographic content-integrity guarantee. Background results for removed/relinked
+sources are discarded; existing display data is invalidated on source changes.
+Analysis bounds temporary PCM to approximately 29 MB; arrays are bounded to the
+same 30-minute mono input but can use additional memory during reduction.
+Cancellation removes scratch PCM, preserves existing cache and joins on shutdown.
+Waveforms are not auto-scheduled for every imported source and proxy generation
+is still pending.
+
+Validation: **538 passed, 10 skipped in 94.46 seconds**. New tests cover linked
+transactions/locks/split/curve boundaries/delete/ripple/reopen, actual tone/silence
+waveform amplitude, cache reuse/corruption/source changes, cancellation, and
+background Qt delivery/rendering. The last additional grouped-ripple guard was
+also checked in the targeted engine suite. Native build gates include waveform
+regressions. Physical/native, real-model and audiovisual association acceptance
+remain separate unresolved gates; none is inferred from these synthetic fixtures.

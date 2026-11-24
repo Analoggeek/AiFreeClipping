@@ -55,6 +55,23 @@ class FrameWorker(QThread):
         finally:compositor.close()
 
 
+class WaveformWorker(QThread):
+    ready=Signal(str,object)
+    failed=Signal(str)
+
+    def __init__(self,media,parent=None):
+        super().__init__(parent)
+        self.media_id=media.id;self.path=media.path;self.cancelled=threading.Event()
+
+    def run(self):
+        from ...video.waveform import build_waveform
+        try:
+            data=build_waveform(self.path,PATHS.cache/'waveforms',cancel_cb=self.cancelled.is_set)
+            self.ready.emit(self.media_id,data)
+        except FFmpegCancelled:self.failed.emit('Waveform analysis cancelled')
+        except Exception as exc:self.failed.emit(str(exc))
+
+
 class ExportWorker(QThread):
     progress=Signal(float,str)
     done=Signal(str)
@@ -82,7 +99,7 @@ class MultitrackPage(BasePage):
 
     def __init__(self,window):
         self.project=MultitrackProject();self.path=None;self.exporter=None;self.generation=0
-        self.playing=False;self._building=False;self.audio=None;self._clock_update=False
+        self.playing=False;self._building=False;self.audio=None;self._clock_update=False;self.waveform_worker=None
         super().__init__(window)
 
     def build(self):
@@ -119,7 +136,10 @@ class MultitrackPage(BasePage):
         timeline_controls.addWidget(snap)
         zoom=QDoubleSpinBox();zoom.setRange(5,240);zoom.setValue(60);zoom.setSuffix(' px/s')
         zoom.valueChanged.connect(lambda value:self.timeline.set_scale(value))
-        timeline_controls.addWidget(zoom);timeline_controls.addStretch()
+        timeline_controls.addWidget(zoom)
+        for text,handler in [('Analyze selected source waveform',self._waveform),('Cancel waveform',self._cancel_waveform)]:
+            button=QPushButton(text);button.clicked.connect(handler);timeline_controls.addWidget(button)
+        timeline_controls.addStretch()
         self.content_layout.addLayout(timeline_controls)
         self.timeline=MultitrackTimeline()
         self.timeline.seekRequested.connect(self.cursor.setValue)
@@ -136,7 +156,8 @@ class MultitrackPage(BasePage):
         self.table.itemSelectionChanged.connect(self._table_selection_changed)
         self.content_layout.addWidget(self.table)
         edits=QHBoxLayout()
-        self.ripple=QCheckBox('Ripple delete within selected track');edits.addWidget(self.ripple)
+        self.ripple=QCheckBox('Ripple delete on affected tracks');edits.addWidget(self.ripple)
+        self.linked=QCheckBox('Linked A/V timing edits');self.linked.setChecked(True);edits.addWidget(self.linked)
         for text,handler in [('Split at cursor',self._split),('Relink source…',self._relink),('Delete item',self._delete),('Layer earlier',lambda:self._move(-1)),
                              ('Layer later',lambda:self._move(1)),('Undo',self._undo),('Redo',self._redo)]:
             button=QPushButton(text);button.clicked.connect(handler);edits.addWidget(button)
@@ -153,7 +174,7 @@ class MultitrackPage(BasePage):
         self.key_status=QLabel('Select a clip to inspect its linear automation. Times are relative to clip start.')
         self.key_status.setWordWrap(True);self.content_layout.addWidget(self.key_status)
         self.progress=QProgressBar();self.progress.setRange(0,100);self.content_layout.addWidget(self.progress)
-        self.status=QLabel('No project exported. Video audio is imported as a separate audio track.')
+        self.status=QLabel('No project exported. Imported video/audio tracks are linked for timing edits by default; uncheck Linked A/V for independent edits.')
         self.status.setWordWrap(True);self.content_layout.addWidget(self.status)
         self.timer=QTimer(self);self.timer.setInterval(33);self.timer.timeout.connect(self._tick)
         self._rows=[]
@@ -252,6 +273,33 @@ class MultitrackPage(BasePage):
             self.preview_status.setText('No active media')
         self._seek(self.cursor.value())
 
+    def _waveform(self):
+        if self.waveform_worker and self.waveform_worker.isRunning():
+            self.status.setText('Waveform analysis already running');return
+        try:
+            _,item=self.project.find(*self._selected())
+            source=next(m for m in self.project.media if m.id==item.media_id)
+            if not source.has_audio:raise ValueError('Selected source has no audio')
+            if self.waveform_worker:self.waveform_worker.deleteLater()
+            self.waveform_worker=WaveformWorker(source,self)
+            self.waveform_worker.ready.connect(self._waveform_ready)
+            self.waveform_worker.failed.connect(self.status.setText)
+            self.status.setText('Analyzing real source audio in background (up to 30 minutes/source)…')
+            self.waveform_worker.start()
+        except Exception as exc:self._error(str(exc))
+
+    def _waveform_ready(self,media_id,data):
+        from ...video.waveform import source_signature
+        source=next((m for m in self.project.media if m.id==media_id),None)
+        try:
+            if source is None or source_signature(source.path)!=data['source_signature']:return
+        except OSError:return
+        self.timeline.waveforms[media_id]=data;self.timeline.update()
+        self.status.setText('Source waveform ready: decoded 8 kHz mono peak overview, before gain/fades/mix.')
+
+    def _cancel_waveform(self):
+        if self.waveform_worker:self.waveform_worker.cancelled.set()
+
     def _table_selection_changed(self):
         if self._building:return
         row=self.table.currentRow()
@@ -290,7 +338,7 @@ class MultitrackPage(BasePage):
 
     def _timeline_edit(self,lane,item,values):
         try:
-            self.project.change_item(lane,item,**values)
+            self.project.change_item(lane,item,linked=self.linked.isChecked(),**values)
             self._changed()
         except Exception as exc:
             self._error(str(exc));self._rebuild()
@@ -307,12 +355,12 @@ class MultitrackPage(BasePage):
             if column==0:self.project.lane_state(lane,name=cell.text())
             elif column in (13,14):self.project.lane_state(lane,**{('enabled' if column==13 else 'locked'):cell.checkState()==Qt.CheckState.Checked})
             elif column in (15,16):self.project.change_item(lane,item,**{('fade_in' if column==15 else 'fade_out'):float(cell.text())})
-            elif 3<=column<=12:self.project.change_item(lane,item,**{self.fields[column-3]:float(cell.text())})
+            elif 3<=column<=12:self.project.change_item(lane,item,linked=self.linked.isChecked(),**{self.fields[column-3]:float(cell.text())})
             self._changed()
         except Exception as exc:self._error(str(exc));self._rebuild()
 
     def _split(self):
-        try:self.project.split(*self._selected(),self.cursor.value());self._changed()
+        try:self.project.split(*self._selected(),self.cursor.value(),linked=self.linked.isChecked());self._changed()
         except Exception as exc:self._error(str(exc))
 
     def _relink(self):
@@ -323,7 +371,7 @@ class MultitrackPage(BasePage):
         except Exception as exc:self._error(str(exc))
 
     def _delete(self):
-        try:self.project.remove(*self._selected(),ripple=self.ripple.isChecked());self._changed()
+        try:self.project.remove(*self._selected(),ripple=self.ripple.isChecked(),linked=self.linked.isChecked());self._changed()
         except Exception as exc:self._error(str(exc))
 
     def _move(self,direction):
@@ -403,4 +451,6 @@ class MultitrackPage(BasePage):
 
     def shutdown(self):
         self._stop();self.frames.stopping.set();self.frames.wait()
+        if self.waveform_worker and self.waveform_worker.isRunning():
+            self.waveform_worker.cancelled.set();self.waveform_worker.wait()
         if self.exporter and self.exporter.isRunning():self.exporter.cancelled.set();self.exporter.wait()
