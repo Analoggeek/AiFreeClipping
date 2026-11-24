@@ -60,9 +60,13 @@ class HardwareProfile:
 
     @property
     def recommended_threads(self) -> int:
-        if self.cpu_threads <= 1:
-            return 1
-        return max(1, self.cpu_threads - 1)
+        # Leave headroom for playback, Qt and the OS. FFmpeg filters and speech
+        # inference each own worker pools; using all logical CPUs causes stutter.
+        logical = max(1, self.cpu_threads)
+        budget = min(8, max(1, logical - max(1, logical // 4)))
+        if 0 < self.ram_total_mb <= 8192:
+            budget = min(budget, 4)
+        return budget
 
     @property
     def is_apple_silicon(self) -> bool:
@@ -115,32 +119,11 @@ def _cpu_name() -> str:
             return out.strip()
     if system == "Windows":
         try:
-            import ctypes
-
-            class _Proc(ctypes.Structure):
-                _fields_ = [
-                    ("dwSize", ctypes.c_ulong), ("ProcessId", ctypes.c_ulong),
-                    ("dwReserved", ctypes.c_ulong), ("pdwReserved", ctypes.c_ulong),
-                    ("Affinity", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
-                    ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
-                    ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
-                    ("PagefileUsage", ctypes.c_size_t),
-                    ("PeakPagefileUsage", ctypes.c_size_t),
-                ]
-
-            PSAPI = ctypes.windll.psapi
-            K32 = ctypes.windll.kernel32
-            count = ctypes.c_ulong(0)
-            K32.GetLogicalProcessorInformation(None, ctypes.byref(count))
-            buf = (ctypes.c_byte * count.value)()
-            K32.GetLogicalProcessorInformation(buf, ctypes.byref(count))
-            procs = ctypes.cast(buf, ctypes.POINTER(_Proc))
-            for i in range(count.value // ctypes.sizeof(_Proc)):
-                if procs[i].ProcessorFrequency:
-                    return f"CPU @ {procs[i].ProcessorFrequency} MHz"
-        except Exception:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as key:
+                return str(winreg.QueryValueEx(key, "ProcessorNameString")[0]).strip()
+        except (ImportError, OSError):
             pass
     try:
         with open("/proc/cpuinfo") as fh:
@@ -153,6 +136,13 @@ def _cpu_name() -> str:
 
 
 def _ram_info() -> tuple[int, int]:
+    # Live available memory (particularly important on unified-memory Macs).
+    try:
+        import psutil
+        mem = psutil.virtual_memory()
+        return mem.total // (1024 * 1024), mem.available // (1024 * 1024)
+    except (ImportError, OSError):
+        pass
     system = platform.system()
     if system == "Windows":
         try:
@@ -230,10 +220,14 @@ def _detect_nvidia() -> GPUInfo:
 
 
 def _detect_apple() -> GPUInfo:
-    gpu = GPUInfo(vendor="apple")
+    gpu = GPUInfo()
     if platform.system() != "Darwin":
         return gpu
     brand = platform.machine()
+    if brand not in ("arm64", "aarch64"):
+        # Intel Macs may have Intel/AMD graphics, not an Apple Silicon GPU.
+        return gpu
+    gpu.vendor = "apple"
     names = {"arm64": "Apple Silicon (Apple GPU)", "aarch64": "Apple Silicon (Apple GPU)"}
     gpu.name = names.get(brand, "Apple GPU")
     gpu.metal_available = True
@@ -243,10 +237,6 @@ def _detect_apple() -> GPUInfo:
         m = re.search(r"VRAM[^:]*:\s*(\d+)\s*MB", out)
         if m:
             gpu.vram_mb = int(m.group(1))
-        else:
-            m2 = re.search(r"Total Number of Cores:\s*(\d+)", out)
-            if m2:
-                gpu.vram_mb = int(m2.group(1)) * 1024
     except Exception:
         pass
     return gpu
@@ -314,6 +304,11 @@ def detect_hardware() -> HardwareProfile:
         cpu_cores=os.cpu_count() or 1,
         cpu_threads=os.cpu_count() or 1,
     )
+    try:
+        import psutil
+        prof.cpu_cores = psutil.cpu_count(logical=False) or prof.cpu_threads
+    except (ImportError, OSError):
+        pass
     total, avail = _ram_info()
     prof.ram_total_mb = total
     prof.ram_available_mb = avail
@@ -406,15 +401,17 @@ def choose_encoder(preference: str = "auto", codec: str = "h264",
 
 def memory_pressure() -> float:
     """Fraction of RAM in use (0..1)."""
-    prof = detect_hardware()
-    if prof.ram_total_mb <= 0:
+    total, available = _ram_info()
+    if total <= 0:
         return 0.0
-    used = prof.ram_total_mb - prof.ram_available_mb
-    return max(0.0, min(1.0, used / prof.ram_total_mb))
+    return max(0.0, min(1.0, (total - available) / total))
 
 
 def suggest_worker_threads(requested: int = 0) -> int:
     prof = detect_hardware()
     if requested and requested > 0:
         return max(1, min(requested, prof.cpu_threads))
-    return prof.recommended_threads
+    budget = prof.recommended_threads
+    if memory_pressure() >= .85:
+        budget = min(budget, 2)
+    return budget

@@ -104,3 +104,22 @@ in the same data directory. Back up projects before any upgrade.
 YouTube publishing/OAuth code and dependencies were removed. Any previously
 issued Google grant can be revoked in your Google account settings; CLIPOS 2.5
 no longer accesses the old publishing token.
+
+
+### Platform responsiveness policy
+
+- Automatic CPU pools reserve at least 25% of logical processors (one minimum)
+  for playback/UI/OS, cap at eight workers, and cap at four on machines with
+  8 GiB RAM or less. At 85% live RAM use, new automatic pools cap at two.
+  Explicit thread settings remain respected within detected logical CPU limits.
+- FFmpeg render children run at below-normal priority on Windows and nice +5 on
+  macOS/Linux, best effort. The application/playback thread priority is unchanged.
+- Available RAM is sampled live through psutil, including unified-memory Macs;
+  cached startup memory is not used for memory-pressure decisions. GPU core count
+  is never presented as VRAM. Intel Macs are not labelled Apple Silicon.
+- macOS retains capability-selected VideoToolbox on both Intel and Apple Silicon;
+  Windows retains detected NVENC/Quick Sync with software retry. These are encode
+  paths, not a claim that every filter or speech model runs on the GPU. Speech
+  uses supported CUDA or CPU int8, not an unsupported MPS backend.
+- Native playback/thermal/driver measurements still require physical Windows and
+  macOS testing; Linux policy/regression tests do not establish native frame rates.

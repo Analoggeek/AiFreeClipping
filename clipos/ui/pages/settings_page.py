@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
 
 from ...core.editing import enabled
 from ...core.config import ASPECT_RATIOS, CLIP_DURATION_PRESETS, PATHS
-from ...core.hardware import detect_hardware
+from ...core.hardware import detect_hardware, choose_encoder, suggest_worker_threads
 from ...core.logging_setup import get_logger
 from ..theme import Metrics, PALETTES, apply_theme
 from ..widgets.common import Card, SectionHeader, format_size
@@ -511,7 +511,8 @@ class SettingsPage(BasePage):
             f"CPU: {prof.cpu_name} — {prof.cpu_cores} cores / {prof.cpu_threads} threads\n"
             f"RAM: {prof.ram_total_mb} MB total, {prof.ram_available_mb} MB available\n"
             f"GPU: {prof.gpu.label} (vendor: {prof.gpu.vendor or 'none'})\n"
-            f"Hardware encode: {'yes' if prof.gpu.cuda_available or prof.is_apple_silicon else 'CPU only'}\n"
+            f"Auto encoder: {choose_encoder().description} (CPU retry on failure)\n"
+            f"Automatic worker budget now: {suggest_worker_threads()} threads\n"
             f"Torch: {'available' if prof.torch_available else 'not installed'}"
             f"{' (CUDA)' if prof.torch_cuda else ''}{' (Metal)' if prof.torch_mps else ''}\n"
             f"FFmpeg encoders: {enc}"
