@@ -139,3 +139,13 @@ actual ByteTrack tests use synthetic detections, not trained detector evidence.
 Real YOLOX weights download and OS network isolation were blocked in this sandbox.
 See `PRO_INTEGRATED_MILESTONE.md` for exact commands, formats, limits and remaining
 multitrack/diarization/disconnected native gates.
+
+### Body-center rendering integration
+
+New body evidence is now consumed by range and edited-timeline crop-center motion,
+with ID selection/coverage gates, source freshness checks, silence-cut remapping
+and manual/gaming precedence. Body IDs are not speaker IDs. Full local suite:
+495 passed / 9 skipped; output-pixel tests use known synthetic body boxes, not
+trained YOLO evidence. Fixed crop size, not segmentation or dynamic body-fit zoom.
+Details: `BODY_REFRAMING.md`. Native playback, multitrack, actual diarization and
+real-model disconnected acceptance are still separate pending work.

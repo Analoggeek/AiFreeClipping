@@ -211,6 +211,7 @@ def write_tracks(video_path, model_path, output_path, **kwargs):
         raise ValueError('Tracking output cannot overwrite source media')
     if model_path and output.resolve() == Path(model_path).expanduser().resolve():
         raise ValueError('Tracking output cannot overwrite model weights')
+    source_stat = Path(video_path).stat()
     output.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(prefix='.tracking-', suffix='.tmp', dir=output.parent)
     try:
@@ -218,7 +219,12 @@ def write_tracks(video_path, model_path, output_path, **kwargs):
             def emit(observation):
                 stream.write(json.dumps({'type':'person', **observation.to_dict()}, allow_nan=False)+'\n')
             summary = track_video(video_path, model_path, emit=emit, **kwargs)
+            finished_stat = Path(video_path).stat()
+            if (finished_stat.st_size, finished_stat.st_mtime_ns) != (source_stat.st_size, source_stat.st_mtime_ns):
+                raise TrackingUnavailable('Source changed during tracking; previous artifact preserved')
             summary['source'] = str(Path(video_path).resolve())
+            summary['source_size'] = source_stat.st_size
+            summary['source_mtime_ns'] = source_stat.st_mtime_ns
             summary['schema_version'] = 1
             if model_path:
                 digest = hashlib.sha256()

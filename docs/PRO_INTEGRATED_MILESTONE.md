@@ -9,7 +9,7 @@ passing synthetic tests does not complete the milestone.
 
 | Engine | Current source | Still required for acceptance |
 |---|---|---|
-| Continuous YOLO + ByteTrack | New opt-in YOLOX ONNX person detector + actual supervision ByteTrack, every decoded frame, scene-cut retirement, streamed normalized body-track artifact, pipeline/settings/CLI integration | Real YOLO weights acceptance, representative multi-person gaming/occlusion/VFR tests, consumption by body-aware reframing and native performance validation |
+| Continuous YOLO + ByteTrack | New opt-in YOLOX ONNX person detector + actual supervision ByteTrack, every decoded frame, scene-cut retirement, streamed normalized body-track artifact, pipeline/settings/CLI integration | Real YOLO weights acceptance, representative multi-person gaming/occlusion/VFR tests and native performance validation; body-center export consumption is now implemented |
 | Professional multitrack + live playback | Existing single-source segment timeline, real edits/exports, atomic saves/recovery, persisted undo/redo | Genuine multi-source video/audio/caption/overlay track schema and editing UI, live multitrack decode/composition/audio clock, proxies, seeks/cache/keyframes; rendered preview must not be called live playback |
 | Anonymous speakers | Existing energy/face-prominence heuristic remains clearly separate from body tracks | Actual local diarization embeddings/clustering, overlap/unknown handling, audiovisual association with confidence and corrected labels |
 | Real-model disconnected acceptance | Strict local-model loading policies and real media export tests exist | Real installed detector/STT/diarization/LLM weights; OS-enforced disconnected run across import→detect→diarize→multitrack edit→save/reopen→1080×1920 export on all three targets |
@@ -56,8 +56,9 @@ temporary file and atomic replace; error/cancellation preserves the old output.
 Scene cuts reset associations without reusing IDs. Missing/unsupported models,
 unknown frame rates and detected early decode truncation fail actionably.
 
-These body tracks are **not** faces or speaker IDs and are not yet fed into the
-subject reframer. Nominal frame-index/fps timestamps are used; variable-frame-rate
+These body tracks are **not** faces or speaker IDs. An opt-in body-center export
+reframer now consumes them for non-gaming ranges and edited segments; see
+`BODY_REFRAMING.md` for precedence, evidence/coverage guards and limits. Nominal frame-index/fps timestamps are used; variable-frame-rate
 alignment is not certified. Continuous means every decoded frame is processed,
 not a claim that CPU inference runs at real-time speed. ByteTrack is spatial
 association, not appearance-based reidentification through arbitrary occlusions.

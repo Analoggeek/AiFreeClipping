@@ -73,6 +73,8 @@ class RenderSettings:
     caption_background: bool = False
     show_captions: bool = True
     smart_reframe: bool = True
+    body_reframe: bool = True
+    body_track_id: int = 0
     auto_zoom: bool = True
     remove_silence: bool = True
     silence_threshold_db: float = -32.0
@@ -510,6 +512,20 @@ class ClipRenderer:
         vf_parts: list[str] = []
         vf_parts.append(f"fps={settings.fps}")
 
+        body_graph = None
+        if settings.smart_reframe and settings.body_reframe and settings.editing_preset != "gaming" and visual and visual.person_tracking.get("artifact"):
+            from .body_reframe import body_keys, body_crop_filter
+            keys, chosen = body_keys(visual.person_tracking["artifact"],source,start,end,settings.body_track_id)
+            if keys:
+                body_duration = clip_dur
+                if len(keeps)>1:
+                    from .body_reframe import retime_body_keys
+                    keys, body_duration = retime_body_keys(keys,clip_dur,keeps)
+                body_graph = body_crop_filter(src_w,src_h,settings.width,settings.height,keys,body_duration)
+                result.steps.append(f"Body reframe follows person track {chosen} (not speaker identity)")
+            else:
+                result.warnings.append("Selected body evidence lacks coverage; existing face/center framing used")
+
         if settings.editing_preset == "gaming":
             from .presets import gaming_filter
             facecam, gameplay = settings.facecam_rect, settings.gameplay_rect
@@ -530,6 +546,8 @@ class ClipRenderer:
                 vf_parts.append("eq=contrast=1.04:saturation=1.06,unsharp=5:5:0.25:5:5:0")
                 result.steps.append("SDR clarity and restrained colour enhancement (not HDR)")
             result.steps.append(f"Studio layout: {settings.studio_layout}" if facecam or settings.studio_layout in ("blur","fill") else "Gameplay only")
+        elif body_graph:
+            vf_parts.append(body_graph)
         elif settings.smart_reframe and visual and speaker and visual.tracks:
             keys = _smooth_keys(
                 _subject_keyframes(speaker, visual, start, end, step=0.5)
@@ -797,7 +815,16 @@ class ClipRenderer:
                     if not layout:result.warnings.append("No stable facecam: gameplay-only. Select a manual camera rectangle in Create clips.")
                 parts.append(gaming_filter(settings.width,settings.height,source_info.video.width,source_info.video.height,facecam,gameplay,settings.studio_layout,settings.camera_size))
             else:
-                parts.append(segment_video_filter(seg, settings.width, settings.height))
+                body_graph = None
+                # Explicit per-segment crop/zoom takes precedence over auto framing.
+                if settings.smart_reframe and settings.body_reframe and visual and visual.person_tracking.get("artifact") and seg.zoom == 1 and seg.crop_x == .5 and seg.crop_y == .5:
+                    from .body_reframe import body_keys, body_crop_filter
+                    keys, chosen = body_keys(visual.person_tracking["artifact"], source, seg.start, seg.end,settings.body_track_id)
+                    if keys:
+                        body_graph = body_crop_filter(source_info.video.width,source_info.video.height,
+                            settings.width,settings.height,keys,seg.source_duration)
+                        result.steps.append(f"Body reframe follows person track {chosen} (not speaker identity)")
+                parts.append(body_graph or segment_video_filter(seg, settings.width, settings.height))
             color=_build_color_filter(settings)
             if color:parts.append(color)
             graph=",".join(parts)

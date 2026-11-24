@@ -259,6 +259,17 @@ class SettingsPage(BasePage):
         clear_model.clicked.connect(lambda:self._set_person_model(""))
         tracking_row.addWidget(clear_model)
         tracking.add_layout(tracking_row)
+        self.body_reframe_check = QCheckBox("Follow body evidence in non-gaming auto framing")
+        self.body_reframe_check.setChecked(enabled(settings.get("body_reframe",True)))
+        self.body_reframe_check.toggled.connect(lambda value:self._save("body_reframe",int(value)))
+        tracking.add(self.body_reframe_check)
+        self.body_track_spin = QSpinBox()
+        self.body_track_spin.setRange(0,2147483647)
+        self.body_track_spin.setValue(int(settings.get("body_track_id",0)))
+        self.body_track_spin.setSpecialValueText("Auto: longest-supported person")
+        self.body_track_spin.setToolTip("Person ID from this project's tracking artifact; not a speaker label")
+        self.body_track_spin.valueChanged.connect(lambda value:self._save("body_track_id",value))
+        tracking.add(self.body_track_spin)
         self.content_layout.addWidget(tracking)
 
         # ---------------- local LLM ----------------
@@ -550,11 +561,11 @@ class SettingsPage(BasePage):
                 idx=widget.findData(values.get(key, values.get('default_aspect','9:16') if key=='aspect_ratio' else None))
                 if idx>=0:
                     widget.blockSignals(True);widget.setCurrentIndex(idx);widget.blockSignals(False)
-        for name,key in [('count_spin','default_clip_count'),('threads_spin','processing_threads'),('cap_size_spin','caption_size'),('silence_spin','silence_threshold_db'),('min_sil_spin','min_silence_duration'),('music_volume_spin','bgm_volume')]:
+        for name,key in [('count_spin','default_clip_count'),('threads_spin','processing_threads'),('cap_size_spin','caption_size'),('silence_spin','silence_threshold_db'),('min_sil_spin','min_silence_duration'),('music_volume_spin','bgm_volume'),('body_track_spin','body_track_id')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setValue(values[key]);widget.blockSignals(False)
-        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking')]:
+        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)

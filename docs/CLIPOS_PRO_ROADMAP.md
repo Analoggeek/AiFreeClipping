@@ -275,3 +275,28 @@ failed (`Operation not permitted`). Real-model disconnected acceptance therefore
 remains blocked; socket fixtures are not equivalent. Genuine professional
 multitrack/live playback and actual local diarization still need implementation.
 No new installer/native success, complete PRO milestone, merge or release claim.
+
+### Body-evidence export reframing
+
+Continuous body artifacts now drive actual crop-center motion in range and
+edited-timeline exports. Auto selection keeps a single longest-supported track
+(area breaks ties); users can select an ID in Settings. Gaming/manual composition
+and explicit per-segment crop/zoom keep priority. Low coverage falls back with a
+range-export warning; no identity switch or invented speaker label is introduced.
+Silence-cut output timing remaps body keys to kept source intervals. Timeline
+segments use their own source intervals before speed retiming/reordering.
+
+Artifacts must have a terminal source-matching summary, matching source size and
+mtime, valid normalized observations, and must not be frame-limited. Old artifacts
+without source identity fields must be regenerated. Source changes during tracking
+preserve the previous artifact and fail explicitly. Reads use bounded per-track
+and time-bin memory; crop dimensions are fixed and only center coordinates vary.
+Missing evidence bins use neutral framing, not fictitious person observations.
+
+Fresh full source suite: **495 passed, 9 skipped** in 98.61 s. Real FFmpeg tests
+verify that a moving known test body remains visible in range and reordered/
+speed-edited timeline output, plus manual edit precedence, stale/malformed/partial
+artifact rejection, coverage gates and cut remapping. Synthetic body observations
+are not real YOLO weight/accuracy evidence. Native live playback, full multitrack,
+actual diarization and OS-disconnected real-model acceptance remain pending.
+See [BODY_REFRAMING.md](BODY_REFRAMING.md).

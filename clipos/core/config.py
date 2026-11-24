@@ -87,6 +87,8 @@ DEFAULT_SETTINGS: dict = {
     "background_music": "",
     "bgm_ducking": True,
     "person_model_path": "",
+    "body_reframe": True,
+    "body_track_id": 0,
     "sfx_enabled": True,
     "silence_threshold_db": -32.0,
     "min_silence_duration": 0.35,

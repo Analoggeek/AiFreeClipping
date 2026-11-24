@@ -334,6 +334,7 @@ class ClipOSPipeline:
                 [(seg.start, seg.end, seg.speed) for seg in timeline.segments]) if settings.show_captions and analysis.transcript else []
             result = renderer.render_timeline(
                 source, output, timeline, settings, cues=edited_cues,
+                visual=analysis.visual, speaker=analysis.speaker, audio=analysis.audio,
                 progress_cb=prog, cancel_cb=self._cancel_requested,
             )
         else:
