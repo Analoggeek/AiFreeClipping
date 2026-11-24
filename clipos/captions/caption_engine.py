@@ -4,7 +4,7 @@ Builds word-level caption cues from a transcript and renders them with ASS (Adva
 SubStation Alpha) subtitles, which FFmpeg renders natively -- giving real animated,
 word-by-word highlighted captions without needing a separate rendering engine.
 
-All 8 caption styles are real, distinct ASS styles.
+Includes 8 legacy styles and 30 animated motion/typography combinations.
 """
 from __future__ import annotations
 
@@ -135,6 +135,7 @@ class CaptionStyle:
     karaoke: bool = False
     background_opacity: float = 0.0
     scale_with_video: bool = True
+    animation: str = "none"
 
     def to_dict(self) -> dict:
         return {
@@ -143,7 +144,7 @@ class CaptionStyle:
             "primary_color": self.primary_color, "highlight_color": self.highlight_color,
             "stroke_width": self.stroke_width, "shadow": self.shadow,
             "alignment": self.alignment, "karaoke": self.karaoke,
-            "uppercase": self.uppercase,
+            "uppercase": self.uppercase, "animation": self.animation,
         }
 
 
@@ -215,6 +216,31 @@ _register(CaptionStyle(
     font=_caption_font(), size=50, primary_color="&H00FFFFFF", outline_color="&H40000000",
     bold=False, uppercase=False, stroke_width=2.5, shadow=1.5, alignment=2, margin_v=210,
 ))
+
+
+# Ten functioning motion treatments x three typography/palette profiles. These
+# are 30 distinct rendered combinations, not 30 unique animation algorithms.
+_ANIMATIONS = {
+    "fade": "Soft Fade", "pop": "Spring Pop", "slide_up": "Rise",
+    "slide_left": "Glide", "zoom_out": "Zoom Settle", "tilt": "Tilt Settle",
+    "blur_reveal": "Focus Reveal", "pulse": "Pulse",
+    "word_pop": "Timed Word Pop", "word_reveal": "Timed Build Up",
+}
+_PROFILES = {
+    "studio": dict(size=50, bold=False, uppercase=False, stroke_width=2., shadow=1.,
+                   primary_color="&H00FFFFFF", outline_color="&H00000000"),
+    "impact": dict(size=64, bold=True, uppercase=True, stroke_width=6., shadow=3.,
+                   primary_color="&H0000EFFF", outline_color="&H00000000"),
+    "arcade": dict(size=56, bold=True, uppercase=False, stroke_width=3.5, shadow=4.,
+                   primary_color="&H00FFFF60", outline_color="&H00900070"),
+}
+for _motion, _name in _ANIMATIONS.items():
+    for _profile, _options in _PROFILES.items():
+        _register(CaptionStyle(
+            key=f"{_profile}_{_motion}", name=f"{_profile.title()} · {_name}",
+            description=f"{_profile.title()} typography with {_name.lower()} animation",
+            font=_caption_font(), margin_v=240, animation=_motion, **_options,
+        ))
 
 
 def get_style(key: str) -> CaptionStyle:
@@ -441,9 +467,26 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     parts.append(_escape(w))
             rendered_lines.append(" ".join(parts))
         body = "\\N".join(rendered_lines)
-        lines_out.append(
-            f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},Main,,0,0,0,,{body}"
-        )
+        from .motion import motion_tags, timed_words
+        duration_ms = max(1, round((cue.end-cue.start)*1000))
+        if cue.end <= cue.start:
+            continue
+        # Real word timestamps only. Missing/stale word timing falls back to a
+        # cue-level animation, never fabricated word synchronization.
+        events = timed_words(cue, st.animation, st.uppercase)
+        if events:
+            for start, end, event_text in events:
+                event_body = "\\N".join(" ".join(_escape(w) for w in ln)
+                                             for ln in _wrap(event_text.split()))
+                mode = "pop" if st.animation == "word_pop" else "fade"
+                tags = motion_tags(mode, max(1, round((end-start)*1000)), width, height, align, margin_v)
+                lines_out.append(f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Main,,0,0,0,,{tags}{event_body}")
+        else:
+            mode = "pop" if st.animation == "word_pop" else "fade" if st.animation == "word_reveal" else st.animation
+            tags = motion_tags(mode, duration_ms, width, height, align, margin_v)
+            lines_out.append(
+                f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},Main,,0,0,0,,{tags}{body}"
+            )
 
     return header + "\n".join(lines_out) + "\n"
 

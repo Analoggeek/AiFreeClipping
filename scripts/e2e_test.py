@@ -156,8 +156,13 @@ def main() -> int:
                   content.count("Dialogue:") == len(cues))
             check("caption cues carry word timings",
                   all(len(cue.words) > 0 for cue in cues))
-        check("caption styles are registered", len(list_styles()) == 8,
-              f"{len(list_styles())} styles")
+        styles = list_styles()
+        legacy = {"mrbeast", "minimal_white", "neon_gaming", "modern_podcast",
+                  "bold_viral", "cinematic", "karaoke", "clean_professional"}
+        check("legacy and animated caption styles are registered",
+              legacy <= {style["key"] for style in styles}
+              and sum(style["animation"] != "none" for style in styles) >= 30,
+              f"{len(styles)} styles")
 
     # ------------------------------------------------------------------ render
     print("\n=== 5. Render ===")

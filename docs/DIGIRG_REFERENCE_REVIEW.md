@@ -12,7 +12,7 @@ Reference: [DIGIRGCLOUD/DIGIRGCLIPPINGFREE](https://github.com/DIGIRGCLOUD/DIGIR
 | Faster-Whisper | `captions.py`: word timestamps, VAD, model/device choice, GPU warmup/CPU retry; can download snapshots | **Existing CLIPOS implementation**, foundation improved installed-local-weight-only loading and explicit setup downloads | Local word transcription exists; no new speech model or real-weight disconnected acceptance in this change |
 | Ollama refinement | `smart.py`: local model selection, transcript JSON scoring/titles/hooks and evidence checks, deterministic fallback | **Existing CLIPOS title path plus prior foundation** strict loopback transport and bounded reviewed edit plans; rejects proxies/redirects/cloud model references | No newly ported evidence-validated semantic highlight reranker. Reviewed agent changes supported settings/ranges, not arbitrary multitrack edits or vision |
 | Gameplay/facecam layouts | `layouts.py`: crop/scale/overlay, masks, blur; independent camera/game source rectangles | **Previously adapted with MIT attribution**; existing native crop controls, FFmpeg composition and presets retained. New panel refinement feeds the existing path | Real rendering, not semantic player extraction. Manual crop override remains important; existing adjustable/split/PIP options are not a newly built professional compositing engine |
-| Animated ASS captions | `captions.py` / `subtitles.py`: grouped word events, full-line/highlight/build-up/pop styles, ASS transforms/fades | **Existing CLIPOS ASS/caption pipeline retained** | This patch does not deliver or certify >=30 distinct functioning animated presets, multilingual editorial UI or caption timeline automation |
+| Animated ASS captions | `captions.py` / `subtitles.py`: grouped word events, full-line/highlight/build-up/pop styles, ASS transforms/fades | **Existing pipeline retained; 30 new independently developed animated combinations** (10 motion treatments × 3 typography/palette profiles) | All 30 raster-tested with/without word timings; three real video export integrations. Native visual review, multilingual editorial UI and caption timeline automation remain pending |
 | Local processing / hardware fallback | `encoders.py`: advertised encoder discovery plus cached tiny test encode; CPU-last retry | **Improved with independently implemented runtime preflight** for NVENC, QSV and VideoToolbox, H.264 and HEVC; existing full-render CPU retry retained | Three-frame local encode, eight-second timeout per candidate, bounded cache keyed by binary identity and 60-second epoch. VideoToolbox software fallback is disabled to avoid labelling a software session as hardware. No native driver/performance claim from Linux policy tests |
 | Subject association | Upstream facecam sampling is not a continuous multiperson tracker | **Improved** `build_tracks`: one-to-one per timestamp, bounded velocity prediction, size gating, shot-cut retirement, stable IDs, observed-interval duration | Spatial sampled face association only; not biometric identity, YOLO, ByteTrack, person/body tracking or speaker diarization |
 
@@ -28,7 +28,7 @@ The previous frame-difference motion list was N-1 values and unused in ranking. 
 | Dynamic vertical / subject-aware reframing | Existing FFmpeg crop/layout/subject-follow paths retained | Continuous body-aware composition and editable motion-keyframe timeline |
 | Professional multitrack timeline | Existing bounded range/settings editing retained | Persistent editable video/audio/caption/overlay tracks, trim/split/ripple, automation, snapping, keyframes, undo integration |
 | Real-time playback / preview | Existing native source playback and composition preview retained | True multitrack live engine, proxy/cache scheduling and native acceptance; rendered previews are not real-time editing |
-| >=30 functional animated caption presets | Existing ASS generation retained | Distinct render-tested presets, editable word timing/text and multilingual acceptance |
+| >=30 functional animated caption presets | 30 new animated combinations plus eight legacy styles; real ASS raster and export tests | Native visual review, editable word timing/text workflow and multilingual acceptance |
 | Local editing agent | Prior foundation validates/reviews/applies supported settings and ranges transactionally | Vision-guided autonomous modes, arbitrary timeline operations and real installed-LLM acceptance |
 | Advanced audio | Existing analysis/render filters retained | Validated denoising, separation, sync, VAD-driven editing, track ducking/automation workflow |
 | AI scene understanding | Existing cuts/text heuristics and measured activity | Installed local vision-language model, explicit model management, grounded semantic evidence |
@@ -91,3 +91,13 @@ scope. Validation: **93 targeted tests passed**, including actual exports whose
 duration changes correctly after reopened undo/redo. Full-suite collection was
 blocked by missing `yaml`/native `libGL.so.1` in this environment; no new full-suite
 result or native UI acceptance is claimed. See `CLIPOS_PRO_ROADMAP.md`.
+
+### Follow-up: actual animated caption presets
+
+Added thirty new ASS animation/typography combinations while retaining eight
+legacy styles. Full matrix and limits: `ANIMATED_CAPTIONS.md`. All thirty have
+real libass temporal-pixel tests, with/without word evidence; three additional
+actual MP4 export cases verify renderer integration. Selected regression:
+174 passed / 2 Qt-dependent tests deselected; generated-video E2E: 35/35 passed.
+This does not establish native real-time ASS preview or multilingual/editorial
+acceptance. Professional timeline and continuous YOLO/ByteTrack remain pending.

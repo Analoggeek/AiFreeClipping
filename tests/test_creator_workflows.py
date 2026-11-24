@@ -185,3 +185,26 @@ def test_reopened_undo_redo_changes_real_export_duration(video,tmp_path):
     assert restored.redo()
     renderer.render_timeline(video,tmp_path/'redone.mp4',restored,settings)
     assert probe(tmp_path/'redone.mp4').duration==pytest.approx(1,abs=.2)
+
+
+@pytest.mark.parametrize('style',['studio_word_pop','impact_slide_up','arcade_word_reveal'])
+def test_new_animated_caption_styles_reach_real_clip_export(video,tmp_path,style):
+    from clipos.captions.caption_engine import CaptionCue
+    from clipos.core.ffmpeg import probe
+    cue=CaptionCue(0,1,'Real captions',[
+        {'w':'Real','s':0,'e':.45},{'w':'captions','s':.5,'e':1}])
+    result=ClipRenderer(tmp_path/'work').render(video,tmp_path/'animated.mp4',0,1,
+        RenderSettings(width=270,height=480,fps=15,show_captions=True,
+                       caption_style=style,caption_size=28,caption_position='middle',
+                       sound_effects=False,encoder_preference='cpu'),cues=[cue])
+    assert result.size_bytes>0
+    info=probe(tmp_path/'animated.mp4')
+    assert info.has_video and info.has_audio
+    assert (info.video.width,info.video.height)==(270,480)
+    ass=list((tmp_path/'work').rglob('*.ass'))
+    assert ass
+    content=ass[0].read_text()
+    if 'slide' in style:
+        assert '\\move(' in content
+    else:
+        assert '\\t(' in content or '\\fad(' in content

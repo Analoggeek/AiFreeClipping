@@ -86,7 +86,7 @@ complete disconnected AI workflow are **not verified** in this environment.
 | M3: perception and stable crop | Local body/object detector and tracker, facecam/game/screen classifier, scene resets, speaker association, confidence/uncertainty, smoothing/hysteresis, manual priority overrides, annotated-video accuracy/jitter tests | Existing face/speaker/scene heuristics only; PRO detectors/tracking/segmentation pending |
 | M4: media engine and player | Crash-safe versioned multi-track document and effect graph; proxies/cache invalidation, audio/video clocks, waveform, scrubbing/frame stepping/rate/fullscreen, actual transition/keyframe preview | Current source/rendered player and single-source timeline exist; professional engine pending |
 | M5: multitrack editor | Genuine video/audio/caption/music/SFX/overlay/transition/adjustment tracks, drag/trim/split/merge/ripple, locks/visibility, automation/keyframes/rotation/opacity/speed ramps, undo/redo/copy/snap/shortcuts mapped to renderer | Pending; no dummy track rows counted as implemented |
-| M6: captions and audio | 30 distinct functioning presets, editable word timings/transcript, colour/highlight/spacing/alignment/margins/animation controls; voice separation where supported, ducking and audio automation | Eight current ASS styles and existing audio filters only; PRO expansion pending |
+| M6: captions and audio | 30 distinct functioning presets, editable word timings/transcript, colour/highlight/spacing/alignment/margins/animation controls; voice separation where supported, ducking and audio automation | 30 animated motion/typography combinations added alongside eight legacy styles; ASS pixel/render tests passed. Editable word-timing UI, native visual review and advanced audio expansion remain pending |
 | M7: autonomous modes | Gaming/podcast/talking-head/education/cinematic/reaction plans grounded in perception, actual effect/transition decisions, safe iterative instructions | Bounded supported-operation agent only; full six-mode autonomous intelligence pending |
 | M8: native reliability/release | Long/4K/multitrack stress, RAM/VRAM limits, recovery, offline and native driver/install/update tests, reproducible signed builds and acceptance artifacts | Prior 2.5.1 native evidence does not certify new PRO work |
 
@@ -176,3 +176,25 @@ speed edit, undoes it and renders a 2-second file, saves/reopens again, redoes i
 and renders a 1-second file. The attempted full suite was blocked during
 collection by missing environment dependencies (`yaml`, native `libGL.so.1`);
 there is no new full-suite/native acceptance claim for this increment.
+
+### Animated caption follow-up
+
+Thirty independently implemented animated combinations are now available through
+the shared caption registry (ten motion treatments × Studio/Impact/Arcade visual
+profiles). Eight existing styles are retained unchanged. See
+[ANIMATED_CAPTIONS.md](ANIMATED_CAPTIONS.md) for all keys, timing fallback behavior
+and exact implementation limits. These are thirty distinct combinations, not
+thirty unique algorithms. ASS frame tests check visible, changing pixels for
+every combination with and without supplied word timings. Missing/stale timing
+falls back to cue-level animation, never fabricated word synchronization.
+Caption Studio's illustrative painted sample is explicitly labelled typography
+sample rather than exact live ASS motion.
+
+Validation: selected regression **174 passed, 2 deselected** (two Qt import tests
+blocked by missing native libGL). Generated-video pipeline E2E **35/35 passed**.
+Its old exact-eight-style assertion was updated to require all eight legacy keys
+and at least thirty animated styles; the initial run failed only that obsolete
+count check. Three new actual MP4 export tests exercise new styles through the
+existing renderer. This is not full-suite/native acceptance. Multilingual visual
+review, editable word-timing workflow, native live ASS preview, advanced audio,
+continuous person tracking and professional multitrack work remain pending.
