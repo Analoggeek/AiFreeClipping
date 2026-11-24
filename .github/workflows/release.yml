@@ -114,7 +114,7 @@ jobs:
           set -e
           for attempt in 1 2 3; do
             echo "### install attempt $attempt"
-            if python scripts/install_deps.py --build --tracking --diarization $INSTALL_DEPS_ARGS; then
+            if python scripts/install_deps.py --build --tracking --diarization --ocr $INSTALL_DEPS_ARGS; then
               exit 0
             fi
             echo "### attempt $attempt failed; waiting before trying again"
@@ -163,7 +163,7 @@ jobs:
           fi
           mkdir -p build
           set +e  # Preserve pytest exit while emitting bounded JUnit diagnostics.
-          python -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_automatic_selection.py tests/test_tightening.py tests/test_longform_preferences.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py tests/test_creator_workflows.py tests/test_timeline.py tests/test_timeline_recovery.py tests/test_timeline_history.py tests/test_animated_captions.py tests/test_audio_ducking.py tests/test_reference_enhancements.py tests/test_encoder_preflight.py tests/test_timeline_integrity.py tests/test_person_tracking.py tests/test_body_reframe.py tests/test_multitrack.py tests/test_graphical_multitrack.py tests/test_waveform.py tests/test_diarization.py --junitxml=build/editing-tests.xml -q 2>&1 | tee build/editing-tests.log
+          python -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_automatic_selection.py tests/test_tightening.py tests/test_longform_preferences.py tests/test_speaker_vision_intent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py tests/test_creator_workflows.py tests/test_timeline.py tests/test_timeline_recovery.py tests/test_timeline_history.py tests/test_animated_captions.py tests/test_audio_ducking.py tests/test_reference_enhancements.py tests/test_encoder_preflight.py tests/test_timeline_integrity.py tests/test_person_tracking.py tests/test_body_reframe.py tests/test_multitrack.py tests/test_graphical_multitrack.py tests/test_waveform.py tests/test_diarization.py --junitxml=build/editing-tests.xml -q 2>&1 | tee build/editing-tests.log
           test_status="${PIPESTATUS[0]}"
           python scripts/report_test_failures.py build/editing-tests.xml
           exit "$test_status"
@@ -221,7 +221,7 @@ jobs:
           mkdir -p build
           "$CLIPOS_INTEL_PYTHON" -c 'import platform; assert platform.machine() == "x86_64"'
           set +e  # Preserve pytest exit while emitting bounded JUnit diagnostics.
-          "$CLIPOS_INTEL_PYTHON" -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_automatic_selection.py tests/test_tightening.py tests/test_longform_preferences.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py tests/test_creator_workflows.py tests/test_timeline.py tests/test_timeline_recovery.py tests/test_timeline_history.py tests/test_animated_captions.py tests/test_audio_ducking.py tests/test_reference_enhancements.py tests/test_encoder_preflight.py tests/test_timeline_integrity.py tests/test_person_tracking.py tests/test_body_reframe.py tests/test_multitrack.py tests/test_graphical_multitrack.py tests/test_waveform.py tests/test_diarization.py --junitxml=build/editing-tests-intel.xml -q 2>&1 | tee build/editing-tests-intel.log
+          "$CLIPOS_INTEL_PYTHON" -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_automatic_selection.py tests/test_tightening.py tests/test_longform_preferences.py tests/test_speaker_vision_intent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py tests/test_creator_workflows.py tests/test_timeline.py tests/test_timeline_recovery.py tests/test_timeline_history.py tests/test_animated_captions.py tests/test_audio_ducking.py tests/test_reference_enhancements.py tests/test_encoder_preflight.py tests/test_timeline_integrity.py tests/test_person_tracking.py tests/test_body_reframe.py tests/test_multitrack.py tests/test_graphical_multitrack.py tests/test_waveform.py tests/test_diarization.py --junitxml=build/editing-tests-intel.xml -q 2>&1 | tee build/editing-tests-intel.log
           test_status="${PIPESTATUS[0]}"
           python scripts/report_test_failures.py build/editing-tests-intel.xml
           exit "$test_status"

@@ -370,6 +370,9 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
         "--exclude-module", "pytest",
         "--exclude-module", "IPython",
     ]
+    import importlib.util
+    if importlib.util.find_spec('rapidocr_onnxruntime') is not None:
+        args += ['--collect-all','rapidocr_onnxruntime','--collect-all','shapely','--collect-all','pyclipper']
     icon = ROOT / "resources" / "icons" / (
         "app_icon.ico" if target == "windows" else "app_icon.icns"
     )

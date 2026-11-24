@@ -263,6 +263,10 @@ class SettingsPage(BasePage):
         self.body_reframe_check.setChecked(enabled(settings.get("body_reframe",True)))
         self.body_reframe_check.toggled.connect(lambda value:self._save("body_reframe",int(value)))
         tracking.add(self.body_reframe_check)
+        self.shot_reframe_check=QCheckBox('Hold one face crop per shot; reset at scene cuts (heuristic)')
+        self.shot_reframe_check.setChecked(enabled(settings.get('shot_aware_reframe','1')))
+        self.shot_reframe_check.toggled.connect(lambda v:self._save('shot_aware_reframe',int(v)))
+        tracking.add(self.shot_reframe_check)
         self.body_track_spin = QSpinBox()
         self.body_track_spin.setRange(0,2147483647)
         self.body_track_spin.setValue(int(settings.get("body_track_id",0)))
@@ -327,13 +331,29 @@ class SettingsPage(BasePage):
         self.automatic_selection_check.setChecked(enabled(settings.get('automatic_selection','1')))
         self.automatic_selection_check.toggled.connect(lambda v:self._save('automatic_selection',int(v)))
         form4.addRow('',self.automatic_selection_check)
+        self.selection_intent_check=QCheckBox('Compile direction into grounded phrases / explicit clock ranges locally')
+        self.selection_intent_check.setChecked(enabled(settings.get('selection_compile_intent','0')))
+        self.selection_intent_check.toggled.connect(lambda v:self._save('selection_compile_intent',int(v)))
+        form4.addRow('',self.selection_intent_check)
+        self.selection_ocr_check=QCheckBox('Read finalist on-screen text with explicitly installed local OCR models')
+        self.selection_ocr_check.setChecked(enabled(settings.get('selection_ocr_review','0')))
+        self.selection_ocr_check.toggled.connect(lambda v:self._save('selection_ocr_review',int(v)))
+        form4.addRow('',self.selection_ocr_check)
+        self.selection_vision_check=QCheckBox('Local visual-model review of up to four finalists (three source frames each)')
+        self.selection_vision_check.setChecked(enabled(settings.get('selection_visual_review','0')))
+        self.selection_vision_check.toggled.connect(lambda v:self._save('selection_visual_review',int(v)))
+        form4.addRow('',self.selection_vision_check)
+        self.selection_vision_model_field=QLineEdit(str(settings.get('selection_vision_model','')))
+        self.selection_vision_model_field.setMaxLength(160)
+        self.selection_vision_model_field.editingFinished.connect(lambda:self._save('selection_vision_model',self.selection_vision_model_field.text()))
+        form4.addRow('Installed local vision model',self.selection_vision_model_field)
         self.selection_rerank_check=QCheckBox('Rerank up to 24 finalists with installed local model')
         self.selection_rerank_check.setChecked(enabled(settings.get('selection_local_rerank','0')))
         self.selection_rerank_check.toggled.connect(lambda v:self._save('selection_local_rerank',int(v)))
         form4.addRow('',self.selection_rerank_check)
         for label,key,limit in [('Prefer transcript phrases (comma-separated)','selection_include',2000),
                                 ('Exclude transcript phrases (comma-separated)','selection_exclude',2000),
-                                ('Selection direction (requires local reranking)','selection_direction',1000)]:
+                                ('Selection direction (local compilation / reranking)','selection_direction',1000)]:
             field=QLineEdit(str(settings.get(key,'')));field.setMaxLength(limit)
             field.editingFinished.connect(lambda k=key,f=field:self._save(k,f.text()))
             setattr(self,key+'_field',field);form4.addRow(label,field)
@@ -618,11 +638,11 @@ class SettingsPage(BasePage):
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setValue(values[key]);widget.blockSignals(False)
-        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe'),('automatic_selection_check','automatic_selection'),('selection_rerank_check','selection_local_rerank'),('learn_preferences_check','learn_selection_preferences')]:
+        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe'),('automatic_selection_check','automatic_selection'),('selection_rerank_check','selection_local_rerank'),('learn_preferences_check','learn_selection_preferences'),('speaker_colors_check','speaker_caption_colors'),('selection_vision_check','selection_visual_review'),('selection_intent_check','selection_compile_intent'),('shot_reframe_check','shot_aware_reframe'),('selection_ocr_check','selection_ocr_review')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)
-        for key in ('selection_include','selection_exclude','selection_direction'):
+        for key in ('selection_include','selection_exclude','selection_direction','selection_vision_model'):
             widget=getattr(self,key+'_field',None)
             if widget is not None:
                 widget.blockSignals(True);widget.setText(str(values.get(key,'')));widget.blockSignals(False)

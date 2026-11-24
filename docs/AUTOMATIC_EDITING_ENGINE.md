@@ -203,3 +203,53 @@ specific limits above; this does not turn signal-based downtime into semantic
 understanding or certify physical audio/video and real-model accuracy. Latest
 inspected native run 45408739163 had Windows/Linux jobs successful and macOS still
 running; no native acceptance result is inferred from a hosted build alone.
+
+## Source-grounded local evidence and captions
+
+The Settings page adds independent opt-ins for local visual review, installed
+OCR, and constrained direction compilation. All remain local; there is no
+publishing or upload path. Visual review requires an explicitly installed,
+vision-capable Ollama model on the existing loopback-only transport. Up to four
+finalists get three decoded frames each. Model verdicts are fallible evidence;
+the bounded +/-3 ranking adjustment never changes the measured signal score.
+Failures are recorded instead of manufacturing successful reviews.
+
+`python scripts/install_deps.py --ocr` explicitly installs RapidOCR 1.4.4 and
+its wheel-bundled PaddleOCR detector/recognizer/classifier ONNX files. No model
+is fetched by the OCR application path. Installed models are SHA-256 identified
+in evidence, CPU sessions are bounded, ONNX telemetry is disabled, and source
+freshness/cancellation is checked. OCR observations include timestamps,
+normalized boxes and confidence (>=0.8); they do not themselves establish a
+kill, win, game state, or sound event. OCR text is supplied as labelled evidence
+to the optional local semantic selector, not a guaranteed keyword boost.
+Optional installed OCR is collected into frozen builds; native build workflows
+explicitly request it. Apache notices are in `resources/licenses/` (RapidOCR
+and PaddleOCR). No reference application's code, prompts or tests were copied.
+
+Intent compilation accepts only phrases literally grounded in the instruction
+and explicitly written valid clock endpoints. Positive ranges intersect, never
+expand, the user's hard selected ranges. Unsupported directions and failures
+remain visible in the selection report. This is not complete arbitrary natural
+language editing or semantic time-exclusion interpretation.
+
+Speaker caption colours use source-bound anonymous diarization turns, validate
+word text/timestamps, split at unambiguous speaker changes, and survive ordinary
+and saved-timeline speed/cut retiming. Overlap, missing words or stale text use
+the default caption colour. These are audio speaker labels, not visible person
+identities. Existing caption styles and keyword emphasis remain available.
+
+Shot-aware crop resets at scene boundaries and holds the best-observed face
+track within each shot. No-evidence shots reset to centre. Piecewise crop times
+are mapped through kept ranges; explicit manual composition, gaming layout and
+body framing keep precedence. This is face-coverage framing, **not TalkNet
+active-speaker audiovisual association**. TalkNet inference and semantic gaming
+sound classification are not implemented by this increment; no synthetic or
+mock local-model response constitutes acceptance of those capabilities.
+
+Validation: full suite 570 passed / 10 skipped; E2E import-to-export/batch 35/35.
+Tests include actual libass colour pixels, FFmpeg cut-boundary crop pixels,
+source-frame decoding and real trained OCR on a generated text video with
+network requests blocked. Ollama responses are mocked in automated contracts;
+those tests do not prove real visual/intent model quality. Skips/headless runs
+do not certify physical A/V sync, disconnected OS operation, or native
+Windows/macOS hardware acceptance. No release is implied by these results.

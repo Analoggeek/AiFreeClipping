@@ -152,6 +152,7 @@ def main() -> int:
                          "always pinned")
     ap.add_argument("--tracking", action="store_true", help="install optional local YOLOX/ByteTrack runtime (no model downloads)")
     ap.add_argument("--diarization", action="store_true", help="install local neural diarization runtime, never model weights")
+    ap.add_argument("--ocr", action="store_true", help="explicitly install RapidOCR runtime and its wheel-bundled local OCR models")
     args = ap.parse_args()
 
     try:
@@ -206,6 +207,12 @@ def _install(args) -> int:
     if args.build:
         packages += BUILD
     run(pip("install", *packages), "installing the core packages")
+
+    if getattr(args, "ocr", False):
+        run(pip("install", "pyclipper>=1.2,<2", "shapely>=1.8,<3", "six>=1.15,<2"), "installing local OCR support")
+        # Use the existing headless cv2 implementation, never install a second
+        # GUI OpenCV wheel over it. This pinned wheel includes local ONNX models.
+        run(pip("install", "--no-deps", "rapidocr-onnxruntime==1.4.4"), "installing explicit bundled OCR models")
 
     if getattr(args, "diarization", False):
         run(pip("install", "sherpa-onnx==1.12.34"), "installing optional neural diarization runtime")

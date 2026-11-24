@@ -516,7 +516,7 @@ def detect_clips(
     progress_cb: Callable[[float, str], None] | None = None,
     selected_ranges: list[tuple[float, float]] | None = None,
     selection_policy=None, selection_report=None, selection_host='http://127.0.0.1:11434',
-    selection_model='llama3.1:8b', cancel_cb=None, selection_preferences=None,
+    selection_model='llama3.1:8b', cancel_cb=None, selection_preferences=None, evidence_reviewer=None,
 ) -> list[ClipCandidate]:
     """Rank candidate windows and return the best ``target_count`` distinct clips."""
     if duration <= 0:
@@ -588,7 +588,7 @@ def detect_clips(
     if selection_policy is not None:
         from .automatic_selection import select
         chosen,report=select(scored,duration,target_count,selection_policy,
-            host=selection_host,model=selection_model,cancel_cb=cancel_cb,preferences=selection_preferences)
+            host=selection_host,model=selection_model,cancel_cb=cancel_cb,preferences=selection_preferences,evidence_reviewer=evidence_reviewer)
         if selection_report is not None:selection_report.update(report)
         for candidate in chosen:candidate.description=_make_description(candidate)
         if progress_cb:progress_cb(100.,f'Selected {len(chosen)} distinct eligible clips')

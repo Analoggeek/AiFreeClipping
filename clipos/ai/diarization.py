@@ -143,6 +143,27 @@ def diarize(wav,segmentation,embedding,output,*,cancel_cb=None,progress_cb=None,
                 'turns':len(turns),'engine':payload['engine']}
 
 
+def caption_turns(summary,duration,signature):
+    """Read only current-source validated anonymous turns, not arbitrary caption tags."""
+    import re
+    if summary.get('source_signature')!=signature:raise ValueError('Diarization source binding mismatch')
+    path=Path(summary['artifact'])
+    if path.stat().st_size>8*1024*1024:raise ValueError('Diarization artifact exceeds caption bound')
+    data=json.loads(path.read_text())
+    if data.get('schema')!='clipos.diarization.v1' or abs(data.get('duration',-1)-duration)>.05:
+        raise ValueError('Diarization artifact incompatible with source')
+    turns=data.get('turns')
+    if not isinstance(turns,list) or len(turns)>100000:raise ValueError('Invalid speaker turns')
+    previous=-1.
+    for row in turns:
+        a,b=row['start'],row['end'];label=row['speaker']
+        if (any(type(v) not in (int,float) or not math.isfinite(v) for v in (a,b)) or
+            not 0<=a<b<=duration+.05 or a<previous or not isinstance(label,str) or not re.fullmatch(r'Speaker [A-Z]{1,3}',label)):
+            raise ValueError('Invalid speaker caption evidence')
+        previous=a
+    return turns
+
+
 def worker_main(args):
     """Child-only native model loading. A native abort cannot terminate the desktop process."""
     config={}

@@ -73,6 +73,7 @@ class RenderSettings:
     caption_background: bool = False
     show_captions: bool = True
     smart_reframe: bool = True
+    shot_aware_reframe: bool = True
     body_reframe: bool = True
     body_track_id: int = 0
     auto_zoom: bool = True
@@ -526,6 +527,14 @@ class ClipRenderer:
             else:
                 result.warnings.append("Selected body evidence lacks coverage; existing face/center framing used")
 
+        shot_graph=None
+        if settings.smart_reframe and settings.shot_aware_reframe and settings.editing_preset!='gaming' and not body_graph and visual:
+            from .shot_reframe import crop_filter
+            try:
+                shot_graph=crop_filter(visual,start,end,keeps if len(keeps)>1 else [(0.,clip_dur)],
+                    src_w,src_h,settings.width,settings.height)
+            except ValueError as exc:result.warnings.append(str(exc)+'; existing framing retained')
+
         if settings.editing_preset == "gaming":
             from .presets import gaming_filter
             facecam, gameplay = settings.facecam_rect, settings.gameplay_rect
@@ -548,6 +557,9 @@ class ClipRenderer:
             result.steps.append(f"Studio layout: {settings.studio_layout}" if facecam or settings.studio_layout in ("blur","fill") else "Gameplay only")
         elif body_graph:
             vf_parts.append(body_graph)
+        elif shot_graph:
+            vf_parts.append(shot_graph)
+            result.steps.append('Shot-held face-coverage framing; hard-cut reset, not verified active speaker')
         elif settings.smart_reframe and visual and speaker and visual.tracks:
             keys = _smooth_keys(
                 _subject_keyframes(speaker, visual, start, end, step=0.5)
@@ -824,7 +836,15 @@ class ClipRenderer:
                         body_graph = body_crop_filter(source_info.video.width,source_info.video.height,
                             settings.width,settings.height,keys,seg.source_duration)
                         result.steps.append(f"Body reframe follows person track {chosen} (not speaker identity)")
-                parts.append(body_graph or segment_video_filter(seg, settings.width, settings.height))
+                shot_graph=None
+                if not body_graph and settings.smart_reframe and settings.shot_aware_reframe and visual and seg.zoom==1 and seg.crop_x==.5 and seg.crop_y==.5:
+                    from .shot_reframe import crop_filter
+                    try:
+                        shot_graph=crop_filter(visual,seg.start,seg.end,[(0.,seg.source_duration)],
+                            source_info.video.width,source_info.video.height,settings.width,settings.height)
+                    except ValueError as exc:result.warnings.append(str(exc)+'; manual/center framing retained')
+                    if shot_graph:result.steps.append('Shot-held face framing with cut reset (heuristic)')
+                parts.append(body_graph or shot_graph or segment_video_filter(seg, settings.width, settings.height))
             color=_build_color_filter(settings)
             if color:parts.append(color)
             graph=",".join(parts)

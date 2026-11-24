@@ -220,6 +220,7 @@ class ClipOSPipeline:
                     cancel_cb=self._cancel_requested,transcript=result.transcript,
                     progress_cb=lambda p,m:self._report("speakers",78.+p*.015,m))
             except FFmpegCancelled as exc:raise PipelineCancelled("Diarization cancelled") from exc
+            result.diarization['source_signature']=result.source_signature
             self._check_cancel()
 
         # -- speaker tracking ---------------------------------------------------
@@ -249,15 +250,42 @@ class ClipOSPipeline:
         from ..ai.automatic_selection import SelectionPolicy
         from ..core.editing import enabled
         policy=None
+        intent_report={'status':'disabled'}
         if enabled(self.db.get_setting('automatic_selection','1')):
             phrases=lambda key:tuple(p.strip() for p in self.db.get_setting(key,'').split(',') if p.strip())
             policy=SelectionPolicy(include=phrases('selection_include'),exclude=phrases('selection_exclude'),
                 direction=self.db.get_setting('selection_direction',''),
                 local_rerank=enabled(self.db.get_setting('selection_local_rerank','0'))).validate()
+            if enabled(self.db.get_setting('selection_compile_intent','0')) and policy.direction.strip():
+                from ..ai.clip_intent import compile_intent,intersect_ranges
+                from ..core.local_ai import LocalAIError
+                from dataclasses import replace
+                try:
+                    parsed=compile_intent(policy.direction,analysis.duration,
+                        self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
+                        self.db.get_setting('llm_model','llama3.1:8b'))
+                    self._check_cancel()
+                    candidate_policy=replace(policy,include=tuple(dict.fromkeys([*policy.include,*parsed['prefer']])),
+                        exclude=tuple(dict.fromkeys([*policy.exclude,*parsed['exclude']]))).validate()
+                    selected_ranges=intersect_ranges(selected_ranges,parsed['ranges'])
+                    policy=candidate_policy
+                    intent_report={'status':'compiled','result':parsed,'interpretation':'fallible local-model interpretation; fields grounded to instruction'}
+                except (LocalAIError,ValueError,TypeError,KeyError) as exc:
+                    intent_report={'status':'unapplied','reason':str(exc)[:300]}
         selection_report={}
         from ..ai.preferences import learn
         preferences=learn(self.db) if enabled(self.db.get_setting('learn_selection_preferences','0')) else None
+        evidence_reviewer=None
+        if enabled(self.db.get_setting('selection_visual_review','0')) or enabled(self.db.get_setting('selection_ocr_review','0')):
+            from ..ai.game_evidence import review
+            source=self.db.get_project(self.project_id)['source_path']
+            evidence_reviewer=lambda rows:review(source,rows,signature=analysis.source_signature,
+                ocr=enabled(self.db.get_setting('selection_ocr_review','0')),
+                vision=enabled(self.db.get_setting('selection_visual_review','0')),
+                host=self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
+                model=self.db.get_setting('selection_vision_model',''),cancel_cb=self._cancel_requested)
         clips = clip_detector.detect_clips(
+            evidence_reviewer=evidence_reviewer,
             selection_policy=policy,selection_report=selection_report,selection_preferences=preferences,
             selection_host=self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
             selection_model=self.db.get_setting('llm_model','llama3.1:8b'),cancel_cb=self._cancel_requested,
@@ -275,6 +303,7 @@ class ClipOSPipeline:
         self._check_cancel()
         analysis.selection=selection_report
         if selection_report:
+            selection_report['intent_compilation']=intent_report
             from .timeline import Timeline
             selection_report['project_id']=self.project_id
             selection_report['selected_source_ranges']=[list(pair) for pair in selected_ranges] if selected_ranges is not None else None
@@ -380,6 +409,16 @@ class ClipOSPipeline:
                 clip["start_time"], clip["end_time"],
                 words_per_cue=3 if settings.caption_style == "clean_professional" else 6,
             )
+        turns=[]
+        from ..core.editing import enabled
+        if enabled(self.db.get_setting('speaker_caption_colors','1')) and analysis.diarization:
+            from ..ai.diarization import caption_turns
+            from .waveform import source_signature
+            if not analysis.source_signature or analysis.source_signature!=source_signature(source):
+                raise ValueError('Speaker caption source changed; rerun analysis')
+            turns=caption_turns(analysis.diarization,analysis.duration,analysis.source_signature)
+            from ..captions.caption_engine import apply_speaker_labels
+            cues=apply_speaker_labels(cues,turns)
         self._check_cancel()
 
         work_dir = PATHS.projects / str(self.project_id) / "work"
@@ -397,8 +436,12 @@ class ClipOSPipeline:
             if timeline.recovered_from:
                 self._report("render", 5., "Recovered previous timeline backup; latest edits may be missing")
             from ..captions.caption_engine import retime_cues, build_cues
-            edited_cues = retime_cues(build_cues(analysis.transcript, 0, analysis.duration),
-                [(seg.start, seg.end, seg.speed) for seg in timeline.segments]) if settings.show_captions and analysis.transcript else []
+            source_cues=build_cues(analysis.transcript,0,analysis.duration) if settings.show_captions and analysis.transcript else []
+            if turns:
+                from ..captions.caption_engine import apply_speaker_labels
+                source_cues=apply_speaker_labels(source_cues,turns)
+            edited_cues = retime_cues(source_cues,
+                [(seg.start, seg.end, seg.speed) for seg in timeline.segments])
             result = renderer.render_timeline(
                 source, output, timeline, settings, cues=edited_cues,
                 visual=analysis.visual, speaker=analysis.speaker, audio=analysis.audio,

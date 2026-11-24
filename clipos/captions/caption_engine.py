@@ -24,6 +24,7 @@ class CaptionCue:
     end: float
     text: str
     words: list[dict] = field(default_factory=list)  # [{w, s, e}]
+    speaker: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -31,6 +32,7 @@ class CaptionCue:
             "end": round(self.end, 3),
             "text": self.text,
             "words": self.words,
+            "speaker": self.speaker,
         }
 
 
@@ -449,6 +451,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     hl = {w.lower().strip(".,!?") for w in (highlight_words or [])}
 
     for cue in cues:
+        cue_color=speaker_color(cue.speaker)
+        primary=cue_color or st.primary_color
+        speaker_tag=f"{{\\1c{primary}&}}" if cue_color else ''
         text = cue.text
         if st.uppercase:
             text = text.upper()
@@ -461,7 +466,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 if hl and core in hl:
                     parts.append(
                         f"{{\\c{st.highlight_color}&\\fscx118\\fscy118\\b1}}{_escape(w)}"
-                        f"{{\\c{st.primary_color}&\\fscx100\\fscy100\\b{int(st.bold)}}}"
+                        f"{{\\c{primary}&\\fscx100\\fscy100\\b{int(st.bold)}}}"
                     )
                 else:
                     parts.append(_escape(w))
@@ -480,12 +485,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                                              for ln in _wrap(event_text.split()))
                 mode = "pop" if st.animation == "word_pop" else "fade"
                 tags = motion_tags(mode, max(1, round((end-start)*1000)), width, height, align, margin_v)
-                lines_out.append(f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Main,,0,0,0,,{tags}{event_body}")
+                lines_out.append(f"Dialogue: 0,{_ass_time(start)},{_ass_time(end)},Main,,0,0,0,,{tags}{speaker_tag}{event_body}")
         else:
             mode = "pop" if st.animation == "word_pop" else "fade" if st.animation == "word_reveal" else st.animation
             tags = motion_tags(mode, duration_ms, width, height, align, margin_v)
             lines_out.append(
-                f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},Main,,0,0,0,,{tags}{body}"
+                f"Dialogue: 0,{_ass_time(cue.start)},{_ass_time(cue.end)},Main,,0,0,0,,{tags}{speaker_tag}{body}"
             )
 
     return header + "\n".join(lines_out) + "\n"
@@ -566,6 +571,44 @@ def retime_cues(cues, ranges):
                       "e": offset + (min(end, word["e"])-start)/speed}
                      for word in cue.words if word["e"] > start and word["s"] < end]
             text = " ".join(word["w"] for word in words) if words else cue.text
-            output.append(CaptionCue(offset+(left-start)/speed, offset+(right-start)/speed, text, words))
+            output.append(CaptionCue(offset+(left-start)/speed, offset+(right-start)/speed, text, words, cue.speaker))
         offset += (end-start)/speed
+    return output
+
+
+SPEAKER_PALETTE=('&H0076E8FF','&H00E0A8FF','&H00B7FF9D','&H00FFCE7E','&H008FA4FF','&H00F0E0AC')
+
+
+def speaker_color(label):
+    if not isinstance(label,str) or not re.fullmatch(r'Speaker [A-Z]{1,3}',label):return None
+    index=0
+    for letter in label[8:]:index=index*26+ord(letter)-64
+    return SPEAKER_PALETTE[(index-1)%len(SPEAKER_PALETTE)]
+
+
+def apply_speaker_labels(cues,turns):
+    """Split actual timed words at anonymous diarization boundaries; unknown stays default."""
+    from ..ai.diarization import word_speaker
+    output=[]
+    for cue in cues:
+        import math
+        valid=bool(cue.words) and ' '.join(str(w.get('w','')) for w in cue.words).split()==cue.text.split()
+        previous=-1.
+        for word in cue.words:
+            a,b=word.get('s'),word.get('e')
+            if (any(type(v) not in (int,float) or not math.isfinite(v) for v in (a,b)) or
+                not cue.start<=a<b<=cue.end+.001 or a<previous):
+                valid=False;break
+            previous=a
+        if not valid:
+            output.append(CaptionCue(cue.start,cue.end,cue.text,list(cue.words)));continue
+        groups=[]
+        for word in cue.words:
+            label=word_speaker(word['s'],word['e'],turns)
+            if not groups or groups[-1][0]!=label:groups.append((label,[]))
+            groups[-1][1].append(dict(word))
+        for index,(label,words) in enumerate(groups):
+            start=max(cue.start,words[0]['s'])
+            end=min(cue.end,groups[index+1][1][0]['s'] if index+1<len(groups) else cue.end)
+            if end>start:output.append(CaptionCue(start,end,' '.join(w['w'] for w in words),words,label))
     return output

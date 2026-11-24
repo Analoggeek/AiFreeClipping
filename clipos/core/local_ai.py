@@ -75,11 +75,21 @@ class LocalOllama:
             raise LocalAIError('Model does not expose installed local GGUF weights; remote/unknown models are refused')
         return info
 
-    def generate(self,prompt,model,*,json_output=False):
-        self.require_local_model(model)
+    def generate(self,prompt,model,*,json_output=False,images=None):
+        info=self.require_local_model(model)
+        if images is not None:
+            import base64
+            if not isinstance(images,list) or not 1<=len(images)<=4:raise LocalAIError('Use 1–4 bounded image frames')
+            if 'vision' not in info.get('capabilities',[]):raise LocalAIError('Installed local model does not advertise vision support')
+            for image in images:
+                if not isinstance(image,str) or len(image)>900000:raise LocalAIError('Vision image exceeds local input bound')
+                try:raw=base64.b64decode(image,validate=True)
+                except (ValueError,TypeError) as exc:raise LocalAIError('Invalid encoded vision frame') from exc
+                if not raw.startswith((b'\xff\xd8\xff',b'\x89PNG\r\n\x1a\n')):raise LocalAIError('Expected encoded JPEG/PNG frame')
         if not isinstance(prompt,str) or len(prompt)>40000:raise LocalAIError('Prompt exceeds local input budget')
         payload={'model':model,'prompt':prompt,'stream':False,'keep_alive':'2m',
                  'options':{'temperature':.1,'num_predict':1500,'num_ctx':8192}}
+        if images is not None:payload['images']=images
         if json_output:payload['format']='json'
         result=self.request('/api/generate',payload)
         if result.get('done') is False:raise LocalAIError('Incomplete local generation')
