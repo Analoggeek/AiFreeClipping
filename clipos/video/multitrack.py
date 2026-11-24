@@ -44,6 +44,8 @@ class Item:
     opacity: float = 1.
     fade_in: float = 0.  # output/timeline seconds
     fade_out: float = 0.
+    opacity_keys: list = field(default_factory=list)
+    gain_keys: list = field(default_factory=list)
 
     @property
     def duration(self):
@@ -114,6 +116,16 @@ class MultitrackProject:
                 number(item.length,.001,media.duration);number(item.speed,.25,4);number(item.gain,0,4)
                 number(item.fade_in,0,item.duration);number(item.fade_out,0,item.duration)
                 if item.fade_in+item.fade_out>item.duration+1e-6:raise ValueError('Fades exceed item duration')
+                for name,limit,kind in [('opacity_keys',1,'video'),('gain_keys',4,'audio')]:
+                    keys=getattr(item,name)
+                    if not isinstance(keys,list) or len(keys)>64:raise ValueError('At most 64 keyframes per curve')
+                    if keys and lane.kind!=kind:raise ValueError('Keyframe property incompatible with track')
+                    previous=-1.
+                    for key in keys:
+                        if not isinstance(key,(list,tuple)) or len(key)!=2:raise ValueError('Invalid keyframe')
+                        moment,value=key;number(moment,0,item.duration);number(value,0,limit)
+                        if moment<=previous or (previous>=0 and moment-previous<1e-6):raise ValueError('Keyframes must be ordered at least one microsecond apart')
+                        previous=moment
                 if lane.kind=='video' and item.gain!=1:raise ValueError('Set gain on the independent audio track, not video')
                 if lane.kind=='audio' and (item.x,item.y,item.w,item.h,item.opacity)!=(0.,0.,1.,1.,1.):
                     raise ValueError('Audio tracks do not have video geometry/opacity')
@@ -224,6 +236,23 @@ class MultitrackProject:
                     if item.id==item_id:return lane,item
         raise ValueError('Track/item not found')
 
+    def keyframe(self,lane_id,item_id,time,value=None,*,clear=False):
+        """File-local output-time linear opacity/video or gain/audio automation."""
+        def operation(project):
+            lane,item=project.find(lane_id,item_id)
+            if lane.locked:raise ValueError('Track is locked')
+            field='opacity_keys' if lane.kind=='video' else 'gain_keys'
+            if isinstance(time,bool) or not isinstance(time,(int,float)) or not math.isfinite(time) or not 0<=time<=item.duration:
+                raise ValueError('Keyframe cursor must be inside selected item')
+            keys=getattr(item,field)
+            if clear:keys=[]
+            else:
+                keys=[key for key in keys if abs(key[0]-time)>1e-6]
+                if value is not None:keys.append([time,value])
+                keys.sort(key=lambda key:key[0])
+            setattr(item,field,keys)
+        self.edit(operation)
+
     def split(self,lane_id,item_id,time):
         def operation(project):
             lane,item=project.find(lane_id,item_id)
@@ -234,6 +263,12 @@ class MultitrackProject:
                 raise ValueError('Split inside fade is not supported; move cursor or remove fade first')
             used=elapsed*item.speed
             right=Item(**{**asdict(item),'id':uid(),'at':time,'source_in':item.source_in+used,'length':item.length-used,'fade_in':0.})
+            for field in ('opacity_keys','gain_keys'):
+                keys=getattr(item,field)
+                if keys:
+                    midpoint=curve_value(keys,elapsed,1.)
+                    setattr(right,field,[[0.,midpoint]]+[[t-elapsed,v] for t,v in keys if t>elapsed])
+                    setattr(item,field,[[t,v] for t,v in keys if t<elapsed]+[[elapsed,midpoint]])
             item.length=used;item.fade_out=0.
             lane.items.insert(lane.items.index(item)+1,right)
         self.edit(operation)
@@ -285,3 +320,12 @@ def fade_gain(item,elapsed):
     if item.fade_in:value=min(value,max(0.,elapsed/item.fade_in))
     if item.fade_out:value=min(value,max(0.,(item.duration-elapsed)/item.fade_out))
     return value
+
+
+def curve_value(keys,time,default):
+    """Piecewise linear, held outside first/last key. Keys already validated."""
+    if not keys:return default
+    if time<=keys[0][0]:return keys[0][1]
+    for (a,x),(b,y) in zip(keys,keys[1:]):
+        if time<=b:return x+(y-x)*(time-a)/(b-a)
+    return keys[-1][1]

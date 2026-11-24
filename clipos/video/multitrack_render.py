@@ -38,8 +38,8 @@ def graph(project):
             x=round(item.x*project.width);y=round(item.y*project.height)
             parts.append(f'[{index}:v]setpts=(PTS-STARTPTS)/{item.speed:.8f},fps={project.fps},'
                 f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},'
-                f'setsar=1,format=rgba,colorchannelmixer=aa={item.opacity:.6f},'
-                + video_fades(item) +
+                f'setsar=1,format=rgba,' + video_opacity(item) +
+                video_fades(item) +
                 f'setpts=PTS+{item.at:.6f}/TB[layer{index}]')
             parts.append(f'{base}[layer{index}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:'
                 f"enable='gte(t,{item.at:.6f})*lt(t,{item.at+item.duration:.6f})'[composite{index}]")
@@ -47,7 +47,7 @@ def graph(project):
         else:
             delay=round(item.at*1000)
             parts.append(f'[{index}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},'
-                f'aresample=48000,aformat=channel_layouts=stereo,volume={item.gain:.6f},'
+                f'aresample=48000,aformat=channel_layouts=stereo,' + audio_gain(item) +
                 f'atrim=duration={item.duration:.6f},' + audio_envelope(item) + f'adelay={delay}|{delay}[audio{index}]')
             audio.append(f'[audio{index}]')
     # Compensate amix averaging; limit peaks without auto loudness boosting.
@@ -122,7 +122,7 @@ def audio_preview_command(project,start):
             delay=round(max(0,item.at-start)*1000)
             inputs+=['-threads','2','-ss',f'{source_in:.6f}','-t',f'{length:.6f}','-i',source.path]
             parts.append(f'[{index}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},aresample=48000,'
-                f'aformat=channel_layouts=stereo,volume={item.gain:.6f},' + audio_envelope(item,offset) + f'adelay={delay}|{delay}[p{index}]')
+                f'aformat=channel_layouts=stereo,' + audio_gain(item,offset) + audio_envelope(item,offset) + f'adelay={delay}|{delay}[p{index}]')
             labels.append(f'[p{index}]');index+=1
     if index>64:raise ValueError('Audio preview supports at most 64 items')
     parts.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0,'
@@ -147,3 +147,22 @@ def audio_envelope(item,offset=0.):
     expression=terms[0]
     for term in terms[1:]:expression=f'min({expression},{term})'
     return f"volume='{expression}':eval=frame," if len(terms)>1 else ''
+
+
+def curve_expression(keys,clock):
+    expression=f'{keys[-1][1]:.10f}'
+    for (a,x),(b,y) in reversed(list(zip(keys,keys[1:]))):
+        segment=f'({x:.10f}+({y-x:.10f})*({clock}-{a:.10f})/{b-a:.10f})'
+        expression=f'if(lt({clock},{b:.10f}),{segment},{expression})'
+    return f'if(lte({clock},{keys[0][0]:.10f}),{keys[0][1]:.10f},{expression})'
+
+
+def audio_gain(item,offset=0.):
+    expression=curve_expression(item.gain_keys,f'(t+{offset:.10f})') if item.gain_keys else f'{item.gain:.10f}'
+    return f"volume='{expression}':eval=frame,"
+
+
+def video_opacity(item):
+    if not item.opacity_keys:return f'colorchannelmixer=aa={item.opacity:.10f},'
+    expression=curve_expression(item.opacity_keys,'T')
+    return f"format=gbrap,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*({expression})',"

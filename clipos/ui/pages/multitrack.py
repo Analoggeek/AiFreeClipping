@@ -141,6 +141,17 @@ class MultitrackPage(BasePage):
                              ('Layer later',lambda:self._move(1)),('Undo',self._undo),('Redo',self._redo)]:
             button=QPushButton(text);button.clicked.connect(handler);edits.addWidget(button)
         self.content_layout.addLayout(edits)
+        automation=QHBoxLayout()
+        automation.addWidget(QLabel('Opacity (video) / gain (audio):'))
+        self.key_value=QDoubleSpinBox();self.key_value.setRange(0,4);self.key_value.setDecimals(3);self.key_value.setValue(1.)
+        automation.addWidget(self.key_value)
+        for text,handler in [('Set key at cursor',lambda:self._keyframe('set')),
+                             ('Remove key at cursor',lambda:self._keyframe('remove')),
+                             ('Clear selected curve',lambda:self._keyframe('clear'))]:
+            button=QPushButton(text);button.clicked.connect(handler);automation.addWidget(button)
+        self.content_layout.addLayout(automation)
+        self.key_status=QLabel('Select a clip to inspect its linear automation. Times are relative to clip start.')
+        self.key_status.setWordWrap(True);self.content_layout.addWidget(self.key_status)
         self.progress=QProgressBar();self.progress.setRange(0,100);self.content_layout.addWidget(self.progress)
         self.status=QLabel('No project exported. Video audio is imported as a separate audio track.')
         self.status.setWordWrap(True);self.content_layout.addWidget(self.status)
@@ -234,6 +245,7 @@ class MultitrackPage(BasePage):
         else:self.table.setCurrentCell(-1,-1)
         self._building=False
         self.timeline.set_project(self.project)
+        self._refresh_keys()
         self.cursor.setMaximum(self.project.duration)
         if self.project.duration<=0:
             self.preview.clear();self.preview.setText('Import local media to preview. No example video is loaded.')
@@ -245,6 +257,32 @@ class MultitrackPage(BasePage):
         row=self.table.currentRow()
         self.timeline.selection=self._rows[row] if 0<=row<len(self._rows) else None
         self.timeline.update()
+        self._refresh_keys()
+
+    def _refresh_keys(self):
+        if not hasattr(self,'key_status'):return
+        try:
+            lane,item=self.project.find(*self._selected())
+            keys=item.opacity_keys if lane.kind=='video' else item.gain_keys
+            self.key_value.setMaximum(1 if lane.kind=='video' else 4)
+            self.key_status.setText(('Opacity' if lane.kind=='video' else 'Gain')+' keys (clip seconds): '+
+                (', '.join(f'{t:.3f}s → {v:.3f}' for t,v in keys) if keys else 'none; constant inspector value applies'))
+        except ValueError:self.key_status.setText('Select a clip to inspect linear automation.')
+
+    def _keyframe(self,action):
+        try:
+            lane,item=self.project.find(*self._selected())
+            moment=0. if action=='clear' else self.cursor.value()-item.at
+            keys=item.opacity_keys if lane.kind=='video' else item.gain_keys
+            if action=='remove':
+                nearest=min(keys,key=lambda key:abs(key[0]-moment),default=None)
+                if nearest is None or abs(nearest[0]-moment)>.51/self.project.fps:
+                    raise ValueError('No keyframe within half a project frame of cursor')
+                moment=nearest[0]
+            self.project.keyframe(lane.id,item.id,moment,
+                self.key_value.value() if action=='set' else None,clear=action=='clear')
+            self._changed()
+        except Exception as exc:self._error(str(exc))
 
     def _timeline_selected(self,lane,item):
         if (lane,item) in self._rows:

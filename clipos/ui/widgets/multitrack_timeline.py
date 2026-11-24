@@ -142,6 +142,19 @@ class MultitrackTimeline(QWidget):
                 painter.save();painter.setClipRect(rect.adjusted(5,0,-5,0))
                 painter.drawText(rect.adjusted(7,0,-5,0),Qt.AlignmentFlag.AlignVCenter,f'{item.at:.2f}s · {item.duration:.2f}s')
                 painter.restore()
+                keys=item.opacity_keys if lane.kind=='video' else item.gain_keys
+                if keys:
+                    maximum=1. if lane.kind=='video' else 4.
+                    painter.save();painter.setClipRect(rect)
+                    painter.setPen(QPen(QColor('#f5dd8a'),1))
+                    previous=None
+                    for moment,value in keys:
+                        px=self.LABEL+(item.at+moment)*self.scale
+                        py=rect.bottom()-3-value/maximum*(rect.height()-6)
+                        if previous:painter.drawLine(previous[0],previous[1],round(px),round(py))
+                        painter.setBrush(QColor('#f5dd8a'));painter.drawEllipse(QRectF(px-3,py-3,6,6))
+                        previous=(round(px),round(py))
+                    painter.restore()
                 if self.drag and self.drag['item']==item.id and self.drag['values']:
                     values=self.drag['values'];at=values.get('at',item.at);length=values.get('length',item.length)
                     ghost=QRectF(self.LABEL+at*self.scale,rect.y(),length/item.speed*self.scale,rect.height())

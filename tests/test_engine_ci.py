@@ -28,4 +28,7 @@ def test_native_builds_gate_on_new_regressions_including_intel_runtime(filename)
         for name in MODULES:
             assert 'tests/'+name in command
         assert 'PIPESTATUS[0]' in command
+        assert '--junitxml=' in command
+        assert 'report_test_failures.py' in command
+        assert 'exit "$test_status"' in command
     assert 'platform.machine() == "x86_64"' in intel[0]

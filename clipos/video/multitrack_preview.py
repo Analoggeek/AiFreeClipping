@@ -8,7 +8,7 @@ import math
 import numpy as np
 
 from ..ai.visual_analysis import cv2_module
-from .multitrack import fade_gain
+from .multitrack import fade_gain,curve_value
 
 
 class FrameCompositor:
@@ -59,7 +59,7 @@ class FrameCompositor:
             resized=cv2.resize(frame,(max(w,math.ceil(frame.shape[1]*ratio)),max(h,math.ceil(frame.shape[0]*ratio))))
             left=(resized.shape[1]-w)//2;top=(resized.shape[0]-h)//2
             layer=resized[top:top+h,left:left+w]
-            opacity=item.opacity*fade_gain(item,time-item.at)
+            opacity=curve_value(item.opacity_keys,time-item.at,item.opacity)*fade_gain(item,time-item.at)
             output[y:y+h,x:x+w]=np.round(layer.astype(np.float32)*opacity+
                 output[y:y+h,x:x+w].astype(np.float32)*(1-opacity)).astype(np.uint8)
         return output

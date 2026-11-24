@@ -209,3 +209,48 @@ actual Qt mouse move/release/edge trims, non-mutating drag preview, save/reopen,
 undo, seek, snapping and locked-lane behavior. The native build and release gates
 include this module on regular and isolated Intel Python runs. Real model and
 physical audio/disconnected acceptance blockers recorded above are unchanged.
+
+## Persisted linear opacity/gain automation increment
+
+Video items now support absolute opacity keyframes (0–1); audio items support
+absolute gain keyframes (0–4). Select an item, place the timeline cursor inside
+it and use **Set key at cursor** with the value control. Remove the key within
+half a project frame of the cursor, or clear the selected curve. Existing keys
+can be replaced by setting at the same time. The inspector lists clip-relative
+output seconds/values; the graphical timeline draws actual curve lines/markers.
+Markers are visual inspection only, not draggable curve handles.
+
+Curves are persisted with each item and default empty for old projects. Empty
+curves use the constant opacity/gain inspector value. Non-empty curves override
+that property's constant value, interpolate linearly between keys and hold the
+first/last values outside their key range. Fade-in/out envelopes multiply this
+result. There are at most 64 keys per curve, ordered at least one microsecond
+apart. Unknown/wrong-track/out-of-range data is rejected transactionally.
+
+Export video evaluates alpha through FFmpeg geq; decoded preview evaluates the
+same curve in local output time. Audio export and direct PCM preview evaluate
+volume after tempo conversion and before timeline delay, compensating for a
+preview seek's offset. FFmpeg audio volume evaluates per audio frame, not every
+sample. Video is evaluated per output frame. Curved alpha adds CPU cost; realtime
+4K performance is not claimed. No GPU keyframe processing is implied.
+
+Splitting inserts matching boundary values on both resulting curves and shifts
+the right item's key times, preserving continuous automation. Moving an item
+carries its local keys. Source trim/speed changes do NOT automatically retime or
+remove keys; if a proposed new duration would place keys out of bounds, the edit
+is rejected instead of silently destroying automation. Clear/re-author keys
+before shortening such an item. Geometry/rotation/speed keyframes, easing,
+Bezier handles, multiple selection and automation recording remain pending.
+
+Validation: **531 passed, 10 skipped in 94.76 seconds**. Real FFmpeg pixel tests
+verify animated alpha; direct seeked PCM measurements verify gain changes. Qt
+control tests verify key creation/removal, recovery persistence and undo. Existing
+fade/multitrack/graphical gesture tests still pass. These are generated-media
+regressions, not real-model or physical native A/V acceptance.
+
+Native run 45403335558 finished Windows/Linux jobs successfully; macOS failed
+at **Verify editing under isolated Intel Python**. Its redirected Actions log
+host is not reachable under this sandbox's egress policy. New CI runs preserve
+pytest failure status while emitting bounded JUnit failure annotations directly
+into check results, so the next failure should be diagnosable without pretending
+Intel passed. This does not fix an unknown native failure preemptively.

@@ -281,3 +281,75 @@ def test_fades_validate_undo_and_safe_split(media):
     a,b=project.lanes[0].items
     assert (a.fade_in,a.fade_out,b.fade_in,b.fade_out)==(.4,0,0,.4)
     project.undo();assert project.to_dict()==before
+
+
+def test_real_keyframed_video_pixels_and_seeked_audio(media,tmp_path):
+    from clipos.video.multitrack_render import audio_preview_command
+    from clipos.video.multitrack import curve_value
+    project=MultitrackProject(width=160,height=90,fps=10)
+    project.import_media(media[0])
+    for lane in project.lanes:
+        for moment,value in [(0.,0.),(1.,1.),(2.,0.)]:
+            project.keyframe(lane.id,lane.items[0].id,moment,value)
+    assert curve_value(project.lanes[0].items[0].opacity_keys,.5,1)==.5
+    path=tmp_path/'automated.json';project.save(path);project=MultitrackProject.load(path)
+    compositor=FrameCompositor()
+    try:
+        assert 110<compositor.frame(project,.5)[45,80,2]<145
+        assert compositor.frame(project,1.)[45,80,2]>230
+    finally:compositor.close()
+    output=tmp_path/'automated.mp4';export_project(project,output,tmp_path/'work',encoder='cpu')
+    raw=subprocess.run([require_ffmpeg(),'-v','error','-ss','0.5','-i',str(output),'-frames:v','1',
+        '-f','rawvideo','-pix_fmt','rgb24','-'],check=True,capture_output=True).stdout
+    assert 100<np.frombuffer(raw,np.uint8).reshape(90,160,3)[45,80,0]<150
+    def energy(start):
+        raw=subprocess.run(audio_preview_command(project,start),check=True,capture_output=True).stdout
+        pcm=np.frombuffer(raw,dtype='<i2').astype(float).reshape(-1,2).mean(axis=1)
+        return np.sqrt(np.mean(pcm[2400:4800]**2))
+    assert energy(.1)<energy(.8)*.35
+    assert energy(1.7)<energy(.8)*.4
+
+
+def test_automation_split_transaction_validation_and_undo(media):
+    from clipos.video.multitrack import curve_value
+    project=layered(media);lane=project.lanes[0];item=lane.items[0]
+    for t,v in [(0.,.1),(2.,.9)]:project.keyframe(lane.id,item.id,t,v)
+    before=project.to_dict()
+    with pytest.raises(ValueError):project.keyframe(lane.id,item.id,float('nan'),1.)
+    with pytest.raises(ValueError):project.keyframe(lane.id,item.id,1.,5.)
+    assert project.to_dict()==before
+    project.split(lane.id,item.id,.8)
+    a,b=project.lanes[0].items
+    assert curve_value(a.opacity_keys,.8,0)==pytest.approx(.42)
+    assert curve_value(b.opacity_keys,0,0)==pytest.approx(.42)
+    assert curve_value(b.opacity_keys,.5,0)==pytest.approx(.62)
+    project.undo();assert project.to_dict()==before
+    project.keyframe(lane.id,item.id,0.,None)
+    assert len(project.lanes[0].items[0].opacity_keys)==1
+    project.keyframe(lane.id,item.id,0.,clear=True)
+    assert project.lanes[0].items[0].opacity_keys==[]
+
+
+def test_native_keyframe_controls_drive_model_recovery_and_undo(media,tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from PySide6.QtWidgets import QApplication
+    from clipos.db.database import Database
+    from clipos.ui.pages import multitrack as ui
+    app=QApplication.instance() or QApplication([])
+    monkeypatch.setattr(ui,'PATHS',SimpleNamespace(projects=tmp_path/'projects',cache=tmp_path/'cache'))
+    page=ui.MultitrackPage(SimpleNamespace(db=Database(tmp_path/'ui.db')))
+    page.project=layered(media)
+    try:
+        page._changed();page.table.setCurrentCell(0,3);page.cursor.setValue(.5)
+        page.key_value.setValue(.25);page._keyframe('set')
+        assert page.project.lanes[0].items[0].opacity_keys==[[.5,.25]]
+        assert '0.500s' in page.key_status.text()
+        recovery=MultitrackProject.load(tmp_path/'projects'/'multitrack-workspace'/'recovery.json')
+        assert recovery.lanes[0].items[0].opacity_keys==[[.5,.25]]
+        page._keyframe('remove');assert not page.project.lanes[0].items[0].opacity_keys
+        page._undo();assert page.project.lanes[0].items[0].opacity_keys==[[.5,.25]]
+        page._keyframe('clear');assert not page.project.lanes[0].items[0].opacity_keys
+        page.table.setCurrentCell(1,3);page.key_value.setValue(2.);page._keyframe('set')
+        assert page.project.lanes[1].items[0].gain_keys==[[.5,2.]]
+    finally:
+        page.shutdown();page.deleteLater();app.processEvents()
