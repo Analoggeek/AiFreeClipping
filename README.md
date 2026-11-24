@@ -1,4 +1,4 @@
-# CLIPOS 2.5.1 — Offline-first Video Clip Editor
+# CLIPOS 3.0.0 — Offline-first Video Clip Editor
 
 **CLIPOS**, developed by **Analoggeek**, is a native desktop application for
 turning long recordings into edited short-form videos. Import a recording,
@@ -6,30 +6,38 @@ select moments and framing, apply editing presets and captions, review the
 rendered videos, and export the batch. Processing runs locally with **Python,
 PySide6, Faster-Whisper and FFmpeg**—no mandatory cloud account or subscription.
 
-**v2.5.1 is released.** YouTube publishing/account connection and the separate
+**v3.0.0 release:** YouTube publishing/account connection and the separate
 Gaming Studio 2.0 navigation have been removed; authorised URL import remains.
 
-## Download v2.5.1
+## Download v3.0.0
 
 | Platform | Installer |
 | --- | --- |
-| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS-Setup.exe) |
-| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS-2.5.1-arm64.dmg) |
-| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS-2.5.1-intel.dmg) |
-| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS_2.5.1_amd64.deb) |
-| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.1/CLIPOS-2.5.1-linux-x86_64.zip) |
+| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.0.0/CLIPOS-Setup.exe) |
+| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.0.0/CLIPOS-3.0.0-arm64.dmg) |
+| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.0.0/CLIPOS-3.0.0-intel.dmg) |
+| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.0.0/CLIPOS_3.0.0_amd64.deb) |
+| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.0.0/CLIPOS-3.0.0-linux-x86_64.zip) |
 
-[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v2.5.1)
+[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.0.0)
 · [Release notes](RELEASE_NOTES.md)
 · [Detailed workflow guide](docs/WORKFLOW_V25.md)
 
-### Fixed in 2.5.1
+### New in 3.0.0
 
-PLAYER (pink) and GAMEPLAY (cyan) regions now stay visible together, with live
-source-frame composition and editable camera-placement presets. Layout/caption
-controls persist across navigation. Changing controls no longer blocks exporting
-checked rendered clips; re-edit explicitly to apply new effects. Speech-model
-errors offer an explicit retry without captions. See [release notes](RELEASE_NOTES.md).
+- Native multitrack timeline improvements, linked audio/video editing, waveforms,
+  keyframes, gestures, fades and conservative longform cleanup.
+- Grounded automatic selection, source-wide candidate review, selected-range
+  protection and optional local export-preference learning.
+- Speaker-coloured captions, shot-held face framing and local OCR evidence.
+- Optional loopback-only visual/intent models and local TalkNet/AST inference
+  integrations; large optional runtimes/checkpoints are not bundled by default.
+- Existing native editing, manual gaming regions, local data and offline-first
+  workflow are preserved. No publishing/upload feature has been added.
+
+See [release notes](RELEASE_NOTES.md) for installation details and acceptance
+limits. This version number does not imply that the full PRO roadmap or native
+physical-device/model-quality certification is complete.
 
 ## Contents
 
@@ -91,7 +99,7 @@ warnings may appear; verify the source and follow your system's security policy.
 On Debian / Ubuntu:
 
 ```bash
-sudo apt install ./CLIPOS_2.5.1_amd64.deb
+sudo apt install ./CLIPOS_3.0.0_amd64.deb
 ```
 
 Alternatively, extract the Linux ZIP and launch the bundled executable on a
@@ -299,9 +307,14 @@ and preserves application permissions/symlinks in release archives.
 
 ## Validation and limitations
 
-For the v2.5.1 fixes:
+For v3.0.0 source:
 
-- Local full suite: **270 passed, 9 skipped**; E2E: **35/35 passed**.
+- Local full suite: **579 passed, 10 skipped**; E2E: **35/35 passed**.
+- Trained OCR inference is tested; TalkNet/AST runtime tests use random weights,
+  not trained-model quality evidence. See the release notes for optional-runtime
+  and hardware limitations.
+
+Earlier v2.5.1 validation:
 - Real GUI source-region drags, persistence, source playback, pixel-checked recipe
   rendering and playable delivery after changed controls have regression tests.
 - [Native v2.5.1 release checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45376503798)

@@ -128,7 +128,18 @@ class WorkflowPage(BasePage):
         self.duration=QComboBox();self.duration.addItems(['15-30','30-45','45-60','60-90']);row.addWidget(self.duration)
         self.enhance=QCheckBox('SDR colour + clarity');row.addWidget(self.enhance)
         self._button('Preview recipe (4 seconds)',self._recipe_preview,row);card.add_layout(row)
-        self._button('Edit all clips →',self._edit,layout,True);layout.addWidget(card)
+        layout.addWidget(card)
+        agent=Card();agent.add(SectionHeader('Local editing agent · supported operations',
+            'Uses installed local Ollama weights only. Plans existing recipes, captions and ranges—not object detection or multi-track editing. Review before applying.'))
+        self.agent_instruction=QLineEdit();self.agent_instruction.setMaxLength(2000)
+        self.agent_instruction.setPlaceholderText('Make 10 gaming shorts, gameplay above player, bigger captions…');agent.add(self.agent_instruction)
+        self._button('Propose local edit plan',self._propose_agent_plan,agent.layout())
+        self.agent_plan_view=QTextEdit();self.agent_plan_view.setReadOnly(True);self.agent_plan_view.setMaximumHeight(140);agent.add(self.agent_plan_view)
+        self.agent_apply=QPushButton('Apply reviewed plan to project');self.agent_apply.setEnabled(False);self.agent_apply.clicked.connect(self._apply_agent_plan);agent.add(self.agent_apply)
+        self.agent_run=QPushButton('Approve plan & render clips');self.agent_run.setEnabled(False);self.agent_run.clicked.connect(self._execute_agent_plan);agent.add(self.agent_run)
+        note=QLabel('Apply only, or approve and render using the real local pipeline. No model is downloaded by this action.');note.setWordWrap(True);agent.add(note)
+        layout.addWidget(agent)
+        self._button('Edit all clips →',self._edit,layout,True)
 
     def _review_ui(self,layout):
         card=Card();card.add(SectionHeader('Review edited videos','Actual rendered outputs, not an unedited source-frame simulation. Check clips to export.'))
@@ -360,6 +371,48 @@ class WorkflowPage(BasePage):
         overrides['facecam_rect']=self.facecam
         return render_settings(self.db,overrides)
 
+    def _propose_agent_plan(self):
+        if not self.project_id or self._busy():return
+        instruction=self.agent_instruction.text().strip()
+        if len(instruction)<3:self.status.setText('Enter an editing instruction first.');return
+        pid=self.project_id;dbpath=self.db.path;project=dict(self.db.get_project(pid));prefs=self._preferences()
+        self.agent_apply.setEnabled(False);self.agent_run.setEnabled(False);self.agent_plan_view.clear();self._pending_agent_plan=None
+        def job(task):
+            from ...ai.editing_agent import propose_plan
+            from ...db.database import Database
+            db=Database(dbpath)
+            try:
+                transcript=db.get_transcript(pid)
+                task.progress.emit(10,'Requesting a bounded plan from installed LOCAL Ollama weights…')
+                plan=propose_plan(instruction,project['duration'],transcript['full_text'] if transcript else '',
+                    evidence={'current_edit_settings':prefs,'vision_analysis':'Not supplied; do not invent detections'},
+                    host=db.get_setting('ollama_host','http://127.0.0.1:11434'),model=db.get_setting('llm_model','llama3.1:8b'))
+                if task.cancelled.is_set():raise RuntimeError('Local plan request cancelled; no changes applied')
+                return plan
+            finally:db.close()
+        def proposed(plan):
+            if self.project_id!=pid:return
+            self._pending_agent_plan=(pid,project['source_path'],plan)
+            self.agent_plan_view.setPlainText(json.dumps(plan.to_dict(),indent=2,ensure_ascii=False));self.agent_apply.setEnabled(True);self.agent_run.setEnabled(True)
+            self.status.setText('Local plan validated. Review it, apply it, then Edit all clips. No video has been changed/rendered yet.')
+        self._start(job,proposed)
+
+    def _apply_agent_plan(self):
+        pending=getattr(self,'_pending_agent_plan',None)
+        if not pending or self._busy():return False
+        pid,source,plan=pending;project=self.db.get_project(self.project_id) if self.project_id else None
+        if pid!=self.project_id or not project or project['source_path']!=source:
+            self.agent_apply.setEnabled(False);self.agent_run.setEnabled(False);self.status.setText('Project changed. Request a new plan.');return False
+        from ...ai.editing_agent import apply_plan
+        try:apply_plan(self.db,pid,plan)
+        except Exception as exc:self.status.setText(f'Plan was not applied: {exc}');return False
+        self._load_preferences();self.load_project(pid);self.agent_apply.setEnabled(False);self.agent_run.setEnabled(False)
+        self.status.setText('Reviewed plan applied to real settings/ranges. Existing renders are unchanged; Edit all clips executes the plan.')
+        return True
+
+    def _execute_agent_plan(self):
+        if self._apply_agent_plan():self._edit()
+
     def _edit(self):
         if not self.project_id:return
         try:settings=self._settings()
@@ -368,13 +421,12 @@ class WorkflowPage(BasePage):
         def job(task):
             from ...db.database import Database
             from ...video.pipeline import ClipOSPipeline,run_full_analysis
-            from ...ai.transcription import model_installed,download_whisper_model
+            from ...ai.transcription import model_installed
             db=Database(dbpath)
             try:
                 model=db.get_setting('stt_model','base');project=db.get_project(pid)
                 if settings.show_captions and project['has_audio'] and not model_installed(model):
-                    if not db.get_settings().get('auto_download_models',True):raise RuntimeError('Download the selected speech model in AI Models before requesting captions.')
-                    if not download_whisper_model(model,lambda p,m:task.progress.emit(p*.1,m)):raise RuntimeError('Speech model download failed; no captioned render was claimed.')
+                    raise RuntimeError('Speech model is not installed. Open AI Models and explicitly approve its download, or retry without speech captions. Editing never downloads model weights automatically.')
                 analysis=run_full_analysis(db,pid,clip_count=prefs['default_clip_count'],duration_range=prefs['default_clip_duration'],stt_model=model,language=db.get_setting('stt_language',''),selected_ranges=ranges or None,progress_cb=lambda p:task.progress.emit(p.percent*.35,p.message),cancel_cb=task.cancelled.is_set)
                 if settings.show_captions and project['has_audio'] and not analysis.transcript:raise RuntimeError('Transcription failed: '+analysis.transcription_error)
                 pipe=ClipOSPipeline(db,pid);pipe.external_cancel=task.cancelled.is_set

@@ -21,7 +21,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QComboBox, QDoubleSpinBox, QFileDialog, QHBoxLayout, QLabel, QPushButton,
-    QSlider, QSpinBox, QVBoxLayout, QWidget,
+    QSlider, QSpinBox, QVBoxLayout, QWidget, QMessageBox,
 )
 
 from ...core.config import ASPECT_RATIOS
@@ -435,6 +435,9 @@ class EditorPage(BasePage):
         header.addWidget(self.btn_merge)
         header.addWidget(self.btn_trim_in)
         header.addWidget(self.btn_trim_out)
+        self.btn_cleanup=QPushButton('Review auto cleanup')
+        self.btn_cleanup.clicked.connect(self._review_cleanup)
+        header.addWidget(self.btn_cleanup)
         header.addWidget(self.btn_render)
         header.addWidget(self.btn_cancel_render)
         root.addLayout(header)
@@ -652,11 +655,14 @@ class EditorPage(BasePage):
         )
         from ...core.config import PATHS
         saved = PATHS.projects / str(self.project_id) / "edits" / f"{clip_id}.json"
-        if saved.exists():
+        if saved.exists() or Timeline.backup_path(saved).exists():
             try:
                 self.timeline = Timeline.load(saved)
+                if self.timeline.recovered_from:
+                    self.window.notify("Recovered previous saved timeline from backup; latest edits may be missing", 7000)
             except (ValueError, OSError, KeyError) as exc:
                 log.warning("Could not restore timeline: %s", exc)
+                self.window.notify("Saved timeline could not be restored; showing original clip", 7000)
         self._frame_cache.clear()
         self.timeline_widget.select(0)
         self.timeline_widget.set_duration(self.timeline.duration)
@@ -820,7 +826,7 @@ class EditorPage(BasePage):
             self._after_edit()
             self.window.notify("Merged with the next segment")
         else:
-            self.window.notify("Nothing to merge — segments must be adjacent")
+            self.window.notify("Cannot merge — source ranges must touch and speed, crop, zoom and mute must match")
 
     def _trim(self, which: str) -> None:
         idx, seg = self._selected_segment()
@@ -892,10 +898,47 @@ class EditorPage(BasePage):
         self.timeline.set_muted(seg.id, checked)
         self._after_edit()
 
+    def _review_cleanup(self):
+        if self.clip_id is None or self.source is None:return
+        try:
+            from ...core.config import PATHS
+            from ...video.waveform import source_signature
+            from ...ai.tightening import apply_to_timeline
+            artifact=PATHS.projects/str(self.project_id)/'analysis'/'tightening.json'
+            if not artifact.is_file():raise ValueError('Run automatic analysis for this project first; no cleanup proposal exists')
+            if artifact.stat().st_size>8*1024*1024:raise ValueError('Cleanup artifact exceeds limit')
+            data=json.loads(artifact.read_text())
+            if data.get('schema')!='clipos.tightening.v1' or data.get('source_signature')!=source_signature(self.source):
+                raise ValueError('Cleanup evidence is stale or invalid; rerun analysis')
+            clip=self.window.db.get_clip(self.clip_id)
+            proposal=next((p for p in data['proposals'] if abs(p['start']-clip['start_time'])<.001
+                           and abs(p['end']-clip['end_time'])<.001),None)
+            if proposal is None:raise ValueError('No analysis proposal for this clip range; rerun detection')
+            # Validate against current edits on an isolated timeline before offering Apply.
+            from ...video.timeline import Timeline
+            from copy import deepcopy
+            draft=deepcopy(self.timeline)
+            before=draft.duration
+            if not apply_to_timeline(draft,proposal):
+                self.window.notify('No safe silence cuts proposed for this timeline',5000);return
+            reply=QMessageBox.question(self,'Review automatic cleanup',
+                f'Audio-measured silence cleanup proposes {len(draft.segments)} keep segments.\n'
+                f'Output duration: {before:.2f}s → {draft.duration:.2f}s.\n'
+                'No filler words are removed. Apply as one undoable timeline edit?',
+                QMessageBox.StandardButton.Apply|QMessageBox.StandardButton.Cancel,QMessageBox.StandardButton.Cancel)
+            if reply==QMessageBox.StandardButton.Apply:
+                apply_to_timeline(self.timeline,proposal);self._after_edit()
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            self.window.notify(str(exc),6000)
+
     def _after_edit(self) -> None:
         from ...core.config import PATHS
         if self.clip_id:
-            self.timeline.save(PATHS.projects / str(self.project_id) / "edits" / f"{self.clip_id}.json")
+            try:
+                self.timeline.save(PATHS.projects / str(self.project_id) / "edits" / f"{self.clip_id}.json")
+            except (OSError, ValueError) as exc:
+                log.warning("Timeline autosave failed: %s", exc)
+                self.window.notify("Timeline not saved. Keep the editor open and check available storage/permissions.", 7000)
         self._frame_cache.clear()
         self.timeline_widget.set_segments(self._segment_views())
         self.timeline_widget.set_duration(self.timeline.duration)

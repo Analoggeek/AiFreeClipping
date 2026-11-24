@@ -31,7 +31,7 @@ from ..ai.transcription import (
 )
 from ..captions.caption_engine import build_cues_for_clip, get_style, list_styles
 from ..core.config import ASPECT_RATIOS, CLIP_DURATION_PRESETS, PATHS
-from ..core.ffmpeg import extract_audio_wav, probe
+from ..core.ffmpeg import extract_audio_wav, probe, FFmpegCancelled
 from ..core.logging_setup import get_logger
 from ..db.database import Database
 from ..video.renderer import ClipRenderer, RenderSettings, generate_thumbnails
@@ -57,6 +57,9 @@ class AnalysisResult:
     transcript: Optional[Transcript] = None
     transcription_available: bool = True
     transcription_error: str = ""
+    diarization: dict = field(default_factory=dict)
+    selection: dict = field(default_factory=dict)
+    source_signature: str = ""
     clips: list = field(default_factory=list)
     elapsed: float = 0.0
 
@@ -65,7 +68,11 @@ class AnalysisResult:
             "duration": self.duration,
             "transcription_available": self.transcription_available,
             "transcription_error": self.transcription_error,
+            "diarization": self.diarization,
+            "selection": self.selection,
             "clips": len(self.clips),
+            "person_tracking": self.visual.person_tracking if self.visual else {},
+            "active_speaker": self.visual.active_speaker if self.visual else {},
             "elapsed": round(self.elapsed, 2),
         }
 
@@ -116,6 +123,8 @@ class ClipOSPipeline:
         t0 = time.time()
         source = Path(source)
         result = AnalysisResult()
+        from .waveform import source_signature
+        result.source_signature=source_signature(source)
 
         self._report("probe", 2.0, "Reading media information")
         info = probe(source)
@@ -145,6 +154,21 @@ class ClipOSPipeline:
             progress_cb=lambda p, m: self._report("visual", 18.0 + p * 0.27, m),
         )
         self._check_cancel()
+
+        person_model = self.db.get_setting("person_model_path", "")
+        if person_model:
+            from ..ai.person_tracking import write_tracks
+            artifact = PATHS.projects / str(self.project_id) / "analysis" / "person_tracks.jsonl"
+            try:
+                result.visual.person_tracking = write_tracks(source, person_model, artifact,
+                    scene_cuts=result.visual.scenes.times, cancel_cb=self._cancel_requested,
+                    progress_cb=lambda p,m:self._report("visual", 45. + p*.025, m))
+            except FFmpegCancelled as exc:
+                raise PipelineCancelled("Person tracking cancelled") from exc
+            result.visual.person_tracking["artifact"] = str(artifact)
+            # Body tracks are kept distinct from face/speaker identities. They
+            # are evidence, not automatically promoted to active-speaker labels.
+            self._check_cancel()
 
         # -- speech ------------------------------------------------------------
         self._report("speech", 48.0, "Transcribing speech (offline)")
@@ -185,8 +209,35 @@ class ClipOSPipeline:
             result.transcription_error = "No audio track in source video"
         self._check_cancel()
 
+        segmentation=self.db.get_setting("diarization_segmentation","")
+        embedding=self.db.get_setting("diarization_embedding","")
+        if (segmentation or embedding) and info.has_audio:
+            from ..ai.diarization import diarize
+            if not segmentation or not embedding:
+                raise RuntimeError("Select both installed local diarization models or disable diarization")
+            try:
+                result.diarization=diarize(wav_path,segmentation,embedding,
+                    PATHS.projects/str(self.project_id)/"analysis"/"diarization.json",
+                    cancel_cb=self._cancel_requested,transcript=result.transcript,
+                    progress_cb=lambda p,m:self._report("speakers",78.+p*.015,m))
+            except FFmpegCancelled as exc:raise PipelineCancelled("Diarization cancelled") from exc
+            result.diarization['source_signature']=result.source_signature
+            self._check_cancel()
+
+        from ..core.editing import enabled
+        if enabled(self.db.get_setting('talknet_enabled','0')):
+            if not info.has_audio or not result.visual:
+                raise RuntimeError('TalkNet requires source audio and visual analysis')
+            from ..ai.active_speaker import analyze as analyze_active_speaker
+            self._report('speakers',79.,'Running local TalkNet audiovisual association (CPU)')
+            try:
+                result.visual.active_speaker=analyze_active_speaker(source,wav_path,result.visual,
+                    self.db.get_setting('talknet_checkpoint',''),cancel_cb=self._cancel_requested)
+            except FFmpegCancelled as exc:raise PipelineCancelled('Active-speaker inference cancelled') from exc
+            self._check_cancel()
+
         # -- speaker tracking ---------------------------------------------------
-        self._report("speakers", 80.0, "Identifying the active speaker")
+        self._report("speakers", 80.0, "Estimating visual subject; heuristic is separate from neural speaker labels")
         if result.visual:
             result.speaker = speaker_tracking.analyze_speakers(
                 result.visual, result.audio or audio_analysis.AudioAnalysis()
@@ -195,6 +246,7 @@ class ClipOSPipeline:
 
         # -- clip detection -----------------------------------------------------
         self._report("clips", 84.0, "Scoring moments for engagement")
+        if source_signature(source)!=result.source_signature:raise RuntimeError('Source changed during analysis; rerun before editing')
         result.elapsed = time.time() - t0
         return result
 
@@ -208,7 +260,50 @@ class ClipOSPipeline:
     ) -> list:
         """Run clip detection over an analysis result."""
         self._report("clips", 86.0, "Scoring candidate moments")
+        from ..ai.automatic_selection import SelectionPolicy
+        from ..core.editing import enabled
+        policy=None
+        intent_report={'status':'disabled'}
+        if enabled(self.db.get_setting('automatic_selection','1')):
+            phrases=lambda key:tuple(p.strip() for p in self.db.get_setting(key,'').split(',') if p.strip())
+            policy=SelectionPolicy(include=phrases('selection_include'),exclude=phrases('selection_exclude'),
+                direction=self.db.get_setting('selection_direction',''),
+                local_rerank=enabled(self.db.get_setting('selection_local_rerank','0'))).validate()
+            if enabled(self.db.get_setting('selection_compile_intent','0')) and policy.direction.strip():
+                from ..ai.clip_intent import compile_intent,intersect_ranges
+                from ..core.local_ai import LocalAIError
+                from dataclasses import replace
+                try:
+                    parsed=compile_intent(policy.direction,analysis.duration,
+                        self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
+                        self.db.get_setting('llm_model','llama3.1:8b'))
+                    self._check_cancel()
+                    candidate_policy=replace(policy,include=tuple(dict.fromkeys([*policy.include,*parsed['prefer']])),
+                        exclude=tuple(dict.fromkeys([*policy.exclude,*parsed['exclude']]))).validate()
+                    selected_ranges=intersect_ranges(selected_ranges,parsed['ranges'])
+                    policy=candidate_policy
+                    intent_report={'status':'compiled','result':parsed,'interpretation':'fallible local-model interpretation; fields grounded to instruction'}
+                except (LocalAIError,ValueError,TypeError,KeyError) as exc:
+                    intent_report={'status':'unapplied','reason':str(exc)[:300]}
+        selection_report={}
+        from ..ai.preferences import learn
+        preferences=learn(self.db) if enabled(self.db.get_setting('learn_selection_preferences','0')) else None
+        evidence_reviewer=None
+        if enabled(self.db.get_setting('selection_visual_review','0')) or enabled(self.db.get_setting('selection_ocr_review','0')) or enabled(self.db.get_setting('selection_sound_review','0')):
+            from ..ai.game_evidence import review
+            source=self.db.get_project(self.project_id)['source_path']
+            evidence_reviewer=lambda rows:review(source,rows,signature=analysis.source_signature,
+                sound=enabled(self.db.get_setting('selection_sound_review','0')),
+                sound_model=self.db.get_setting('selection_sound_model',''),
+                ocr=enabled(self.db.get_setting('selection_ocr_review','0')),
+                vision=enabled(self.db.get_setting('selection_visual_review','0')),
+                host=self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
+                model=self.db.get_setting('selection_vision_model',''),cancel_cb=self._cancel_requested)
         clips = clip_detector.detect_clips(
+            evidence_reviewer=evidence_reviewer,
+            selection_policy=policy,selection_report=selection_report,selection_preferences=preferences,
+            selection_host=self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
+            selection_model=self.db.get_setting('llm_model','llama3.1:8b'),cancel_cb=self._cancel_requested,
             duration=analysis.duration,
             selected_ranges=selected_ranges,
             audio=analysis.audio or audio_analysis.AudioAnalysis(),
@@ -220,6 +315,35 @@ class ClipOSPipeline:
             target_count=target_count,
             progress_cb=lambda p, m: self._report("clips", 86.0 + p * 0.12, m),
         )
+        self._check_cancel()
+        analysis.selection=selection_report
+        if selection_report:
+            selection_report['intent_compilation']=intent_report
+            from .timeline import Timeline
+            selection_report['project_id']=self.project_id
+            selection_report['selected_source_ranges']=[list(pair) for pair in selected_ranges] if selected_ranges is not None else None
+            selection_report['source_signature']=analysis.source_signature
+            artifact=PATHS.projects/str(self.project_id)/'analysis'/'selection.json'
+            artifact.parent.mkdir(parents=True,exist_ok=True)
+            Timeline._atomic_write(artifact,json.dumps(selection_report,allow_nan=False).encode())
+            self.db.log_activity(self.project_id,'selection',
+                f"Automatic selection: {len(clips)}/{target_count}; rerank {selection_report['rerank']['status']}")
+        if analysis.audio is not None and analysis.source_signature:
+            from ..ai.tightening import propose
+            from .timeline import Timeline
+            from .waveform import source_signature
+            project=self.db.get_project(self.project_id)
+            source=Path(project['source_path'])
+            if source_signature(source)!=analysis.source_signature:raise RuntimeError('Source changed; cleanup proposals withheld')
+            proposals=[]
+            for candidate in clips:
+                self._check_cancel()
+                words=analysis.transcript.words_between(candidate.start,candidate.end) if analysis.transcript else []
+                proposals.append(propose(candidate.start,candidate.end,analysis.audio.silence_ranges,words))
+            artifact=PATHS.projects/str(self.project_id)/'analysis'/'tightening.json'
+            artifact.parent.mkdir(parents=True,exist_ok=True)
+            Timeline._atomic_write(artifact,json.dumps({'schema':'clipos.tightening.v1',
+                'source_signature':analysis.source_signature,'proposals':proposals},allow_nan=False).encode())
         analysis.clips = clips
         return clips
 
@@ -228,17 +352,20 @@ class ClipOSPipeline:
         """Persist detected clips, replacing any previous ones for this project."""
         self.db.execute("DELETE FROM clips WHERE project_id=?", (self.project_id,))
         ids: list[int] = []
+        from ..ai.preferences import features
         for c in clips:
             meta = title_generator.generate_metadata(
                 text=c.transcript_text,
                 keywords=c.keywords,
                 title_hint=c.title,
-                use_llm=self.db.get_setting("use_llm", "0") == "1",
+                use_llm=str(self.db.get_setting("use_llm", "0")).lower() in ('1','true','on'),
                 llm_model=self.db.get_setting("llm_model", "llama3.1:8b"),
                 ollama_host=self.db.get_setting("ollama_host", "http://127.0.0.1:11434"),
             )
             clip_id = self.db.create_clip(
                 project_id=self.project_id,
+                settings=json.dumps({'selection_features':features(c.signal_scores)})
+                    if str(self.db.get_setting('learn_selection_preferences','0')).lower() in ('1','true','on') else '{}',
                 title=c.title or (meta.titles[0] if meta.titles else "Untitled clip"),
                 description=meta.description or c.description,
                 start_time=c.start,
@@ -297,6 +424,16 @@ class ClipOSPipeline:
                 clip["start_time"], clip["end_time"],
                 words_per_cue=3 if settings.caption_style == "clean_professional" else 6,
             )
+        turns=[]
+        from ..core.editing import enabled
+        if enabled(self.db.get_setting('speaker_caption_colors','1')) and analysis.diarization:
+            from ..ai.diarization import caption_turns
+            from .waveform import source_signature
+            if not analysis.source_signature or analysis.source_signature!=source_signature(source):
+                raise ValueError('Speaker caption source changed; rerun analysis')
+            turns=caption_turns(analysis.diarization,analysis.duration,analysis.source_signature)
+            from ..captions.caption_engine import apply_speaker_labels
+            cues=apply_speaker_labels(cues,turns)
         self._check_cancel()
 
         work_dir = PATHS.projects / str(self.project_id) / "work"
@@ -308,14 +445,21 @@ class ClipOSPipeline:
                 progress_cb(pct, msg)
 
         saved_edit = PATHS.projects / str(self.project_id) / "edits" / f"{clip_id}.json"
-        if saved_edit.exists():
-            from .timeline import Timeline
+        from .timeline import Timeline
+        if saved_edit.exists() or Timeline.backup_path(saved_edit).exists():
             timeline = Timeline.load(saved_edit)
+            if timeline.recovered_from:
+                self._report("render", 5., "Recovered previous timeline backup; latest edits may be missing")
             from ..captions.caption_engine import retime_cues, build_cues
-            edited_cues = retime_cues(build_cues(analysis.transcript, 0, analysis.duration),
-                [(seg.start, seg.end, seg.speed) for seg in timeline.segments]) if settings.show_captions and analysis.transcript else []
+            source_cues=build_cues(analysis.transcript,0,analysis.duration) if settings.show_captions and analysis.transcript else []
+            if turns:
+                from ..captions.caption_engine import apply_speaker_labels
+                source_cues=apply_speaker_labels(source_cues,turns)
+            edited_cues = retime_cues(source_cues,
+                [(seg.start, seg.end, seg.speed) for seg in timeline.segments])
             result = renderer.render_timeline(
                 source, output, timeline, settings, cues=edited_cues,
+                visual=analysis.visual, speaker=analysis.speaker, audio=analysis.audio,
                 progress_cb=prog, cancel_cb=self._cancel_requested,
             )
         else:

@@ -27,6 +27,9 @@ def _prepare_environment() -> None:
 
 def main() -> int:
     _prepare_environment()
+    if len(sys.argv)>1 and sys.argv[1]=='--diarize-worker':
+        from clipos.ai.diarization import worker_main
+        return worker_main(sys.argv[2:])
 
     from clipos.core.config import PATHS
     from clipos.core.logging_setup import setup_logging

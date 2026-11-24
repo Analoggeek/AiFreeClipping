@@ -30,7 +30,7 @@ BUILD = ROOT / "build"
 
 APP_NAME = "CLIPOS"
 BUNDLE_ID = "com.clipos.studio"
-VERSION = "2.5.1"
+VERSION = "3.0.0"
 
 
 def _write_summary(title: str, body: str) -> None:
@@ -370,6 +370,12 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
         "--exclude-module", "pytest",
         "--exclude-module", "IPython",
     ]
+    import importlib.util
+    for optional in ('transformers','python_speech_features'):
+        if importlib.util.find_spec(optional) is not None:
+            args += ['--collect-all',optional]
+    if importlib.util.find_spec('rapidocr_onnxruntime') is not None:
+        args += ['--collect-all','rapidocr_onnxruntime','--collect-all','shapely','--collect-all','pyclipper']
     icon = ROOT / "resources" / "icons" / (
         "app_icon.ico" if target == "windows" else "app_icon.icns"
     )

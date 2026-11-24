@@ -109,7 +109,8 @@ def faster_whisper_available() -> bool:
 
 def local_model_path(size: str) -> Path | None:
     """Locate actual model files; partial downloads/cache metadata are not models."""
-    repo, _ = WHISPER_SIZES.get(size, WHISPER_SIZES["base"])
+    if size not in WHISPER_SIZES:return None
+    repo, _ = WHISPER_SIZES[size]
     folder = "models--" + repo.replace("/", "--")
     roots = [PATHS.models / "whisper" / repo.replace("/", "--"),
              PATHS.models / "whisper" / folder,
@@ -253,6 +254,8 @@ def transcribe(
             "faster-whisper is not installed. Run: pip install faster-whisper"
         )
 
+    weights=local_model_path(model_size)
+    if weights is None:raise TranscriptionUnavailable(f"Speech model '{model_size}' is not installed locally; explicitly download it in AI Models first")
     from faster_whisper import WhisperModel  # type: ignore
 
     dev, ctype = _resolve_device(device)
@@ -262,7 +265,7 @@ def transcribe(
     from ..core.hardware import suggest_worker_threads
     try:
         model = WhisperModel(
-            str(local_model_path(model_size) or model_size), device=dev, compute_type=ctype,
+            str(weights), device=dev, compute_type=ctype,
             download_root=str(PATHS.models / "whisper"),
             local_files_only=True,
             cpu_threads=suggest_worker_threads(threads),

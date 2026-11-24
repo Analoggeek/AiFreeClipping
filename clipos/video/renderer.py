@@ -73,6 +73,9 @@ class RenderSettings:
     caption_background: bool = False
     show_captions: bool = True
     smart_reframe: bool = True
+    shot_aware_reframe: bool = True
+    body_reframe: bool = True
+    body_track_id: int = 0
     auto_zoom: bool = True
     remove_silence: bool = True
     silence_threshold_db: float = -32.0
@@ -85,6 +88,7 @@ class RenderSettings:
     noise_reduction: bool = True
     background_music: str = ""
     bgm_volume: float = 0.12
+    bgm_ducking: bool = True
     sound_effects: bool = True
     transitions: bool = True
     transition_duration: float = 0.35
@@ -368,19 +372,29 @@ def _build_color_filter(s: RenderSettings) -> str:
     return ",".join(parts)
 
 
+def tempo_filter(speed: float) -> str:
+    """Preserve pitch with portable 0.5–2.0 atempo stages (older FFmpeg too)."""
+    if isinstance(speed, bool) or not isinstance(speed, (int,float)) or not math.isfinite(speed) or not .05 <= speed <= 16:
+        raise ValueError("Playback speed must be finite and within 0.05–16")
+    factors = []
+    while speed > 2.:
+        factors.append(2.)
+        speed /= 2.
+    while speed < .5:
+        factors.append(.5)
+        speed /= .5
+    factors.append(speed)
+    return ",".join(f"atempo={factor:.8f}" for factor in factors)
+
+
 def _build_audio_filter(s: RenderSettings, music_path: str = "") -> str:
     parts: list[str] = []
     if s.noise_reduction:
         parts.append("afftdn=nf=-25")
     if s.normalize_audio:
-        # NB: `loudnorm` is a two-pass filter.  In single-pass mode it buffers
-        # the whole signal to measure the loudness, which means it emits nothing
-        # when it is combined with `amix` (the mix waits for a stream that never
-        # arrives).  `dynaudnorm` does the same job in a single pass and mixes
-        # cleanly, so that is what we use here.
+        # Dynamic gain normalization, not a measured two-pass LUFS target.
         parts.append("dynaudnorm=f=250:g=15:p=0.9:m=10")
-    if music_path and Path(music_path).exists():
-        parts.append(f"volume={s.bgm_volume:.3f}")
+    # Background level belongs to the separate music branch, never source audio.
     return ",".join(parts)
 
 
@@ -461,6 +475,9 @@ class ClipRenderer:
         import time
 
         t_start = time.time()
+        if settings.background_music and not Path(settings.background_music).is_file():
+            raise FileNotFoundError("Background music is missing; choose local audio or clear the music setting: "
+                                    + str(settings.background_music))
         source = Path(source)
         output = Path(output)
         output.parent.mkdir(parents=True, exist_ok=True)
@@ -496,6 +513,29 @@ class ClipRenderer:
         vf_parts: list[str] = []
         vf_parts.append(f"fps={settings.fps}")
 
+        body_graph = None
+        if settings.smart_reframe and settings.body_reframe and settings.editing_preset != "gaming" and visual and visual.person_tracking.get("artifact"):
+            from .body_reframe import body_keys, body_crop_filter
+            keys, chosen = body_keys(visual.person_tracking["artifact"],source,start,end,settings.body_track_id)
+            if keys:
+                body_duration = clip_dur
+                if len(keeps)>1:
+                    from .body_reframe import retime_body_keys
+                    keys, body_duration = retime_body_keys(keys,clip_dur,keeps)
+                body_graph = body_crop_filter(src_w,src_h,settings.width,settings.height,keys,body_duration)
+                result.steps.append(f"Body reframe follows person track {chosen} (not speaker identity)")
+            else:
+                result.warnings.append("Selected body evidence lacks coverage; existing face/center framing used")
+
+        shot_graph=None
+        if settings.smart_reframe and settings.shot_aware_reframe and settings.editing_preset!='gaming' and not body_graph and visual:
+            from .shot_reframe import crop_filter,validate_binding
+            try:
+                validate_binding(visual,source)
+                shot_graph=crop_filter(visual,start,end,keeps if len(keeps)>1 else [(0.,clip_dur)],
+                    src_w,src_h,settings.width,settings.height)
+            except ValueError as exc:result.warnings.append(str(exc)+'; existing framing retained')
+
         if settings.editing_preset == "gaming":
             from .presets import gaming_filter
             facecam, gameplay = settings.facecam_rect, settings.gameplay_rect
@@ -516,6 +556,11 @@ class ClipRenderer:
                 vf_parts.append("eq=contrast=1.04:saturation=1.06,unsharp=5:5:0.25:5:5:0")
                 result.steps.append("SDR clarity and restrained colour enhancement (not HDR)")
             result.steps.append(f"Studio layout: {settings.studio_layout}" if facecam or settings.studio_layout in ("blur","fill") else "Gameplay only")
+        elif body_graph:
+            vf_parts.append(body_graph)
+        elif shot_graph:
+            vf_parts.append(shot_graph)
+            result.steps.append('Shot-held face-coverage framing; hard-cut reset, not verified active speaker')
         elif settings.smart_reframe and visual and speaker and visual.tracks:
             keys = _smooth_keys(
                 _subject_keyframes(speaker, visual, start, end, step=0.5)
@@ -523,7 +568,7 @@ class ClipRenderer:
             if keys:
                 vf_parts.append(_crop_expr(src_w, src_h, settings.width, settings.height,
                                            keys, clip_dur, settings.fps))
-                result.steps.append("Smart reframe follows the active speaker")
+                result.steps.append("Face-prominence reframing (heuristic; not verified speaker identity)")
             else:
                 vf_parts.append(
                     f"scale={settings.width}:{settings.height}:force_original_aspect_ratio=increase,"
@@ -634,12 +679,13 @@ class ClipRenderer:
         if settings.background_music and Path(settings.background_music).exists():
             music_idx = 1
             input_args += ["-stream_loop", "-1", "-i", str(settings.background_music)]
-            filter_parts.append(
-                f"[{music_idx}:a]volume={settings.bgm_volume:.3f},"
-                f"atrim=0:{clip_dur:.2f},asetpts=N/SR/TB[bgm]"
-            )
-            filter_parts.append(f"[{final_a[1:-1]}][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]")
-            final_a = "[aout]"
+            from .audio_mix import music_mix_parts
+            music_parts, final_a = music_mix_parts(final_a, music_idx,
+                sum(ke-ks for ks,ke in keeps),settings.bgm_volume,
+                settings.bgm_ducking,has_audio)
+            filter_parts.extend(music_parts)
+            result.steps.append("Background music: source-driven ducking" if settings.bgm_ducking and has_audio
+                                else "Background music: fixed level")
 
         # Sound effect at the start
         if settings.sound_effects:
@@ -673,7 +719,7 @@ class ClipRenderer:
         if enc.hw_accel == "nvenc":
             cmd += ["-c:v", enc.video_encoder, "-preset", "p5", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "videotoolbox":
-            cmd += ["-c:v", enc.video_encoder, "-b:v", f"{settings.bitrate_kbps}k"]
+            cmd += ["-c:v", enc.video_encoder, "-allow_sw", "0", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "qsv":
             cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-b:v", f"{settings.bitrate_kbps}k"]
         else:
@@ -753,6 +799,9 @@ class ClipRenderer:
         a speed other than 1x are retimed with ``setpts``/``atempo``; segments
         with extra zoom or a moved crop centre get their own crop filter.
         """
+        if settings.background_music and not Path(settings.background_music).is_file():
+            raise FileNotFoundError("Background music is missing; choose local audio or clear the music setting: "
+                                    + str(settings.background_music))
         source = Path(source)
         output = Path(output)
         segments = list(timeline.segments)
@@ -779,7 +828,25 @@ class ClipRenderer:
                     if not layout:result.warnings.append("No stable facecam: gameplay-only. Select a manual camera rectangle in Create clips.")
                 parts.append(gaming_filter(settings.width,settings.height,source_info.video.width,source_info.video.height,facecam,gameplay,settings.studio_layout,settings.camera_size))
             else:
-                parts.append(segment_video_filter(seg, settings.width, settings.height))
+                body_graph = None
+                # Explicit per-segment crop/zoom takes precedence over auto framing.
+                if settings.smart_reframe and settings.body_reframe and visual and visual.person_tracking.get("artifact") and seg.zoom == 1 and seg.crop_x == .5 and seg.crop_y == .5:
+                    from .body_reframe import body_keys, body_crop_filter
+                    keys, chosen = body_keys(visual.person_tracking["artifact"], source, seg.start, seg.end,settings.body_track_id)
+                    if keys:
+                        body_graph = body_crop_filter(source_info.video.width,source_info.video.height,
+                            settings.width,settings.height,keys,seg.source_duration)
+                        result.steps.append(f"Body reframe follows person track {chosen} (not speaker identity)")
+                shot_graph=None
+                if not body_graph and settings.smart_reframe and settings.shot_aware_reframe and visual and seg.zoom==1 and seg.crop_x==.5 and seg.crop_y==.5:
+                    from .shot_reframe import crop_filter,validate_binding
+                    try:
+                        validate_binding(visual,source)
+                        shot_graph=crop_filter(visual,seg.start,seg.end,[(0.,seg.source_duration)],
+                            source_info.video.width,source_info.video.height,settings.width,settings.height)
+                    except ValueError as exc:result.warnings.append(str(exc)+'; manual/center framing retained')
+                    if shot_graph:result.steps.append('Shot-held face framing (TalkNet evidence when available, otherwise heuristic)')
+                parts.append(body_graph or shot_graph or segment_video_filter(seg, settings.width, settings.height))
             color=_build_color_filter(settings)
             if color:parts.append(color)
             graph=",".join(parts)
@@ -854,7 +921,7 @@ class ClipRenderer:
             else:
                 a += "anull"
             if seg.speed != 1.0:
-                a += f",atempo={seg.speed:.6f}"
+                a += "," + tempo_filter(seg.speed)
             a += f"[a{i}]"
             parts.append(a)
 
@@ -869,6 +936,17 @@ class ClipRenderer:
             )
             final_v = "[vout]"
 
+        if settings.background_music and Path(settings.background_music).exists():
+            from .audio_mix import music_mix_parts
+            music_idx = len(segments)
+            input_args += ["-stream_loop", "-1", "-i", str(settings.background_music)]
+            music_parts, final_a = music_mix_parts(final_a,music_idx,
+                sum(seg.duration for seg in segments),settings.bgm_volume,
+                settings.bgm_ducking,has_audio)
+            parts.extend(music_parts)
+            result.steps.append("Background music: source-driven ducking" if settings.bgm_ducking and has_audio
+                                else "Background music: fixed level")
+
         filter_complex = ";".join(parts)
 
         cmd: list[str] = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-filter_complex_threads",str(threads)]
@@ -879,7 +957,7 @@ class ClipRenderer:
         if enc.hw_accel == "nvenc":
             cmd += ["-c:v", enc.video_encoder, "-preset", "p5", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "videotoolbox":
-            cmd += ["-c:v", enc.video_encoder, "-b:v", f"{settings.bitrate_kbps}k"]
+            cmd += ["-c:v", enc.video_encoder, "-allow_sw", "0", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "qsv":
             cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-b:v",f"{settings.bitrate_kbps}k"]
         else:

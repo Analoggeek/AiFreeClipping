@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
         self.current_key = "home"
         self._busy = False
 
-        self.setWindowTitle("CLIPOS 2.5.1 — Video Clip Editor")
+        self.setWindowTitle("CLIPOS 3.0.0 — Video Clip Editor")
         self.setMinimumSize(1180, 760)
         self.resize(1440, 900)
 
@@ -207,6 +207,8 @@ class MainWindow(QMainWindow):
             ("projects", "", "Projects"),
             ("library", "", "Clip library"),
             ("editor", "", "Advanced editor"),
+            ("multitrack", "", "Multitrack workspace"),
+            ("longform", "", "Automatic long-form"),
             ("templates", "", "Presets & captions"),
             ("models", "", "AI models"),
             ("settings", "", "Settings"),
@@ -240,6 +242,8 @@ class MainWindow(QMainWindow):
         from .pages.caption_studio import CaptionStudioPage
         from .pages.clip_library import ClipLibraryPage
         from .pages.editor import EditorPage
+        from .pages.multitrack import MultitrackPage
+        from .pages.longform import LongformPage
         from .pages.export_center import ExportCenterPage
         from .pages.workflow import WorkflowPage
         from .pages.home import HomePage
@@ -255,6 +259,8 @@ class MainWindow(QMainWindow):
             ("templates", TemplatesPage),
             ("captions", CaptionStudioPage),
             ("editor", EditorPage),
+            ("multitrack", MultitrackPage),
+            ("longform", LongformPage),
             ("export", ExportCenterPage),
             ("models", AiModelsPage),
             ("settings", SettingsPage),

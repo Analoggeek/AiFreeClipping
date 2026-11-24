@@ -185,7 +185,7 @@ class CaptionStudioPage(BasePage):
 
         # --- preview ---
         preview_card = Card()
-        preview_card.add(SectionHeader("Live Preview", "Word-by-word highlighting"))
+        preview_card.add(SectionHeader("Typography Sample", "Illustrative background; export renders actual ASS motion"))
         self.preview = CaptionPreview()
         preview_card.add(self.preview)
         self.preview_text = QLabel("Preview text")
@@ -195,7 +195,7 @@ class CaptionStudioPage(BasePage):
 
         # --- controls ---
         controls = Card()
-        controls.add(SectionHeader("Style", "8 built-in caption styles"))
+        controls.add(SectionHeader("Style", f"{len(CAPTION_STYLES)} styles · 30 animated combinations"))
         self.style_grid = QGridLayout()
         self.style_grid.setSpacing(Metrics.sm)
         self.style_buttons: dict[str, QPushButton] = {}

@@ -103,7 +103,9 @@ def test_captions_retime_after_trim_and_speed():
     assert result[0].words[0]['e'] == 1
 
 
-def test_hardware_failure_retries_with_cpu(video, tmp_path):
+@pytest.mark.parametrize('encoder,accel', [('h264_nvenc','nvenc'),
+    ('h264_videotoolbox','videotoolbox'),('h264_qsv','qsv')])
+def test_hardware_failure_retries_with_cpu(video, tmp_path, encoder, accel):
     from clipos.core.ffmpeg import FFmpegRunner
     from clipos.core.hardware import EncoderChoice
     original_run = FFmpegRunner.run
@@ -114,11 +116,13 @@ def test_hardware_failure_retries_with_cpu(video, tmp_path):
             raise RuntimeError('Device driver unavailable')
         return original_run(runner, args, **kwargs)
     with patch('clipos.video.renderer.choose_encoder', side_effect=[
-        EncoderChoice(video_encoder='h264_nvenc', hw_accel='nvenc'), EncoderChoice()]), patch.object(FFmpegRunner, 'run', run):
+        EncoderChoice(video_encoder=encoder, hw_accel=accel), EncoderChoice()]), patch.object(FFmpegRunner, 'run', run):
         result = ClipRenderer(tmp_path/'work').render(video, tmp_path/'fallback.mp4', 0, 1,
             RenderSettings(width=270, height=480, fps=15, show_captions=False, sound_effects=False))
     assert len(calls) == 2
-    assert 'libx264' in calls[1] and 'h264_nvenc' not in calls[1]
+    assert 'libx264' in calls[1] and encoder not in calls[1]
+    if accel=='videotoolbox':
+        assert calls[0][calls[0].index('-allow_sw')+1]=='0'
     assert result.size_bytes > 0
 
 
@@ -141,3 +145,124 @@ def test_release_archives_apps_before_artifact_upload():
     release = (root/'.github/workflows/release.yml').read_text()
     assert 'tar -czf dist/CLIPOS-arm64.app.tar.gz -C dist CLIPOS-arm64.app' in release
     assert release.index('Archive native app permissions') < release.index('Upload the build artifacts')
+
+
+def test_recovered_timeline_reopens_and_really_renders(video,tmp_path):
+    from clipos.core.ffmpeg import probe
+    path=tmp_path/'edit.json'
+    timeline=Timeline.from_clip(0,2,source_duration=2)
+    timeline.set_speed(timeline.segments[0].id,2)
+    timeline.save(path)
+    timeline.split_at(1)
+    timeline.save(path)
+    path.write_text('{broken')
+    restored=Timeline.load(path)
+    assert restored.recovered_from and restored.duration==pytest.approx(1)
+    result=ClipRenderer(tmp_path/'work').render_timeline(video,tmp_path/'restored.mp4',restored,
+        RenderSettings(width=270,height=480,fps=15,show_captions=False,sound_effects=False,
+                       encoder_preference='cpu'))
+    assert result.size_bytes>0
+    info=probe(tmp_path/'restored.mp4')
+    assert (info.video.width,info.video.height)==(270,480)
+    assert info.duration==pytest.approx(1,abs=.2)
+
+
+def test_reopened_undo_redo_changes_real_export_duration(video,tmp_path):
+    from clipos.core.ffmpeg import probe
+    path=tmp_path/'history.json'
+    timeline=Timeline.from_clip(0,2,source_duration=2)
+    timeline.set_speed(timeline.segments[0].id,2)
+    timeline.save(path)
+    restored=Timeline.load(path)
+    settings=RenderSettings(width=270,height=480,fps=15,show_captions=False,
+                            sound_effects=False,encoder_preference='cpu')
+    renderer=ClipRenderer(tmp_path/'work')
+    assert restored.undo()
+    renderer.render_timeline(video,tmp_path/'undone.mp4',restored,settings)
+    assert probe(tmp_path/'undone.mp4').duration==pytest.approx(2,abs=.2)
+    restored.save(path)
+    restored=Timeline.load(path)
+    assert restored.redo()
+    renderer.render_timeline(video,tmp_path/'redone.mp4',restored,settings)
+    assert probe(tmp_path/'redone.mp4').duration==pytest.approx(1,abs=.2)
+
+
+@pytest.mark.parametrize('style',['studio_word_pop','impact_slide_up','arcade_word_reveal'])
+def test_new_animated_caption_styles_reach_real_clip_export(video,tmp_path,style):
+    from clipos.captions.caption_engine import CaptionCue
+    from clipos.core.ffmpeg import probe
+    cue=CaptionCue(0,1,'Real captions',[
+        {'w':'Real','s':0,'e':.45},{'w':'captions','s':.5,'e':1}])
+    result=ClipRenderer(tmp_path/'work').render(video,tmp_path/'animated.mp4',0,1,
+        RenderSettings(width=270,height=480,fps=15,show_captions=True,
+                       caption_style=style,caption_size=28,caption_position='middle',
+                       sound_effects=False,encoder_preference='cpu'),cues=[cue])
+    assert result.size_bytes>0
+    info=probe(tmp_path/'animated.mp4')
+    assert info.has_video and info.has_audio
+    assert (info.video.width,info.video.height)==(270,480)
+    ass=list((tmp_path/'work').rglob('*.ass'))
+    assert ass
+    content=ass[0].read_text()
+    if 'slide' in style:
+        assert '\\move(' in content
+    else:
+        assert '\\t(' in content or '\\fad(' in content
+
+
+@pytest.mark.parametrize('timeline_mode',[False,True])
+@pytest.mark.parametrize('ducking',[False,True])
+def test_music_is_mixed_into_actual_range_and_timeline_exports(video,tmp_path,timeline_mode,ducking):
+    import numpy as np
+    from clipos.core.ffmpeg import require_ffmpeg,probe
+    ffmpeg=require_ffmpeg()
+    music=tmp_path/'music.wav'
+    subprocess.run([ffmpeg,'-v','error','-f','lavfi','-i',
+        'sine=frequency=1000:sample_rate=48000:duration=0.7','-y',str(music)],
+        check=True,capture_output=True,timeout=15)
+    settings=RenderSettings(width=270,height=480,fps=15,show_captions=False,
+        normalize_audio=False,noise_reduction=False,sound_effects=False,encoder_preference='cpu',
+        background_music=str(music),bgm_volume=.5,bgm_ducking=ducking)
+    output=tmp_path/'mixed.mp4'
+    renderer=ClipRenderer(tmp_path/'work')
+    if timeline_mode:
+        timeline=Timeline.from_clip(0,2,source_duration=2)
+        timeline.split_at(1)
+        timeline.set_speed(timeline.segments[0].id,2)
+        result=renderer.render_timeline(video,output,timeline,settings)
+        expected_duration=1.5
+    else:
+        result=renderer.render(video,output,0,2,settings)
+        expected_duration=2
+    assert result.size_bytes>0
+    assert any('Background music:' in step for step in result.steps)
+    assert probe(output).duration==pytest.approx(expected_duration,abs=.2)
+    decoded=subprocess.run([ffmpeg,'-v','error','-i',str(output),'-vn','-ac','1',
+        '-ar','48000','-f','f32le','-'],check=True,capture_output=True,timeout=15)
+    samples=np.frombuffer(decoded.stdout,dtype='<f4')
+    segment=samples[round(.9*48000):round(1.3*48000)]
+    # Music remains measurable beyond its 0.7 s source: looping really executes.
+    t=np.arange(len(segment))/48000
+    amplitude=2*abs(np.mean(segment*np.exp(-2j*np.pi*1000*t)))
+    assert amplitude>.001
+
+
+@pytest.mark.parametrize('speed',[.25,4])
+def test_extreme_editor_speeds_really_export_with_pitch_preserved(video,tmp_path,speed):
+    import numpy as np
+    from clipos.core.ffmpeg import require_ffmpeg,probe
+    timeline=Timeline.from_clip(0,2,source_duration=2)
+    timeline.set_speed(timeline.segments[0].id,speed)
+    settings=RenderSettings(width=180,height=320,fps=15,show_captions=False,
+        normalize_audio=False,noise_reduction=False,sound_effects=False,encoder_preference='cpu')
+    output=tmp_path/'speed.mp4'
+    result=ClipRenderer(tmp_path/'work').render_timeline(video,output,timeline,settings)
+    assert result.size_bytes>0
+    assert probe(output).duration==pytest.approx(2/speed,abs=.2)
+    decoded=subprocess.run([require_ffmpeg(),'-v','error','-i',str(output),'-vn',
+        '-ar','16000','-ac','1','-f','f32le','-'],check=True,capture_output=True,timeout=15)
+    samples=np.frombuffer(decoded.stdout,dtype='<f4')
+    segment=samples[len(samples)//4:3*len(samples)//4]
+    frequencies=np.fft.rfftfreq(len(segment),d=1/16000)
+    peak=frequencies[np.argmax(abs(np.fft.rfft(segment)))]
+    assert peak==pytest.approx(440,abs=12)  # Tempo edit, not pitch shifting.

@@ -22,10 +22,12 @@ def render_settings(db, overrides=None):
     rs.show_captions = enabled(data.get('auto_caption',True))
     for field in ('caption_stroke','fps','bitrate_kbps'):
         if field in data: setattr(rs,field,int(data[field]))
-    for field in ('caption_shadow','caption_background','remove_silence','normalize_audio','noise_reduction','gaming_enhance'):
+    for field in ('caption_shadow','caption_background','remove_silence','normalize_audio','noise_reduction','gaming_enhance','bgm_ducking','body_reframe','shot_aware_reframe'):
         if field in data: setattr(rs,field,enabled(data[field]))
     for field in ('silence_threshold_db','min_silence_duration','bgm_volume'):
         if field in data: setattr(rs,field,float(data[field]))
+    rs.body_track_id = int(data.get('body_track_id',0))
+    rs.background_music = data.get('background_music','')
     rs.codec = data.get('codec','h264')
     rs.threads = int(data.get('processing_threads',0))
     rs.low_memory = enabled(data.get('low_memory_mode',False))

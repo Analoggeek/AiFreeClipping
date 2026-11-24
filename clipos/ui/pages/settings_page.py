@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt, QThread, Signal, QUrl
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout,
-    QLabel, QPushButton, QMessageBox, QSpinBox, QDoubleSpinBox, QVBoxLayout, QWidget,
+    QLabel, QLineEdit, QPushButton, QMessageBox, QSpinBox, QDoubleSpinBox, QVBoxLayout, QWidget,
 )
 
 from ...core.editing import enabled
@@ -219,12 +219,78 @@ class SettingsPage(BasePage):
         )
         form3.addRow("Minimum silence", self.min_sil_spin)
 
+        self.music_path_label = QLabel(settings.get("background_music", "") or "No background music")
+        self.music_path_label.setWordWrap(True)
+        music_row = QHBoxLayout()
+        music_row.addWidget(self.music_path_label, 1)
+        choose_music = QPushButton("Choose local audio…")
+        choose_music.clicked.connect(self._choose_music)
+        music_row.addWidget(choose_music)
+        clear_music = QPushButton("Clear")
+        clear_music.clicked.connect(lambda: self._set_music(""))
+        music_row.addWidget(clear_music)
+        form3.addRow("Background music", music_row)
+        self.music_volume_spin = QDoubleSpinBox()
+        self.music_volume_spin.setRange(0., 1.)
+        self.music_volume_spin.setSingleStep(.02)
+        self.music_volume_spin.setValue(float(settings.get("bgm_volume", .12)))
+        self.music_volume_spin.valueChanged.connect(lambda v: self._save("bgm_volume", v))
+        form3.addRow("Music level (0–1)", self.music_volume_spin)
+        self.music_duck_check = QCheckBox("Lower music when source audio is loud")
+        self.music_duck_check.setToolTip("Signal-driven ducking; loud game sounds also lower music. Not speaker identification.")
+        self.music_duck_check.setChecked(enabled(settings.get("bgm_ducking", True)))
+        self.music_duck_check.toggled.connect(lambda v: self._save("bgm_ducking", int(v)))
+        form3.addRow("Music ducking", self.music_duck_check)
+
         caps.add_layout(form3)
         self.content_layout.addWidget(caps)
 
+        tracking = Card()
+        tracking.add(SectionHeader("Continuous person tracking (optional)",
+            "Local YOLOX raw-head COCO ONNX + ByteTrack · CPU · body evidence, not speaker identity"))
+        self.person_model_label = QLabel(settings.get("person_model_path", "") or "Disabled — select installed local YOLOX ONNX weights")
+        self.person_model_label.setWordWrap(True)
+        tracking.add(self.person_model_label)
+        tracking_row = QHBoxLayout()
+        select_model = QPushButton("Select installed model…")
+        select_model.clicked.connect(self._choose_person_model)
+        tracking_row.addWidget(select_model)
+        clear_model = QPushButton("Disable")
+        clear_model.clicked.connect(lambda:self._set_person_model(""))
+        tracking_row.addWidget(clear_model)
+        tracking.add_layout(tracking_row)
+        self.body_reframe_check = QCheckBox("Follow body evidence in non-gaming auto framing")
+        self.body_reframe_check.setChecked(enabled(settings.get("body_reframe",True)))
+        self.body_reframe_check.toggled.connect(lambda value:self._save("body_reframe",int(value)))
+        tracking.add(self.body_reframe_check)
+        self.shot_reframe_check=QCheckBox('Hold one face crop per shot; reset at scene cuts (heuristic)')
+        self.shot_reframe_check.setChecked(enabled(settings.get('shot_aware_reframe','1')))
+        self.shot_reframe_check.toggled.connect(lambda v:self._save('shot_aware_reframe',int(v)))
+        tracking.add(self.shot_reframe_check)
+        self.body_track_spin = QSpinBox()
+        self.body_track_spin.setRange(0,2147483647)
+        self.body_track_spin.setValue(int(settings.get("body_track_id",0)))
+        self.body_track_spin.setSpecialValueText("Auto: longest-supported person")
+        self.body_track_spin.setToolTip("Person ID from this project's tracking artifact; not a speaker label")
+        self.body_track_spin.valueChanged.connect(lambda value:self._save("body_track_id",value))
+        tracking.add(self.body_track_spin)
+        tracking.add(SectionHeader("Anonymous neural diarization (optional)",
+            "Installed sherpa-compatible segmentation + embedding ONNX · CPU · no named identity"))
+        self.diarization_label = QLabel()
+        self.diarization_label.setWordWrap(True)
+        tracking.add(self.diarization_label)
+        self._update_diarization_label()
+        diarization_row=QHBoxLayout()
+        for text,key in [("Select segmentation…","diarization_segmentation"),("Select embedding…","diarization_embedding")]:
+            button=QPushButton(text);button.clicked.connect(lambda checked=False,k=key:self._choose_diarization_model(k))
+            diarization_row.addWidget(button)
+        disable=QPushButton("Disable diarization");disable.clicked.connect(self._disable_diarization)
+        diarization_row.addWidget(disable);tracking.add_layout(diarization_row)
+        self.content_layout.addWidget(tracking)
+
         # ---------------- local LLM ----------------
         llm = Card()
-        llm.add(SectionHeader("Local LLM (optional)", "Ollama — used for title ideas"))
+        llm.add(SectionHeader("Local LLM (optional)", "Local Ollama — metadata and bounded edit plans; loopback only"))
         form4 = QFormLayout()
         form4.setSpacing(Metrics.md)
 
@@ -254,6 +320,58 @@ class SettingsPage(BasePage):
         )
         form4.addRow("", self.use_llm_check)
 
+        self.learn_preferences_check=QCheckBox('Learn bounded local selection preferences from successful exports')
+        self.learn_preferences_check.setChecked(enabled(settings.get('learn_selection_preferences','0')))
+        self.learn_preferences_check.toggled.connect(lambda v:self._save('learn_selection_preferences',int(v)))
+        form4.addRow('',self.learn_preferences_check)
+        reset_preferences=QPushButton('Delete learned selection feature snapshots')
+        reset_preferences.clicked.connect(self._reset_preferences)
+        form4.addRow('',reset_preferences)
+        self.automatic_selection_check=QCheckBox('Strict automatic clip selection (no duplicate-count padding)')
+        self.automatic_selection_check.setChecked(enabled(settings.get('automatic_selection','1')))
+        self.automatic_selection_check.toggled.connect(lambda v:self._save('automatic_selection',int(v)))
+        form4.addRow('',self.automatic_selection_check)
+        self.selection_intent_check=QCheckBox('Compile direction into grounded phrases / explicit clock ranges locally')
+        self.selection_intent_check.setChecked(enabled(settings.get('selection_compile_intent','0')))
+        self.selection_intent_check.toggled.connect(lambda v:self._save('selection_compile_intent',int(v)))
+        form4.addRow('',self.selection_intent_check)
+        self.talknet_check=QCheckBox('Use local TalkNet audiovisual face association (CPU, explicit checkpoint)')
+        self.talknet_check.setChecked(enabled(settings.get('talknet_enabled','0')))
+        self.talknet_check.toggled.connect(lambda v:self._save('talknet_enabled',int(v)))
+        form4.addRow('',self.talknet_check)
+        self.talknet_checkpoint_field=QLineEdit(str(settings.get('talknet_checkpoint','')))
+        self.talknet_checkpoint_field.editingFinished.connect(lambda:self._save('talknet_checkpoint',self.talknet_checkpoint_field.text()))
+        form4.addRow('Trusted local TalkNet checkpoint',self.talknet_checkpoint_field)
+        self.selection_sound_check=QCheckBox('Local AST sound classification (explicitly installed runtime and model)')
+        self.selection_sound_check.setChecked(enabled(settings.get('selection_sound_review','0')))
+        self.selection_sound_check.toggled.connect(lambda v:self._save('selection_sound_review',int(v)))
+        form4.addRow('',self.selection_sound_check)
+        self.selection_sound_model_field=QLineEdit(str(settings.get('selection_sound_model','')))
+        self.selection_sound_model_field.editingFinished.connect(lambda:self._save('selection_sound_model',self.selection_sound_model_field.text()))
+        form4.addRow('Local AST model directory',self.selection_sound_model_field)
+        self.selection_ocr_check=QCheckBox('Read finalist on-screen text with explicitly installed local OCR models')
+        self.selection_ocr_check.setChecked(enabled(settings.get('selection_ocr_review','0')))
+        self.selection_ocr_check.toggled.connect(lambda v:self._save('selection_ocr_review',int(v)))
+        form4.addRow('',self.selection_ocr_check)
+        self.selection_vision_check=QCheckBox('Local visual-model review of up to four finalists (three source frames each)')
+        self.selection_vision_check.setChecked(enabled(settings.get('selection_visual_review','0')))
+        self.selection_vision_check.toggled.connect(lambda v:self._save('selection_visual_review',int(v)))
+        form4.addRow('',self.selection_vision_check)
+        self.selection_vision_model_field=QLineEdit(str(settings.get('selection_vision_model','')))
+        self.selection_vision_model_field.setMaxLength(160)
+        self.selection_vision_model_field.editingFinished.connect(lambda:self._save('selection_vision_model',self.selection_vision_model_field.text()))
+        form4.addRow('Installed local vision model',self.selection_vision_model_field)
+        self.selection_rerank_check=QCheckBox('Rerank up to 24 finalists with installed local model')
+        self.selection_rerank_check.setChecked(enabled(settings.get('selection_local_rerank','0')))
+        self.selection_rerank_check.toggled.connect(lambda v:self._save('selection_local_rerank',int(v)))
+        form4.addRow('',self.selection_rerank_check)
+        for label,key,limit in [('Prefer transcript phrases (comma-separated)','selection_include',2000),
+                                ('Exclude transcript phrases (comma-separated)','selection_exclude',2000),
+                                ('Selection direction (local compilation / reranking)','selection_direction',1000)]:
+            field=QLineEdit(str(settings.get(key,'')));field.setMaxLength(limit)
+            field.editingFinished.connect(lambda k=key,f=field:self._save(k,f.text()))
+            setattr(self,key+'_field',field);form4.addRow(label,field)
+        llm.add(QLabel('Phrases match transcript words, not unseen visuals. Missing local model keeps measured ranking.'))
         llm.add_layout(form4)
         self.llm_status = QLabel("")
         self.llm_status.setObjectName("CardSubtitle")
@@ -443,6 +561,44 @@ class SettingsPage(BasePage):
         self.db.set_setting("theme", theme)
         apply_theme(self.window, theme)
 
+    def _reset_preferences(self):
+        from ...ai.preferences import reset
+        reset(self.db)
+        self.window.notify('Local selection feature snapshots deleted; preferences reset',5000)
+
+    def _update_diarization_label(self):
+        values=self.db.get_settings()
+        self.diarization_label.setText("Segmentation: "+(values.get("diarization_segmentation") or "not installed/selected")+
+            "\nEmbedding: "+(values.get("diarization_embedding") or "not installed/selected"))
+
+    def _choose_diarization_model(self,key):
+        path,_=QFileDialog.getOpenFileName(self,"Select trusted sherpa-compatible local "+key,"","ONNX (*.onnx)")
+        if path:self._save(key,path);self._update_diarization_label()
+
+    def _disable_diarization(self):
+        self.db.set_settings({"diarization_segmentation":"","diarization_embedding":""})
+        self._update_diarization_label()
+        self.window.settings_changed.emit()
+
+    def _set_person_model(self, path: str) -> None:
+        self._save("person_model_path", path)
+        self.person_model_label.setText(path or "Disabled — select installed local YOLOX ONNX weights")
+
+    def _choose_person_model(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Select trusted local raw-head YOLOX COCO model", "", "ONNX weights (*.onnx)")
+        if path:
+            self._set_person_model(path)
+
+    def _set_music(self, path: str) -> None:
+        self._save("background_music", path)
+        self.music_path_label.setText(path or "No background music")
+
+    def _choose_music(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Choose local background audio", "",
+                                             "Audio (*.wav *.mp3 *.m4a *.aac *.flac *.ogg);;All files (*)")
+        if path:
+            self._set_music(path)
+
     def _choose_output(self) -> None:
         path = QFileDialog.getExistingDirectory(self, "Choose output folder")
         if path:
@@ -453,6 +609,10 @@ class SettingsPage(BasePage):
         from ...ai.title_generator import ollama_available, ollama_models
 
         host = self.ollama_host.currentText()
+        from ...core.local_ai import local_endpoint,LocalAIError
+        try:local_endpoint(host)
+        except LocalAIError as exc:
+            self.llm_status.setText(str(exc));return
         if ollama_available(host):
             models = ollama_models(host)
             self.llm_status.setText(
@@ -488,14 +648,21 @@ class SettingsPage(BasePage):
                 idx=widget.findData(values.get(key, values.get('default_aspect','9:16') if key=='aspect_ratio' else None))
                 if idx>=0:
                     widget.blockSignals(True);widget.setCurrentIndex(idx);widget.blockSignals(False)
-        for name,key in [('count_spin','default_clip_count'),('threads_spin','processing_threads'),('cap_size_spin','caption_size'),('silence_spin','silence_threshold_db'),('min_sil_spin','min_silence_duration')]:
+        for name,key in [('count_spin','default_clip_count'),('threads_spin','processing_threads'),('cap_size_spin','caption_size'),('silence_spin','silence_threshold_db'),('min_sil_spin','min_silence_duration'),('music_volume_spin','bgm_volume'),('body_track_spin','body_track_id')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setValue(values[key]);widget.blockSignals(False)
-        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode')]:
+        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe'),('automatic_selection_check','automatic_selection'),('selection_rerank_check','selection_local_rerank'),('learn_preferences_check','learn_selection_preferences'),('speaker_colors_check','speaker_caption_colors'),('selection_vision_check','selection_visual_review'),('selection_intent_check','selection_compile_intent'),('shot_reframe_check','shot_aware_reframe'),('selection_ocr_check','selection_ocr_review'),('selection_sound_check','selection_sound_review'),('talknet_check','talknet_enabled')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)
+        for key in ('selection_include','selection_exclude','selection_direction','selection_vision_model','selection_sound_model','talknet_checkpoint'):
+            widget=getattr(self,key+'_field',None)
+            if widget is not None:
+                widget.blockSignals(True);widget.setText(str(values.get(key,'')));widget.blockSignals(False)
+        self._update_diarization_label()
+        self.person_model_label.setText(values.get('person_model_path','') or 'Disabled — select installed local YOLOX ONNX weights')
+        self.music_path_label.setText(values.get('background_music','') or 'No background music')
         self.out_path_label.setText(values.get('output_dir',''))
         stats = self.db.stats()
         self.storage_label.setText(
@@ -511,7 +678,7 @@ class SettingsPage(BasePage):
             f"CPU: {prof.cpu_name} — {prof.cpu_cores} cores / {prof.cpu_threads} threads\n"
             f"RAM: {prof.ram_total_mb} MB total, {prof.ram_available_mb} MB available\n"
             f"GPU: {prof.gpu.label} (vendor: {prof.gpu.vendor or 'none'})\n"
-            f"Auto encoder: {choose_encoder().description} (CPU retry on failure)\n"
+            f"Encoder candidate: {choose_encoder(verify=False).description} (unverified; tested at export, CPU fallback)\n"
             f"Automatic worker budget now: {suggest_worker_threads()} threads\n"
             f"Torch: {'available' if prof.torch_available else 'not installed'}"
             f"{' (CUDA)' if prof.torch_cuda else ''}{' (Metal)' if prof.torch_mps else ''}\n"

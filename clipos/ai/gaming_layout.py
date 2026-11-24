@@ -14,10 +14,13 @@ class GamingLayout:
     gameplay: tuple[float, float, float, float]
     confidence: float
     observations: int
+    method: str = 'temporal-face'
+    border_confidence: float = 0.0
 
     def to_dict(self):
         return {"facecam": self.facecam, "gameplay": self.gameplay,
-                "confidence": self.confidence, "observations": self.observations}
+                "confidence": self.confidence, "observations": self.observations,
+                "method":self.method,"border_confidence":self.border_confidence}
 
 
 def infer_layout(faces, timestamps):
@@ -69,6 +72,8 @@ def detect_layout(source, start, end, cancel_cb=None, samples=24):
     """Decode at most 24 downscaled frames for this clip, not the entire source."""
     from .visual_analysis import cv2_module, detect_faces_in_frames
     cv2 = cv2_module()
+    if not all(math.isfinite(t) for t in (start,end)) or end<=start:return None
+    samples=max(3,min(24,int(samples)))
     if cv2 is None:
         return None
     cap = cv2.VideoCapture(str(source))
@@ -92,4 +97,7 @@ def detect_layout(source, start, end, cancel_cb=None, samples=24):
             times.append(t)
     finally:
         cap.release()
-    return infer_layout(detect_faces_in_frames(frames,times), times)
+    faces=detect_faces_in_frames(frames,times)
+    seed=infer_layout(faces,times)
+    from .panel_edges import refine_panel
+    return refine_panel(frames,faces,times,seed,cancel_cb) or seed
