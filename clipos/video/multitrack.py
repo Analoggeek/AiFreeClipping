@@ -42,6 +42,8 @@ class Item:
     w: float = 1.
     h: float = 1.
     opacity: float = 1.
+    fade_in: float = 0.  # output/timeline seconds
+    fade_out: float = 0.
 
     @property
     def duration(self):
@@ -110,6 +112,8 @@ class MultitrackProject:
                 if not (media.has_video if lane.kind=='video' else media.has_audio):raise ValueError('Media has no required stream')
                 number(item.at,0,1e7);number(item.source_in,0,media.duration)
                 number(item.length,.001,media.duration);number(item.speed,.25,4);number(item.gain,0,4)
+                number(item.fade_in,0,item.duration);number(item.fade_out,0,item.duration)
+                if item.fade_in+item.fade_out>item.duration+1e-6:raise ValueError('Fades exceed item duration')
                 if lane.kind=='video' and item.gain!=1:raise ValueError('Set gain on the independent audio track, not video')
                 if lane.kind=='audio' and (item.x,item.y,item.w,item.h,item.opacity)!=(0.,0.,1.,1.,1.):
                     raise ValueError('Audio tracks do not have video geometry/opacity')
@@ -205,7 +209,7 @@ class MultitrackProject:
         return media.id
 
     def change_item(self,lane_id,item_id,**values):
-        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity'}
+        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)
@@ -225,9 +229,12 @@ class MultitrackProject:
             lane,item=project.find(lane_id,item_id)
             if lane.locked:raise ValueError('Track is locked')
             if not item.at<time<item.at+item.duration:raise ValueError('Split must be inside item')
-            used=(time-item.at)*item.speed
-            right=Item(**{**asdict(item),'id':uid(),'at':time,'source_in':item.source_in+used,'length':item.length-used})
-            item.length=used
+            elapsed=time-item.at
+            if elapsed<item.fade_in or elapsed>item.duration-item.fade_out:
+                raise ValueError('Split inside fade is not supported; move cursor or remove fade first')
+            used=elapsed*item.speed
+            right=Item(**{**asdict(item),'id':uid(),'at':time,'source_in':item.source_in+used,'length':item.length-used,'fade_in':0.})
+            item.length=used;item.fade_out=0.
             lane.items.insert(lane.items.index(item)+1,right)
         self.edit(operation)
 
@@ -270,3 +277,11 @@ class MultitrackProject:
             media.path=str(path);media.duration=info.duration
             media.has_video=info.has_video;media.has_audio=info.has_audio
         self.edit(operation)
+
+
+def fade_gain(item,elapsed):
+    """Linear timeline-time envelope shared by decoded preview and export."""
+    value=1.
+    if item.fade_in:value=min(value,max(0.,elapsed/item.fade_in))
+    if item.fade_out:value=min(value,max(0.,(item.duration-elapsed)/item.fade_out))
+    return value

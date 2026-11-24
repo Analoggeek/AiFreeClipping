@@ -231,10 +231,53 @@ def test_real_native_audio_sink_when_device_exists(media):
     from clipos.ui.multitrack_audio import AudioClockPlayer,AudioDeviceUnavailable
     app=QApplication.instance() or QApplication([])
     try:player=AudioClockPlayer(layered(media),0)
-    except AudioDeviceUnavailable as exc:pytest.skip(str(exc))
+    except AudioDeviceUnavailable as exc:
+        import os
+        if os.environ.get('CLIPOS_REQUIRE_NATIVE_AUDIO')=='1':pytest.fail(str(exc))
+        pytest.skip(str(exc))
     errors=[];player.failed.connect(errors.append)
     try:
         loop=QEventLoop();QTimer.singleShot(600,loop.quit);loop.exec()
         assert not errors,errors
         assert player.position>0  # Actual processed device frames, no elapsed-time fake.
     finally:player.stop();player.deleteLater();app.processEvents()
+
+
+def test_fades_export_preview_audio_seek_and_save(media,tmp_path):
+    from clipos.video.multitrack_render import audio_preview_command
+    project=MultitrackProject(width=160,height=90,fps=10)
+    project.import_media(media[0])
+    for lane in project.lanes:
+        project.change_item(lane.id,lane.items[0].id,fade_in=1.,fade_out=.5)
+    path=tmp_path/'fades.json';project.save(path)
+    project=MultitrackProject.load(path)
+    compositor=FrameCompositor()
+    try:
+        early=compositor.frame(project,.2)[45,80,2]
+        late=compositor.frame(project,1.2)[45,80,2]
+        assert 30<early<75 and late>220
+    finally:compositor.close()
+    output=tmp_path/'fades.mp4'
+    export_project(project,output,tmp_path/'work',encoder='cpu')
+    raw=subprocess.run([require_ffmpeg(),'-v','error','-ss','0.2','-i',str(output),'-frames:v','1',
+        '-f','rawvideo','-pix_fmt','rgb24','-'],check=True,capture_output=True).stdout
+    assert 25<np.frombuffer(raw,np.uint8).reshape(90,160,3)[45,80,0]<85
+    def rms_at(start):
+        raw=subprocess.run(audio_preview_command(project,start),check=True,capture_output=True).stdout
+        pcm=np.frombuffer(raw,dtype='<i2').reshape(-1,2).mean(axis=1)/32768
+        return np.sqrt(np.mean(pcm[2400:7200]**2))
+    assert rms_at(.1)<rms_at(1.)*.4
+    assert rms_at(1.8)<rms_at(1.)*.5
+
+
+def test_fades_validate_undo_and_safe_split(media):
+    project=layered(media);lane=project.lanes[0];item=lane.items[0]
+    project.change_item(lane.id,item.id,fade_in=.4,fade_out=.4)
+    before=project.to_dict()
+    with pytest.raises(ValueError):project.change_item(lane.id,item.id,fade_in=2.)
+    with pytest.raises(ValueError,match='inside fade'):project.split(lane.id,item.id,.2)
+    assert project.to_dict()==before
+    project.split(lane.id,item.id,1.)
+    a,b=project.lanes[0].items
+    assert (a.fade_in,a.fade_out,b.fade_in,b.fade_out)==(.4,0,0,.4)
+    project.undo();assert project.to_dict()==before

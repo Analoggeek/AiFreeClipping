@@ -9,7 +9,7 @@ import threading
 import time
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,QDoubleSpinBox,QFileDialog,QHBoxLayout,QLabel,QPushButton,
     QProgressBar,QTableWidget,QTableWidgetItem,
@@ -105,13 +105,16 @@ class MultitrackPage(BasePage):
         transport.addWidget(self.play_audio)
         self.cursor=QDoubleSpinBox();self.cursor.setRange(0,0);self.cursor.setDecimals(3);self.cursor.setSuffix(' s')
         self.cursor.valueChanged.connect(self._seek)
+        for text,delta in [('Previous frame',-1),('Next frame',1)]:
+            button=QPushButton(text);button.clicked.connect(lambda checked=False,d=delta:self._step_frame(d))
+            transport.addWidget(button)
         transport.addWidget(self.cursor)
         self.preview_status=QLabel('Silent decoded preview — no audio clock; not final effects playback')
         transport.addWidget(self.preview_status,1)
         self.content_layout.addLayout(transport)
-        self.table=QTableWidget(0,15)
+        self.table=QTableWidget(0,17)
         self.table.setHorizontalHeaderLabels(['Track (later rows on top)','Type','Source','Start','Source in',
-            'Source length','Speed','Gain','X','Y','Width','Height','Opacity','Enabled','Locked'])
+            'Source length','Speed','Gain','X','Y','Width','Height','Opacity','Enabled','Locked','Fade in (s)','Fade out (s)'])
         self.table.setMinimumHeight(240)
         self.table.itemChanged.connect(self._cell_changed)
         self.content_layout.addWidget(self.table)
@@ -126,6 +129,17 @@ class MultitrackPage(BasePage):
         self.status.setWordWrap(True);self.content_layout.addWidget(self.status)
         self.timer=QTimer(self);self.timer.setInterval(33);self.timer.timeout.connect(self._tick)
         self._rows=[]
+        self.shortcuts=[]
+        for key,handler in [('Ctrl+Z',self._undo),('Ctrl+Shift+Z',self._redo),
+                            ('Alt+Left',lambda:self._step_frame(-1)),('Alt+Right',lambda:self._step_frame(1))]:
+            shortcut=QShortcut(QKeySequence(key),self)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(handler);self.shortcuts.append(shortcut)
+
+    def _step_frame(self,delta):
+        self._stop()
+        frame=round(self.cursor.value()*self.project.fps)+delta
+        self.cursor.setValue(max(0,min(self.project.duration,frame/self.project.fps)))
 
     def _error(self,message):
         self._stop()
@@ -192,6 +206,8 @@ class MultitrackPage(BasePage):
                     if inactive:cell.setText('—')
                     if col in (1,2) or inactive:cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     self.table.setItem(row,col,cell)
+                for col,field in [(15,'fade_in'),(16,'fade_out')]:
+                    self.table.setItem(row,col,QTableWidgetItem(str(getattr(item,field))))
                 for col,checked in [(13,lane.enabled),(14,lane.locked)]:
                     cell=QTableWidgetItem();cell.setFlags(Qt.ItemFlag.ItemIsUserCheckable|Qt.ItemFlag.ItemIsEnabled|Qt.ItemFlag.ItemIsSelectable)
                     cell.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
@@ -217,6 +233,7 @@ class MultitrackPage(BasePage):
             lane,item=self._rows[cell.row()];column=cell.column()
             if column==0:self.project.lane_state(lane,name=cell.text())
             elif column in (13,14):self.project.lane_state(lane,**{('enabled' if column==13 else 'locked'):cell.checkState()==Qt.CheckState.Checked})
+            elif column in (15,16):self.project.change_item(lane,item,**{('fade_in' if column==15 else 'fade_out'):float(cell.text())})
             elif 3<=column<=12:self.project.change_item(lane,item,**{self.fields[column-3]:float(cell.text())})
             self._changed()
         except Exception as exc:self._error(str(exc));self._rebuild()

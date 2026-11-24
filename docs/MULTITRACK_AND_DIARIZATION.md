@@ -127,3 +127,54 @@ records the analysis-time transcript snapshot.
   Model-download egress and network-isolation privilege blockers recorded in
   `PRO_INTEGRATED_MILESTONE.md` have not disappeared. No disconnected success,
   native device success, merge, release or full PRO completion is asserted.
+
+## Next increment: fades, transport and explicit acceptance runner
+
+Both video and audio items now persist editable linear fade-in/out durations
+(output seconds). Export video fades alter alpha, so overlapping layers can
+produce dissolves; audio uses a matching timeline envelope before delay/mix.
+Decoded video preview and seeked PCM preview evaluate the same fade timing.
+Validation rejects overlapping fade lengths; split outside fades preserves only
+the relevant outer fades. Split inside a fade is explicitly rejected rather than
+silently changing its shape. Old files default to zero fades. This is not a
+full transition library or keyframe editor.
+
+Native workspace has previous/next frame buttons (project-frame grid), Alt+Left/
+Right frame step, Ctrl+Z undo and Ctrl+Shift+Z redo, scoped to this page. These
+still use nominal-FPS source seeking, not a VFR precision guarantee.
+
+Explicit trained-model smoke runner (no downloads):
+
+```sh
+python scripts/accept_real_models.py --video authorized-person-sample.mp4 \
+  --wav authorized-speech-16k-mono-pcm16.wav --yolo yolox_nano.onnx \
+  --segmentation segmentation.onnx --embedding embedding.onnx \
+  --report real-model-report.json
+```
+
+It runs continuous real tracking and neural diarization, requires positive person
+observations and speech turns, and writes machine/architecture/input hashes plus
+success or failure. It does not certify speaker accuracy or establish OS network
+isolation. Run separately on each target with externally verified network
+blocking. Do not substitute synthetic model outputs or publish private sample
+media as acceptance evidence.
+
+For a target's actual audio-device gate, set `CLIPOS_REQUIRE_NATIVE_AUDIO=1`
+and run `tests/test_multitrack.py::test_real_native_audio_sink_when_device_exists`.
+Missing device/backend then FAILS instead of skipping. This confirms sink clock
+advancement only; physical loopback/listening, drift and video presentation latency
+still need measured native A/V acceptance. Generic hosted CI lacks physical output
+hardware and must not be labelled certified by bypassing this gate.
+
+Official YOLOX release download retried during this increment: access to
+`release-assets.githubusercontent.com` is denied by this environment's outbound
+host policy. Real weights are still absent. Native workflow 45399594657 reported
+Windows/Linux success but macOS failed at isolated Intel editing tests; the
+restricted log-artifact host prevented retrieving the underlying failure log.
+Workflow 45403335558 remained in progress at the time of inspection. Neither
+native Intel acceptance nor a disconnected three-target pass is established.
+
+Latest local validation after this increment: **522 passed, 10 skipped in 94.41 s**.
+Workflow 45403335558 subsequently reported **Windows installer job success**;
+Linux/macOS remained in progress. Installer build success is not physical audio
+or disconnected acceptance.

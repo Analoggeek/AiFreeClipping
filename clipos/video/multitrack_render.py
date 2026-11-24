@@ -39,6 +39,7 @@ def graph(project):
             parts.append(f'[{index}:v]setpts=(PTS-STARTPTS)/{item.speed:.8f},fps={project.fps},'
                 f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},'
                 f'setsar=1,format=rgba,colorchannelmixer=aa={item.opacity:.6f},'
+                + video_fades(item) +
                 f'setpts=PTS+{item.at:.6f}/TB[layer{index}]')
             parts.append(f'{base}[layer{index}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:'
                 f"enable='gte(t,{item.at:.6f})*lt(t,{item.at+item.duration:.6f})'[composite{index}]")
@@ -47,7 +48,7 @@ def graph(project):
             delay=round(item.at*1000)
             parts.append(f'[{index}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},'
                 f'aresample=48000,aformat=channel_layouts=stereo,volume={item.gain:.6f},'
-                f'atrim=duration={item.duration:.6f},adelay={delay}|{delay}[audio{index}]')
+                f'atrim=duration={item.duration:.6f},' + audio_envelope(item) + f'adelay={delay}|{delay}[audio{index}]')
             audio.append(f'[audio{index}]')
     # Compensate amix averaging; limit peaks without auto loudness boosting.
     parts.append(''.join(audio)+f'amix=inputs={len(audio)}:duration=first:dropout_transition=0,'
@@ -121,7 +122,7 @@ def audio_preview_command(project,start):
             delay=round(max(0,item.at-start)*1000)
             inputs+=['-threads','2','-ss',f'{source_in:.6f}','-t',f'{length:.6f}','-i',source.path]
             parts.append(f'[{index}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},aresample=48000,'
-                f'aformat=channel_layouts=stereo,volume={item.gain:.6f},adelay={delay}|{delay}[p{index}]')
+                f'aformat=channel_layouts=stereo,volume={item.gain:.6f},' + audio_envelope(item,offset) + f'adelay={delay}|{delay}[p{index}]')
             labels.append(f'[p{index}]');index+=1
     if index>64:raise ValueError('Audio preview supports at most 64 items')
     parts.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0,'
@@ -129,3 +130,20 @@ def audio_preview_command(project,start):
     return [require_ffmpeg(),'-hide_banner','-nostdin','-v','error','-filter_complex_threads','2',*inputs,
             '-filter_complex',';'.join(parts),'-map','[pcm]','-t',f'{duration:.6f}',
             '-ac','2','-ar','48000','-f','s16le','-']
+
+
+def video_fades(item):
+    result=''
+    if item.fade_in:result+=f'fade=t=in:st=0:d={item.fade_in:.8f}:alpha=1,'
+    if item.fade_out:result+=f'fade=t=out:st={item.duration-item.fade_out:.8f}:d={item.fade_out:.8f}:alpha=1,'
+    return result
+
+
+def audio_envelope(item,offset=0.):
+    # Evaluate in output seconds BEFORE timeline delay, including preview seek.
+    terms=['1']
+    if item.fade_in:terms.append(f'max(0,(t+{offset:.8f})/{item.fade_in:.8f})')
+    if item.fade_out:terms.append(f'max(0,({item.duration:.8f}-t-{offset:.8f})/{item.fade_out:.8f})')
+    expression=terms[0]
+    for term in terms[1:]:expression=f'min({expression},{term})'
+    return f"volume='{expression}':eval=frame," if len(terms)>1 else ''
