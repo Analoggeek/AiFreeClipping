@@ -70,12 +70,16 @@ jobs:
     steps:
       - name: Check out the source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
         continue-on-error: true
       - name: Check out the source again
         # A flaky network on the runner must not throw away a build that
         # takes half an hour to produce.
         if: failure()
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -409,12 +413,16 @@ jobs:
     steps:
       - name: Check out the source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
         continue-on-error: true
       - name: Check out the source again
         # A flaky network on the runner must not throw away a build that
         # takes half an hour to produce.
         if: failure()
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Download the artifacts
         uses: actions/download-artifact@v4
@@ -446,6 +454,17 @@ jobs:
           done
           cd ..
           find artifacts -maxdepth 1 -type f | sort | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Require all seven nonempty versioned assets
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          for asset in "CLIPOS-Setup.exe" "CLIPOS-$version-arm64.dmg" "CLIPOS-$version-intel.dmg" "CLIPOS-arm64.app.tar.gz" "CLIPOS-intel.app.tar.gz" "CLIPOS_${version}_amd64.deb" "CLIPOS-$version-linux-x86_64.zip"; do
+            test -s "artifacts/$asset" || { echo "Missing/empty release asset: $asset"; exit 1; }
+          done
 
       - name: Publish the release
         uses: softprops/action-gh-release@v2
