@@ -6,7 +6,7 @@ select moments and framing, apply editing presets and captions, review the
 rendered videos, and export the batch. Processing runs locally with **Python,
 PySide6, Faster-Whisper and FFmpeg**—no mandatory cloud account or subscription.
 
-**v2.5.1 release update.** YouTube publishing/account connection and the separate
+**v2.5.1 is released.** YouTube publishing/account connection and the separate
 Gaming Studio 2.0 navigation have been removed; authorised URL import remains.
 
 ## Download v2.5.1
@@ -299,7 +299,16 @@ and preserves application permissions/symlinks in release archives.
 
 ## Validation and limitations
 
-For the v2.5 release work:
+For the v2.5.1 fixes:
+
+- Local full suite: **270 passed, 9 skipped**; E2E: **35/35 passed**.
+- Real GUI source-region drags, persistence, source playback, pixel-checked recipe
+  rendering and playable delivery after changed controls have regression tests.
+- [Native v2.5.1 release checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45376503798)
+  passed Windows, macOS Intel/Apple Silicon and Linux; all seven assets uploaded.
+  Windows/macOS CI requires real Qt source-frame playback, not a mocked player.
+
+Earlier v2.5.0 validation:
 
 - Local full suite: **263 passed, 8 skipped**.
 - Real FFmpeg tests cover five-clip captioned batch export, GUI

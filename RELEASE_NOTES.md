@@ -23,8 +23,10 @@ By **Analoggeek**.
   source decoding is mandatory in Windows/macOS CI, skipped only where minimal
   Linux lacks multimedia system libraries.
 
-Local tests: **269 passed, 9 skipped**. Native build/release checks are required
-before publication; physical-device performance and installer/driver behaviour
+Local tests: **270 passed, 9 skipped**; E2E **35/35**.
+[Native release checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45376503798)
+passed Windows, macOS Intel/Apple Silicon and Linux; all seven assets uploaded.
+These tests do not replace physical-device validation; physical-device performance and installer/driver behaviour
 are not established by automated tests. macOS ad-hoc signing is not notarization;
 do not disable OS security. Existing local projects/data are retained.
 
