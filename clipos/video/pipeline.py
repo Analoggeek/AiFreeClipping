@@ -308,9 +308,11 @@ class ClipOSPipeline:
                 progress_cb(pct, msg)
 
         saved_edit = PATHS.projects / str(self.project_id) / "edits" / f"{clip_id}.json"
-        if saved_edit.exists():
-            from .timeline import Timeline
+        from .timeline import Timeline
+        if saved_edit.exists() or Timeline.backup_path(saved_edit).exists():
             timeline = Timeline.load(saved_edit)
+            if timeline.recovered_from:
+                self._report("render", 5., "Recovered previous timeline backup; latest edits may be missing")
             from ..captions.caption_engine import retime_cues, build_cues
             edited_cues = retime_cues(build_cues(analysis.transcript, 0, analysis.duration),
                 [(seg.start, seg.end, seg.speed) for seg in timeline.segments]) if settings.show_captions and analysis.transcript else []

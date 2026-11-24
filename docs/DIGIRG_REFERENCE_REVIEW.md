@@ -33,7 +33,7 @@ The previous frame-difference motion list was N-1 values and unused in ranking. 
 | Advanced audio | Existing analysis/render filters retained | Validated denoising, separation, sync, VAD-driven editing, track ducking/automation workflow |
 | AI scene understanding | Existing cuts/text heuristics and measured activity | Installed local vision-language model, explicit model management, grounded semantic evidence |
 | GPU video rendering | Platform encoder selection, new runtime preflight, and full-render CPU retry | Actual native GPU acceptance/performance tests; preflight does not establish full-size/filter-graph success |
-| Project saving / recovery | Existing persisted project/settings/ranges and prior atomic plan application retained | Professional timeline schema, media relink, crash journal/autosave/recovery acceptance |
+| Project saving / recovery | Existing persisted project/settings/ranges and atomic plan application retained; new validated atomic segment-timeline autosave and previous-revision backup recovery | Professional multitrack schema, media relink, crash journal and native recovery acceptance |
 | Fully disconnected professional acceptance | Existing local transport/installed-model restrictions and test fixtures | Real model weights + OS-level disconnected gaming import→detect→captions→timeline edit→save/reopen→1080x1920 export on macOS Intel/ARM and Windows |
 
 No current feature was intentionally removed. No upstream web-server architecture, implicit editing-time downloads, upload/publishing service or replacement UI was added. This source patch is an incremental enhancement to draft PR #92, not a complete PRO release or native installer validation.
@@ -69,3 +69,13 @@ and nonblocking diagnostics. The real FFmpeg CPU-retry integration now exercises
 simulated failure for NVENC, QSV and VideoToolbox; these simulated failures are
 not evidence of successful native GPU encoding. Native macOS/Windows GPU tests,
 physical installation and real-weight disconnected PRO acceptance remain pending.
+
+### Follow-up: existing timeline persistence
+
+Independently developed beyond the clipping reference: the existing segment
+editor now uses validated atomic saves, a previous-valid-revision backup,
+explicit recovery/failure notices and collision-safe IDs after reopen. Editor
+and export both discover backup-only saves. See `CLIPOS_PRO_ROADMAP.md` for exact
+limits. Targeted validation: **78 passed**, including an actual recovered timeline
+render. Professional multitrack persistence/recovery remains pending; this is not
+a claim that the reference provides a professional timeline engine.

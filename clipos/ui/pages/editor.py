@@ -652,11 +652,14 @@ class EditorPage(BasePage):
         )
         from ...core.config import PATHS
         saved = PATHS.projects / str(self.project_id) / "edits" / f"{clip_id}.json"
-        if saved.exists():
+        if saved.exists() or Timeline.backup_path(saved).exists():
             try:
                 self.timeline = Timeline.load(saved)
+                if self.timeline.recovered_from:
+                    self.window.notify("Recovered previous saved timeline from backup; latest edits may be missing", 7000)
             except (ValueError, OSError, KeyError) as exc:
                 log.warning("Could not restore timeline: %s", exc)
+                self.window.notify("Saved timeline could not be restored; showing original clip", 7000)
         self._frame_cache.clear()
         self.timeline_widget.select(0)
         self.timeline_widget.set_duration(self.timeline.duration)
@@ -895,7 +898,11 @@ class EditorPage(BasePage):
     def _after_edit(self) -> None:
         from ...core.config import PATHS
         if self.clip_id:
-            self.timeline.save(PATHS.projects / str(self.project_id) / "edits" / f"{self.clip_id}.json")
+            try:
+                self.timeline.save(PATHS.projects / str(self.project_id) / "edits" / f"{self.clip_id}.json")
+            except (OSError, ValueError) as exc:
+                log.warning("Timeline autosave failed: %s", exc)
+                self.window.notify("Timeline not saved. Keep the editor open and check available storage/permissions.", 7000)
         self._frame_cache.clear()
         self.timeline_widget.set_segments(self._segment_views())
         self.timeline_widget.set_duration(self.timeline.duration)

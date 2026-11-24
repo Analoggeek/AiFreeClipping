@@ -145,3 +145,23 @@ def test_release_archives_apps_before_artifact_upload():
     release = (root/'.github/workflows/release.yml').read_text()
     assert 'tar -czf dist/CLIPOS-arm64.app.tar.gz -C dist CLIPOS-arm64.app' in release
     assert release.index('Archive native app permissions') < release.index('Upload the build artifacts')
+
+
+def test_recovered_timeline_reopens_and_really_renders(video,tmp_path):
+    from clipos.core.ffmpeg import probe
+    path=tmp_path/'edit.json'
+    timeline=Timeline.from_clip(0,2,source_duration=2)
+    timeline.set_speed(timeline.segments[0].id,2)
+    timeline.save(path)
+    timeline.split_at(1)
+    timeline.save(path)
+    path.write_text('{broken')
+    restored=Timeline.load(path)
+    assert restored.recovered_from and restored.duration==pytest.approx(1)
+    result=ClipRenderer(tmp_path/'work').render_timeline(video,tmp_path/'restored.mp4',restored,
+        RenderSettings(width=270,height=480,fps=15,show_captions=False,sound_effects=False,
+                       encoder_preference='cpu'))
+    assert result.size_bytes>0
+    info=probe(tmp_path/'restored.mp4')
+    assert (info.video.width,info.video.height)==(270,480)
+    assert info.duration==pytest.approx(1,abs=.2)

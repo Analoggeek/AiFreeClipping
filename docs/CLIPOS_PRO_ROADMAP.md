@@ -124,3 +124,30 @@ alone. VideoToolbox software fallback cannot be labelled hardware. Full-render
 CPU retry remains. Diagnostics show an unverified candidate without UI-thread
 probing. Source suite: 331 passed / 9 skipped; generated-video E2E: 35/35.
 These policy/integration results do not establish native GPU or PRO completion.
+
+### Timeline save/recovery follow-up
+
+The existing single-source segment timeline now saves through same-directory
+atomic replacement, flush/fsync and temporary-file cleanup. Before replacement,
+a validated previous revision is atomically retained as `.json.bak`; corrupted
+primary data never rotates over that backup. Load validates bounded JSON,
+version, unique IDs, finite/ranged numeric fields and positive source intervals,
+then tries the backup if the primary is missing/invalid. Legacy unversioned files
+remain supported. New segment IDs resume after the highest saved numeric ID,
+not the segment count. Invalid in-memory state is rejected before file writes.
+
+Both editor reopening and pipeline export discover backup-only saves. Recovery
+is explicitly reported as a previous revision (latest edits may be missing).
+Editor autosave failures are reported without discarding the live edit. Backup
+load does not silently rewrite the damaged primary; the next successful edit save
+does so. If neither copy is valid, export fails rather than silently rendering an
+unedited source; the editor warns when it must show the original clip.
+
+Validation for this increment: **78 targeted tests passed** (`test_timeline.py`,
+`test_timeline_recovery.py`, `test_creator_workflows.py`), including real FFmpeg
+renders and recovered-save → reopen → speed-retimed vertical export. This is not
+a new full-suite/native acceptance result. This is previous-revision protection
+for existing segment edits, **not** multitrack project recovery, persisted undo
+history, cross-process locking, media relinking or a power-loss guarantee on every
+filesystem. A first save has no previous revision to recover; `.bak` appears on
+a subsequent save. No new UI mockup or model dependency was introduced.
