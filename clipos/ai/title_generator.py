@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 import re
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 
 from ..core.logging_setup import get_logger
@@ -66,48 +64,28 @@ class ClipMetadata:
 
 def ollama_available(host: str = "http://127.0.0.1:11434", timeout: float = 2.0) -> bool:
     """Check if a local Ollama server is running."""
+    from ..core.local_ai import LocalOllama
     try:
-        req = urllib.request.Request(f"{host.rstrip('/')}/api/tags",
-                                     headers={"User-Agent": "clipos"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return resp.status == 200
-    except Exception:
-        return False
+        LocalOllama(host,timeout).request('/api/tags')
+        return True
+    except Exception:return False
 
 
 def ollama_models(host: str = "http://127.0.0.1:11434", timeout: float = 2.0) -> list[str]:
+    from ..core.local_ai import LocalOllama
     try:
-        req = urllib.request.Request(f"{host.rstrip('/')}/api/tags",
-                                     headers={"User-Agent": "clipos"})
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return [m.get("name", "") for m in data.get("models", []) if m.get("name")]
-    except Exception:
-        return []
+        result=LocalOllama(host,timeout).request('/api/tags')
+        return [item['name'] for item in result.get('models',[]) if isinstance(item,dict)
+                and isinstance(item.get('name'),str) and 'cloud' not in item['name'].lower()]
+    except Exception:return []
 
 
 def _ollama_generate(prompt: str, model: str, host: str, timeout: float = 120.0) -> str | None:
-    """Call Ollama's /api/generate. Returns None on any failure."""
-    payload = json.dumps({
-        "model": model,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.85, "num_predict": 700},
-    }).encode("utf-8")
-    try:
-        req = urllib.request.Request(
-            f"{host.rstrip('/')}/api/generate",
-            data=payload,
-            headers={"Content-Type": "application/json", "User-Agent": "clipos"},
-        )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            return (data.get("response") or "").strip()
-    except urllib.error.HTTPError as exc:
-        log.warning("ollama HTTP %s", exc.code)
-    except Exception as exc:
-        log.warning("ollama call failed: %s", exc)
-    return None
+    from ..core.local_ai import LocalOllama,LocalAIError
+    try:return LocalOllama(host,timeout).generate(prompt,model)
+    except LocalAIError as exc:
+        log.warning('Local metadata inference unavailable: %s',exc)
+        return None
 
 
 def _parse_json_block(text: str) -> dict | None:

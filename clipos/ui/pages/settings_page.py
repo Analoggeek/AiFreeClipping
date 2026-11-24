@@ -224,7 +224,7 @@ class SettingsPage(BasePage):
 
         # ---------------- local LLM ----------------
         llm = Card()
-        llm.add(SectionHeader("Local LLM (optional)", "Ollama — used for title ideas"))
+        llm.add(SectionHeader("Local LLM (optional)", "Local Ollama — metadata and bounded edit plans; loopback only"))
         form4 = QFormLayout()
         form4.setSpacing(Metrics.md)
 
@@ -453,6 +453,10 @@ class SettingsPage(BasePage):
         from ...ai.title_generator import ollama_available, ollama_models
 
         host = self.ollama_host.currentText()
+        from ...core.local_ai import local_endpoint,LocalAIError
+        try:local_endpoint(host)
+        except LocalAIError as exc:
+            self.llm_status.setText(str(exc));return
         if ollama_available(host):
             models = ollama_models(host)
             self.llm_status.setText(

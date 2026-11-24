@@ -80,7 +80,7 @@ DEFAULT_SETTINGS: dict = {
     "processing_threads": 0,  # 0 => auto
     "low_memory_mode": False,
     "offline_mode": True,
-    "auto_download_models": True,
+    "auto_download_models": False,
     "llm_model": "llama3.1:8b",
     "ollama_host": "http://127.0.0.1:11434",
     "bgm_volume": 0.12,

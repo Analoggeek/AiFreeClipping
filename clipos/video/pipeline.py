@@ -233,7 +233,7 @@ class ClipOSPipeline:
                 text=c.transcript_text,
                 keywords=c.keywords,
                 title_hint=c.title,
-                use_llm=self.db.get_setting("use_llm", "0") == "1",
+                use_llm=str(self.db.get_setting("use_llm", "0")).lower() in ('1','true','on'),
                 llm_model=self.db.get_setting("llm_model", "llama3.1:8b"),
                 ollama_host=self.db.get_setting("ollama_host", "http://127.0.0.1:11434"),
             )

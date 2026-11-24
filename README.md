@@ -31,6 +31,16 @@ controls persist across navigation. Changing controls no longer blocks exporting
 checked rendered clips; re-edit explicitly to apply new effects. Speech-model
 errors offer an explicit retry without captions. See [release notes](RELEASE_NOTES.md).
 
+## PRO source milestone — not a PRO release
+
+The additional autonomous-editor specification is tracked in the
+[PRO engineering/acceptance ledger](docs/CLIPOS_PRO_ROADMAP.md). Current source
+work adds a loopback-only local-LLM transport, explicit model setup and bounded,
+reviewable edit plans that apply to real project controls/ranges and can execute
+through the existing renderer. It does **not** complete professional multitrack
+editing, advanced perception, 30 captions or the disconnected real-model acceptance
+suite. Download links above still refer to the released **2.5.1 baseline**.
+
 ## Contents
 
 - [What is new in 2.5](#what-is-new-in-25)
