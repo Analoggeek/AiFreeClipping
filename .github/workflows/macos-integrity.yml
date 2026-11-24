@@ -59,7 +59,7 @@ jobs:
               for (const e of fs.readdirSync(dir, {withFileTypes:true})) {
                 const p = path.join(dir, e.name);
                 if (e.isDirectory()) walk(p);
-                else if (['build-error.log','step-failure.txt','failure-report.md'].includes(e.name)) {
+                else if (['build-error.log','step-failure.txt','failure-report.md','editing-tests.log'].includes(e.name)) {
                   const text = fs.readFileSync(p,'utf8');
                   body += '\n### ' + e.name + '\n```\n' + text.slice(0,10000) + '\n...tail...\n' + text.slice(-6000) + '\n```\n';
                 }

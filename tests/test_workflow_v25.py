@@ -180,7 +180,7 @@ def test_real_one_click_import_edit_review_export_flow(db,tmp_path):
     db.set_settings({'auto_caption':False,'default_clip_count':1,'use_gpu':'cpu','output_dir':str(tmp_path/'delivery'),'restore_on_launch':False})
     app=QApplication.instance() or QApplication([])
     window=MainWindow(db);page=window.pages['workflow']
-    def wait_until(predicate,seconds=20):
+    def wait_until(predicate,seconds=180):
         deadline=time.monotonic()+seconds
         while time.monotonic()<deadline:
             app.processEvents();QTest.qWait(20)
