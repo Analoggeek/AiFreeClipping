@@ -144,13 +144,15 @@ class WorkflowPage(BasePage):
     def _review_ui(self,layout):
         card=Card();card.add(SectionHeader('Review edited videos','Actual rendered outputs, not an unedited source-frame simulation. Check clips to export.'))
         try:
+            from ...core.media_backend import configure
+            configure()
             from PySide6.QtMultimedia import QMediaPlayer,QAudioOutput
             from PySide6.QtMultimediaWidgets import QVideoWidget
             self.video=QVideoWidget();self.video.setMinimumHeight(300);self.video.setMaximumHeight(480)
             self.player=QMediaPlayer(self);self.audio=QAudioOutput(self);self.player.setAudioOutput(self.audio);self.player.setVideoOutput(self.video)
             from PySide6.QtMultimedia import QVideoSink
             self.source_sink=QVideoSink(self);self.source_sink.videoFrameChanged.connect(self._source_frame)
-            self.player.errorOccurred.connect(lambda *_:self.status.setText('Embedded decoder could not play this file. Use Open in player; rendered files are preserved.'))
+            self.player.errorOccurred.connect(lambda *_:self.status.setText('Embedded decoder could not play this file: '+self.player.errorString()+'. Use Open in player; rendered files are preserved.'))
             card.add(self.video);row=QHBoxLayout();self._button('Play / Pause',self._play,row)
             self.seek=QSlider(Qt.Orientation.Horizontal);self.player.durationChanged.connect(self._duration_changed);self.player.positionChanged.connect(self._playhead);self.seek.sliderMoved.connect(self.player.setPosition);row.addWidget(self.seek,1)
             self.clock=QLabel('0:00');row.addWidget(self.clock);card.add_layout(row)

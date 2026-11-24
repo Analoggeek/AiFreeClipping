@@ -42,3 +42,15 @@ def test_intel_mac_can_use_available_videotoolbox():
     with patch.object(hardware,'detect_hardware',return_value=profile),patch.object(hardware.platform,'system',return_value='Darwin'),patch.object(hardware,'encoder_works',return_value=True):
         assert hardware.choose_encoder().hw_accel=='videotoolbox'
         assert hardware.choose_encoder('cpu').hw_accel=='none'
+
+
+def test_native_macos_media_backend_is_selected_without_overriding_user(monkeypatch):
+    from clipos.core import media_backend
+    monkeypatch.delenv('QT_MEDIA_BACKEND',raising=False)
+    monkeypatch.setattr(media_backend.sys,'platform','darwin')
+    assert media_backend.configure()=='darwin'
+    monkeypatch.setenv('QT_MEDIA_BACKEND','ffmpeg')
+    assert media_backend.configure()=='ffmpeg'
+    monkeypatch.delenv('QT_MEDIA_BACKEND')
+    monkeypatch.setattr(media_backend.sys,'platform','win32')
+    assert media_backend.configure()==''
