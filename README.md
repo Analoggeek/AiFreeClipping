@@ -307,12 +307,17 @@ and preserves application permissions/symlinks in release archives.
 
 ## Validation and limitations
 
-For the v3.0.0 fixes:
+For v3.0.0 source:
 
-- Local full suite: **270 passed, 9 skipped**; E2E: **35/35 passed**.
+- Local full suite: **579 passed, 10 skipped**; E2E: **35/35 passed**.
+- Trained OCR inference is tested; TalkNet/AST runtime tests use random weights,
+  not trained-model quality evidence. See the release notes for optional-runtime
+  and hardware limitations.
+
+Earlier v2.5.1 validation:
 - Real GUI source-region drags, persistence, source playback, pixel-checked recipe
   rendering and playable delivery after changed controls have regression tests.
-- [Native v3.0.0 release checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45376503798)
+- [Native v2.5.1 release checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45376503798)
   passed Windows, macOS Intel/Apple Silicon and Linux; all seven assets uploaded.
   Windows/macOS CI requires real Qt source-frame playback, not a mocked player.
 
