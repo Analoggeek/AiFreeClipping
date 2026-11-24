@@ -11,7 +11,7 @@ def navigation_icon(key):
         p.drawRoundedRect(QRectF(3,3,18,18),5,5);p.drawPolygon(QPolygonF([QPointF(10,7),QPointF(17,12),QPointF(10,17)]))
     elif key=='projects':
         p.drawRoundedRect(QRectF(3,7,18,14),2,2);p.drawPolyline(QPolygonF([QPointF(3,8),QPointF(3,4),QPointF(10,4),QPointF(13,7)]))
-    elif key in ('editor','multitrack'):
+    elif key in ('editor','multitrack','longform'):
         p.drawLine(4,6,20,6);p.drawLine(4,12,20,12);p.drawLine(4,18,20,18)
         p.drawEllipse(QRectF(7,4,4,4));p.drawEllipse(QRectF(14,10,4,4));p.drawEllipse(QRectF(6,16,4,4))
     elif key in ('templates','library'):

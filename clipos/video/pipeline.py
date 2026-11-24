@@ -255,8 +255,10 @@ class ClipOSPipeline:
                 direction=self.db.get_setting('selection_direction',''),
                 local_rerank=enabled(self.db.get_setting('selection_local_rerank','0'))).validate()
         selection_report={}
+        from ..ai.preferences import learn
+        preferences=learn(self.db) if enabled(self.db.get_setting('learn_selection_preferences','0')) else None
         clips = clip_detector.detect_clips(
-            selection_policy=policy,selection_report=selection_report,
+            selection_policy=policy,selection_report=selection_report,selection_preferences=preferences,
             selection_host=self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
             selection_model=self.db.get_setting('llm_model','llama3.1:8b'),cancel_cb=self._cancel_requested,
             duration=analysis.duration,
@@ -306,6 +308,7 @@ class ClipOSPipeline:
         """Persist detected clips, replacing any previous ones for this project."""
         self.db.execute("DELETE FROM clips WHERE project_id=?", (self.project_id,))
         ids: list[int] = []
+        from ..ai.preferences import features
         for c in clips:
             meta = title_generator.generate_metadata(
                 text=c.transcript_text,
@@ -317,6 +320,8 @@ class ClipOSPipeline:
             )
             clip_id = self.db.create_clip(
                 project_id=self.project_id,
+                settings=json.dumps({'selection_features':features(c.signal_scores)})
+                    if str(self.db.get_setting('learn_selection_preferences','0')).lower() in ('1','true','on') else '{}',
                 title=c.title or (meta.titles[0] if meta.titles else "Untitled clip"),
                 description=meta.description or c.description,
                 start_time=c.start,

@@ -121,3 +121,85 @@ long-VOD cleanup, bounded resettable preference learning and remaining professio
 editor/proxy work. Each must retain explicit unavailable/unknown states and be
 validated with authorized real media and actual models. No upstream publishing,
 social tokens, mandatory cloud services, marketplace execution or branding is added.
+
+## Long-form editor and opt-in local preference increment
+
+### Native long-form flow
+
+New additive **Automatic long-form** sidebar page: select an authorized local
+video, run automatic analysis, review/edit source start/end boundaries, save/open
+the versioned JSON plan, then export a chronological 1920×1080/30fps MP4. Source
+aspect ratio is preserved with padding, not a forced vertical crop. No existing
+short-clip project, editor or file is removed/replaced.
+
+`video/longform.py` measures actual FFmpeg `silencedetect` and `freezedetect`
+evidence in at most 120-second decode windows, over video up to six hours.
+A proposed downtime cut needs BOTH audio <= -45 dBFS and a sustained frozen
+picture for at least eight seconds. It retains 0.6 seconds of padding on each
+side. This is a conservative signal policy, NOT semantic scene/game understanding;
+very quiet static but meaningful material may still be proposed for removal.
+The native plan table allows review before export. Normal audio or normal image
+motion prevents that interval being cut. No-audio videos retain the whole source
+instead of inventing silence evidence. All evidence remains local.
+
+Evidence windows are independent: a freeze/silence that straddles a 120-second
+boundary may be missed or produce an extra retained boundary island. That is a
+safe false-negative tradeoff, not exact global downtime segmentation. Fine noise,
+source audio gain, compression and image scaling affect these fixed thresholds.
+No automatic word-level speech guarantee is claimed for this no-transcription
+long-form path. Keep boundaries can be edited manually; this first page does not
+include waveform/preview/undo controls of the separate existing editors.
+
+Plans bind source path/size/mtime signature and validated source-time segments.
+Export accepts 1–2000 chronological keeps at unchanged speed, encodes one part at
+a time with identical libx264 CPU/AAC parameters and concatenates compatible
+streams. It does not create one enormous N-input filter graph or load the entire
+VOD into memory. Disk use still grows with encoded keep parts plus the final
+output. Export validates final duration/streams and source freshness, checks
+cancellation, and only then atomically replaces the requested MP4. Existing
+outputs survive error/cancellation; temporary parts are removed. Missing source,
+invalid plan and out-of-bounds user edits fail explicitly. It is a CPU path with
+honest encoding progress, not an unmeasured GPU-performance promise.
+
+### Local ranking preference learning
+
+Settings has **Learn bounded local selection preferences from successful exports**,
+off by default. Only while opted in, saving selected clips records a limited
+snapshot of already measured channels (motion/loudness/energy/story/hook) in their
+existing clip metadata. No transcript, audio or video is uploaded, and no schema
+migration or new external account is required.
+
+On later automatic selections, `ai/preferences.py` compares distinct successfully
+exported clips with their local library baseline (at most the latest 5000 clips).
+Repeated exports of the same clip do not increase its sample count. Failed/empty
+exports and missing/invalid feature values do not train. Fewer than eight unique
+exported feature profiles => no bias. Per-channel coefficients are bounded to
+±0.15; total candidate influence is clamped to ±4 ordering points. Measured scores
+are not rewritten, explicit exclusions/diversity still apply, and reports expose
+the profile used. The optional local reranker runs after this heuristic stage and
+can order its candidate pool differently.
+
+Exports are an implicit user preference proxy, NOT observed audience performance.
+Batch/one-click exports can reflect the automatic choice rather than a separate
+manual endorsement; if exported profiles match the whole library, bias tends to
+zero. There is no claim of causal preference accuracy or higher engagement.
+**Delete learned selection feature snapshots** transactionally removes these
+snapshots, retaining unrelated clip metadata and actual export history. Reads and
+reset batches are bounded. Disabling the feature stops recording/applying learning;
+use reset as well to delete already retained snapshots. A fresh opt-in can learn
+again from newly recorded clips.
+
+### Validation
+
+Full local suite **561 passed / 10 skipped in 97.14s**. New tests cover actual
+FFmpeg frozen+quiet analysis, real chronological output streams/duration, old-output
+preservation on cancellation, stale-source rejection, native plan edits/save/open,
+unique-export learning, coefficient bounds, invalid/failed feedback and reset
+preserving unrelated metadata. A final bounded-reset change also passed targeted
+regressions. Build/release regular and isolated Intel gates include the new tests.
+
+The earlier review's long-form/preferences items are now implemented to the
+specific limits above; this does not turn signal-based downtime into semantic
+understanding or certify physical audio/video and real-model accuracy. Latest
+inspected native run 45408739163 had Windows/Linux jobs successful and macOS still
+running; no native acceptance result is inferred from a hosted build alone.

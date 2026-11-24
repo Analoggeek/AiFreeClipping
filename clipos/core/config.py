@@ -81,6 +81,7 @@ DEFAULT_SETTINGS: dict = {
     "low_memory_mode": False,
     "offline_mode": True,
     "auto_download_models": False,
+    "learn_selection_preferences": False,
     "automatic_selection": True,
     "selection_local_rerank": False,
     "selection_include": "",

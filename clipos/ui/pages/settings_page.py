@@ -316,6 +316,13 @@ class SettingsPage(BasePage):
         )
         form4.addRow("", self.use_llm_check)
 
+        self.learn_preferences_check=QCheckBox('Learn bounded local selection preferences from successful exports')
+        self.learn_preferences_check.setChecked(enabled(settings.get('learn_selection_preferences','0')))
+        self.learn_preferences_check.toggled.connect(lambda v:self._save('learn_selection_preferences',int(v)))
+        form4.addRow('',self.learn_preferences_check)
+        reset_preferences=QPushButton('Delete learned selection feature snapshots')
+        reset_preferences.clicked.connect(self._reset_preferences)
+        form4.addRow('',reset_preferences)
         self.automatic_selection_check=QCheckBox('Strict automatic clip selection (no duplicate-count padding)')
         self.automatic_selection_check.setChecked(enabled(settings.get('automatic_selection','1')))
         self.automatic_selection_check.toggled.connect(lambda v:self._save('automatic_selection',int(v)))
@@ -520,6 +527,11 @@ class SettingsPage(BasePage):
         self.db.set_setting("theme", theme)
         apply_theme(self.window, theme)
 
+    def _reset_preferences(self):
+        from ...ai.preferences import reset
+        reset(self.db)
+        self.window.notify('Local selection feature snapshots deleted; preferences reset',5000)
+
     def _update_diarization_label(self):
         values=self.db.get_settings()
         self.diarization_label.setText("Segmentation: "+(values.get("diarization_segmentation") or "not installed/selected")+
@@ -606,7 +618,7 @@ class SettingsPage(BasePage):
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setValue(values[key]);widget.blockSignals(False)
-        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe'),('automatic_selection_check','automatic_selection'),('selection_rerank_check','selection_local_rerank')]:
+        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe'),('automatic_selection_check','automatic_selection'),('selection_rerank_check','selection_local_rerank'),('learn_preferences_check','learn_selection_preferences')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)

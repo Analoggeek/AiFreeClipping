@@ -60,7 +60,7 @@ def local_order(rows,direction,host,model):
 
 
 def select(candidates,duration,count,policy,*,host='http://127.0.0.1:11434',model='llama3.1:8b',
-           cancel_cb=None,ranker=None):
+           cancel_cb=None,ranker=None,preferences=None):
     policy.validate()
     if type(count) is not int or not 1<=count<=30:raise ValueError('Target count must be 1–30')
     if type(duration) not in (int,float) or not math.isfinite(duration) or duration<=0:raise ValueError('Invalid source duration')
@@ -77,6 +77,7 @@ def select(candidates,duration,count,policy,*,host='http://127.0.0.1:11434',mode
     def reject(key,reason):
         counts=report['rejection_counts'];counts[reason]=counts.get(reason,0)+1
         if len(report['rejections'])<2048:report['rejections'].append({'id':key,'reason':reason})
+    report['preferences']=preferences or {'status':'disabled','bias':{}}
     eligible=[]
     for index,candidate in enumerate(candidates):
         cancelled();key=f'c{index:07d}'
@@ -86,7 +87,8 @@ def select(candidates,duration,count,policy,*,host='http://127.0.0.1:11434',mode
         text=tokens(candidate.transcript_text)
         if any(contains(text,p) for p in policy.exclude):reject(key,'explicit_transcript_exclusion');continue
         matched=[p for p in policy.include if contains(text,p)]
-        score=candidate.virality_score+min(12.,len(matched)*4.)
+        from .preferences import adjustment
+        score=candidate.virality_score+min(12.,len(matched)*4.)+adjustment(candidate.signal_scores,preferences or {})
         eligible.append({'id':key,'candidate':candidate,'score':score,'matches':matched,'tokens':text})
     # Preserve the best measured candidate in each of 16 source-time regions, not
     # merely the first N windows in chronological order. Then fill by score.
