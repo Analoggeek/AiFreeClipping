@@ -156,6 +156,7 @@ def _score_signals(
     visual: VisualAnalysis,
     transcript: Transcript | None,
     speaker: SpeakerTrack | None,
+    activity_jumps=None,
 ) -> tuple[dict, list[str], list[str]]:
     """Compute every engagement signal for a window. Returns (scores, reasons, keywords)."""
     scores: dict[str, float] = {}
@@ -164,6 +165,13 @@ def _score_signals(
     words = _tokens(text)
     content = _content_words(text)
     lower = text.lower()
+
+    from .activity import window_activity
+    motion,jump=window_activity(start,end,visual,audio,activity_jumps)
+    scores["motion"]=motion
+    scores["loudness_jump"]=jump
+    if motion>.2:reasons.append("Measured subject-motion burst")
+    if jump>.2:reasons.append("Measured loudness rise")
 
     # -- audio energy ---------------------------------------------------------------
     energy = audio.local_energy(start, end) if audio else 0.0
@@ -299,12 +307,12 @@ def _score_signals(
 
 # Weights for the final engagement ranking (sum = 1.0)
 SIGNAL_WEIGHTS = {
-    "energy": 0.13,
+    "energy": 0.09,
     "silence": 0.09,
     "speech_rate": 0.12,
-    "keywords": 0.14,
+    "keywords": 0.12,
     "questions": 0.09,
-    "surprise": 0.11,
+    "surprise": 0.09,
     "emotion": 0.07,
     "humor": 0.06,
     "scene_change": 0.05,
@@ -312,6 +320,8 @@ SIGNAL_WEIGHTS = {
     "story": 0.05,
     "hook": 0.03,
     "dynamics": 0.0,
+    "motion": 0.05,
+    "loudness_jump": 0.03,
 }
 
 
@@ -364,6 +374,8 @@ def _virality_score(scores: dict, cand: ClipCandidate, audio: AudioAnalysis) -> 
         + energy * 0.07
         + story * 0.07
     )
+    activity=max(float(scores.get("motion",0)),float(scores.get("loudness_jump",0)))
+    base=base*.94+activity*.06
     score = (base * 0.82 + opening_bonus * 0.18) * length_factor * 100.0
     return max(0.0, min(100.0, score))
 
@@ -460,6 +472,9 @@ def _candidate_windows(
         # anchors across the whole source.
         step_back = max(1, int(max_dur))
         anchors = {round(x, 2) for x in [0.0] + list(range(int(duration), 0, -step_back))}
+    from .activity import activity_anchors
+    for t in activity_anchors(visual,audio):
+        anchors.add(round(max(0.,t-min_dur*.4),2))
     anchors.add(0.0)
     # An anchor is usable when a full-length clip can still start there.
     latest = max(0.0, duration - min_dur)
@@ -529,6 +544,8 @@ def detect_clips(
     if progress_cb:
         progress_cb(20.0, f"Scoring {len(windows)} candidate windows")
 
+    from .activity import loudness_jumps
+    activity_jumps=loudness_jumps(audio)
     scored: list[ClipCandidate] = []
     for i, (s, e) in enumerate(windows):
         if progress_cb and i % 20 == 0:
@@ -540,7 +557,7 @@ def detect_clips(
         if transcript:
             text = transcript.text_between(s, e)
         scores, reasons, keywords = _score_signals(
-            s, e, text, audio, visual, transcript, speaker
+            s, e, text, audio, visual, transcript, speaker, activity_jumps
         )
         cand = ClipCandidate(
             start=s, end=e,

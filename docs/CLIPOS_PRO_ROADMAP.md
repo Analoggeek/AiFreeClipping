@@ -2,8 +2,11 @@
 
 This document tracks the additional PRO specification. It is **not** a completion
 announcement. Released 2.5.1 remains the baseline; the current source work adds a
-bounded local-agent/security foundation. No PRO installer/version is being
-published on the strength of UI controls or protocol mocks.
+bounded local-agent/security foundation plus measured activity ranking,
+face-confirmed static-panel refinement and safer sampled face association.
+See [the pinned DigiRG review](DIGIRG_REFERENCE_REVIEW.md) for the feature-by-feature
+reuse/improvement/new-work report and exact validation limits. No PRO installer/version
+is being published on the strength of UI controls or protocol mocks.
 
 ## Non-negotiable inference policy
 

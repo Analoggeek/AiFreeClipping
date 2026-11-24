@@ -493,43 +493,43 @@ def detect_faces_in_frames(
     return out
 
 
-def build_tracks(faces: list[Face], max_gap: float = 2.0) -> list[FaceTrack]:
-    """Group faces into persistent tracks by proximity in time and space."""
-    if not faces:
-        return []
-    faces = sorted(faces, key=lambda f: f.timestamp)
-    tracks: list[FaceTrack] = []
-    for face in faces:
-        best: FaceTrack | None = None
-        best_dist = 1e9
-        for tr in tracks:
-            if face.timestamp - tr.last_seen > max_gap:
-                continue
-            prev = tr.faces[-1]
-            cx, cy = face.center
-            pcx, pcy = prev.center
-            dist = math.hypot(cx - pcx, cy - pcy)
-            if dist < best_dist and dist < 0.28:
-                best_dist = dist
-                best = tr
-        if best is None:
-            tr = FaceTrack(track_id=len(tracks))
-            tr.faces.append(face)
-            tracks.append(tr)
-        else:
-            best.faces.append(face)
-    # Compute total visible time per track
+def build_tracks(faces: list[Face], max_gap: float = 2.0, scene_cuts=()) -> list[FaceTrack]:
+    """One-to-one sampled face association with bounded velocity prediction.
+
+    Spatial continuity only: these are not biometric identities, audio diarization,
+    YOLO or ByteTrack. Cuts retire prior shot tracks instead of switching subjects.
+    """
+    from itertools import groupby
+    tracks=[]
+    cuts=sorted(float(x) for x in scene_cuts)
+    for timestamp,group in groupby(sorted(faces,key=lambda f:f.timestamp),key=lambda f:f.timestamp):
+        current=list(group)
+        active=[tr for tr in tracks if 0<timestamp-tr.last_seen<=max_gap
+                and not any(tr.last_seen<cut<=timestamp for cut in cuts)]
+        pairs=[]
+        for tr in active:
+            prev=tr.faces[-1];px,py=prev.center
+            if len(tr.faces)>1:
+                earlier=tr.faces[-2];dt=prev.timestamp-earlier.timestamp
+                if dt>0:
+                    horizon=min(timestamp-prev.timestamp,max_gap)
+                    px+=max(-.5,min(.5,(px-earlier.center[0])/dt))*horizon
+                    py+=max(-.5,min(.5,(py-earlier.center[1])/dt))*horizon
+            for i,face in enumerate(current):
+                ratio=face.area/max(prev.area,1e-8)
+                distance=math.dist(face.center,(px,py))
+                if .25<=ratio<=4 and distance<.28:
+                    pairs.append((distance+.04*abs(math.log(ratio)),tr.track_id,i,tr))
+        assigned_tracks=set();assigned_faces=set()
+        for _,tid,index,tr in sorted(pairs,key=lambda p:(p[0],p[1],p[2])):
+            if tid in assigned_tracks or index in assigned_faces:continue
+            tr.faces.append(current[index]);assigned_tracks.add(tid);assigned_faces.add(index)
+        for index,face in enumerate(current):
+            if index not in assigned_faces:tracks.append(FaceTrack(track_id=len(tracks),faces=[face]))
     for tr in tracks:
-        tr.total_time = sum(
-            min(max_gap, f.timestamp - tr.faces[i - 1].timestamp)
-            for i, f in enumerate(tr.faces)
-            if i > 0
-        )
-    # Sort by prominence
-    tracks.sort(key=lambda t: (t.total_time, t.mean_area), reverse=True)
-    for i, tr in enumerate(tracks):
-        tr.track_id = i
-    return tracks
+        tr.total_time=sum(min(max_gap,b.timestamp-a.timestamp) for a,b in zip(tr.faces,tr.faces[1:]))
+    # Keep IDs assigned at birth. Sorting for prominence must not relabel identities.
+    return sorted(tracks,key=lambda t:(t.total_time,t.mean_area),reverse=True)
 
 
 def analyze_visual(
@@ -562,7 +562,7 @@ def analyze_visual(
     brightness: list[float] = []
     colorfulness: list[float] = []
     motion: list[float] = []
-    for frame in frames:
+    for index, frame in enumerate(frames):
         small = cv2.resize(frame, (80, 45))
         gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
         brightness.append(float(gray.mean()) / 255.0)
@@ -572,10 +572,12 @@ def analyze_visual(
         std = math.sqrt(float(np.std(rg)) ** 2 + float(np.std(yb)) ** 2)
         mean = math.sqrt(float(np.mean(rg)) ** 2 + float(np.mean(yb)) ** 2)
         colorfulness.append(float((std + 0.3 * mean) / 255.0))
-        if prev_small is not None:
-            diff = cv2.absdiff(gray, prev_small)
-            motion.append(float(diff.mean()) / 255.0)
-        prev_small = gray
+        from .activity import flow_activity
+        dt=times[index]-times[index-1] if index else 0.
+        cut=bool(index and any(times[index-1]<t<=times[index] for t in result.scenes.times))
+        value,_=flow_activity(prev_small,frame,dt,cut)
+        motion.append(value)
+        prev_small = frame
     result.brightness = brightness
     result.colorfulness = colorfulness
     result.motion = motion
@@ -584,7 +586,7 @@ def analyze_visual(
         progress_cb(70.0, "Detecting faces")
     faces = detect_faces_in_frames(frames, times)
     gap = (times[1]-times[0])*1.5 if len(times) > 1 else 2.
-    result.tracks = build_tracks(faces, max_gap=max(2., gap))
+    result.tracks = build_tracks(faces, max_gap=max(2., gap),scene_cuts=result.scenes.times)
 
     if progress_cb:
         progress_cb(100.0, f"Visual analysis complete ({len(result.tracks)} subject tracks)")
