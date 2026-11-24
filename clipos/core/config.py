@@ -87,6 +87,8 @@ DEFAULT_SETTINGS: dict = {
     "background_music": "",
     "bgm_ducking": True,
     "person_model_path": "",
+    "diarization_segmentation": "",
+    "diarization_embedding": "",
     "body_reframe": True,
     "body_track_id": 0,
     "sfx_enabled": True,

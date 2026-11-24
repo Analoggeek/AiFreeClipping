@@ -10,8 +10,8 @@ passing synthetic tests does not complete the milestone.
 | Engine | Current source | Still required for acceptance |
 |---|---|---|
 | Continuous YOLO + ByteTrack | New opt-in YOLOX ONNX person detector + actual supervision ByteTrack, every decoded frame, scene-cut retirement, streamed normalized body-track artifact, pipeline/settings/CLI integration | Real YOLO weights acceptance, representative multi-person gaming/occlusion/VFR tests and native performance validation; body-center export consumption is now implemented |
-| Professional multitrack + live playback | Existing single-source segment timeline, real edits/exports, atomic saves/recovery, persisted undo/redo | Genuine multi-source video/audio/caption/overlay track schema and editing UI, live multitrack decode/composition/audio clock, proxies, seeks/cache/keyframes; rendered preview must not be called live playback |
-| Anonymous speakers | Existing energy/face-prominence heuristic remains clearly separate from body tracks | Actual local diarization embeddings/clustering, overlap/unknown handling, audiovisual association with confidence and corrected labels |
+| Professional multitrack + live playback | New multi-source video/audio model, overlapping FFmpeg exports, editable Qt track table, decoded preview and actual native audio-clock code path; legacy editor preserved | Native audio/video device acceptance, professional graphical timeline, caption/transition/adjustment lanes, keyframes/automation, grouped edits, proxies/cache and long/4K performance |
+| Anonymous speakers | New opt-in sherpa-onnx neural segmentation/embedding/clustering worker, pipeline settings, anonymous turns/unknown-overlap word association and atomic artifacts; legacy heuristic separate | Real trained-model quality acceptance, audiovisual face/body association, correction UI, long-file global clustering and cross-file identity policy |
 | Real-model disconnected acceptance | Strict local-model loading policies and real media export tests exist | Real installed detector/STT/diarization/LLM weights; OS-enforced disconnected run across import→detect→diarize→multitrack edit→save/reopen→1080×1920 export on all three targets |
 
 ## Continuous tracking usage (new, opt-in)
@@ -86,4 +86,16 @@ association, not appearance-based reidentification through arbitrary occlusions.
 
 An accessible, licensed local detector file and suitable native hosts with
 network isolation controls are necessary to close those acceptance gates. The
-remaining engines require implementation, not merely supplying model weights.
+remaining professional features and audiovisual speaker association still require
+implementation, not merely supplying model weights.
+
+
+## New multi-source and neural engine increment
+
+See [MULTITRACK_AND_DIARIZATION.md](MULTITRACK_AND_DIARIZATION.md) for the actual
+workspace, export, decoded/native audio-clock path and conditional local neural
+worker implementation. Fresh full suite: **520 passed / 10 skipped**; original
+pipeline E2E: **35/35 passed**. The new actual audio-sink check skips because this
+sandbox cannot load Qt multimedia; trained diarization/YOLO weights and native
+OS-disconnected acceptance remain unavailable. Source/runtime implementations
+are not equivalent to passed acceptance or a complete professional editor.

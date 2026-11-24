@@ -67,3 +67,16 @@ YOLOX model format/reference: https://github.com/Megvii-BaseDetection/YOLOX
 the documented raw-head format. No YOLOX source files or trained model binaries
 are vendored by this increment. Users must install trusted, appropriately
 licensed model weights explicitly. ONNX Runtime remains an existing dependency.
+
+## Optional neural diarization runtime
+
+sherpa-onnx / sherpa-onnx-core 1.12.34, Apache-2.0:
+https://github.com/k2-fsa/sherpa-onnx
+
+CLIPOS invokes the installed runtime's segmentation, speaker embedding and
+clustering APIs; it does not rename the existing energy/face heuristic as neural
+diarization. The distributed runtime's Apache license is retained at
+`resources/licenses/sherpa-onnx-APACHE-2.0.txt`. No trained segmentation/embedding
+weights are included or implicitly downloaded. Model licenses, access conditions
+and authorized voice processing remain separate requirements for setup. No
+third-party account or access-token collection is added to editing.

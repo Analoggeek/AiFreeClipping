@@ -207,6 +207,7 @@ class MainWindow(QMainWindow):
             ("projects", "", "Projects"),
             ("library", "", "Clip library"),
             ("editor", "", "Advanced editor"),
+            ("multitrack", "", "Multitrack workspace"),
             ("templates", "", "Presets & captions"),
             ("models", "", "AI models"),
             ("settings", "", "Settings"),
@@ -240,6 +241,7 @@ class MainWindow(QMainWindow):
         from .pages.caption_studio import CaptionStudioPage
         from .pages.clip_library import ClipLibraryPage
         from .pages.editor import EditorPage
+        from .pages.multitrack import MultitrackPage
         from .pages.export_center import ExportCenterPage
         from .pages.workflow import WorkflowPage
         from .pages.home import HomePage
@@ -255,6 +257,7 @@ class MainWindow(QMainWindow):
             ("templates", TemplatesPage),
             ("captions", CaptionStudioPage),
             ("editor", EditorPage),
+            ("multitrack", MultitrackPage),
             ("export", ExportCenterPage),
             ("models", AiModelsPage),
             ("settings", SettingsPage),

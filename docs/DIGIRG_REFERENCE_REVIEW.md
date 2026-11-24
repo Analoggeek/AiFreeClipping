@@ -149,3 +149,15 @@ and manual/gaming precedence. Body IDs are not speaker IDs. Full local suite:
 trained YOLO evidence. Fixed crop size, not segmentation or dynamic body-fit zoom.
 Details: `BODY_REFRAMING.md`. Native playback, multitrack, actual diarization and
 real-model disconnected acceptance are still separate pending work.
+
+### Additive multi-source editor and neural runtime implementation
+
+Independently developed beyond DigiRG's clipping scope: real multi-source
+video/audio project model, editable Qt track table, overlapping compositing/mix
+export, decoded source-frame preview and a native QAudioSink audio-clock path.
+Optional local sherpa-onnx segmentation/embedding/clustering is wired through an
+isolated worker and the analysis pipeline. Neither is a renamed clipping recipe
+or face-prominence heuristic. Full local tests: 520 passed / 10 skipped; original
+pipeline E2E: 35/35. Native audio output and trained diarization model acceptance
+were not available; professional timeline features and audiovisual association
+remain pending. See MULTITRACK_AND_DIARIZATION.md for exact completion boundaries.

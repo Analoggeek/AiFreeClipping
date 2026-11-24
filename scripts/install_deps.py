@@ -151,6 +151,7 @@ def main() -> int:
                     help="kept for compatibility; the OpenCV version is "
                          "always pinned")
     ap.add_argument("--tracking", action="store_true", help="install optional local YOLOX/ByteTrack runtime (no model downloads)")
+    ap.add_argument("--diarization", action="store_true", help="install local neural diarization runtime, never model weights")
     args = ap.parse_args()
 
     try:
@@ -205,6 +206,9 @@ def _install(args) -> int:
     if args.build:
         packages += BUILD
     run(pip("install", *packages), "installing the core packages")
+
+    if getattr(args, "diarization", False):
+        run(pip("install", "sherpa-onnx==1.12.34"), "installing optional neural diarization runtime")
 
     if getattr(args, "tracking", False):
         run(pip("install", "scipy>=1.10,<2", "matplotlib>=3.7,<4", "defusedxml>=0.7", "pyyaml>=6", "tqdm>=4.65"),

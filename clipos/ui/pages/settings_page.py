@@ -270,6 +270,18 @@ class SettingsPage(BasePage):
         self.body_track_spin.setToolTip("Person ID from this project's tracking artifact; not a speaker label")
         self.body_track_spin.valueChanged.connect(lambda value:self._save("body_track_id",value))
         tracking.add(self.body_track_spin)
+        tracking.add(SectionHeader("Anonymous neural diarization (optional)",
+            "Installed sherpa-compatible segmentation + embedding ONNX · CPU · no named identity"))
+        self.diarization_label = QLabel()
+        self.diarization_label.setWordWrap(True)
+        tracking.add(self.diarization_label)
+        self._update_diarization_label()
+        diarization_row=QHBoxLayout()
+        for text,key in [("Select segmentation…","diarization_segmentation"),("Select embedding…","diarization_embedding")]:
+            button=QPushButton(text);button.clicked.connect(lambda checked=False,k=key:self._choose_diarization_model(k))
+            diarization_row.addWidget(button)
+        disable=QPushButton("Disable diarization");disable.clicked.connect(self._disable_diarization)
+        diarization_row.addWidget(disable);tracking.add_layout(diarization_row)
         self.content_layout.addWidget(tracking)
 
         # ---------------- local LLM ----------------
@@ -493,6 +505,20 @@ class SettingsPage(BasePage):
         self.db.set_setting("theme", theme)
         apply_theme(self.window, theme)
 
+    def _update_diarization_label(self):
+        values=self.db.get_settings()
+        self.diarization_label.setText("Segmentation: "+(values.get("diarization_segmentation") or "not installed/selected")+
+            "\nEmbedding: "+(values.get("diarization_embedding") or "not installed/selected"))
+
+    def _choose_diarization_model(self,key):
+        path,_=QFileDialog.getOpenFileName(self,"Select trusted sherpa-compatible local "+key,"","ONNX (*.onnx)")
+        if path:self._save(key,path);self._update_diarization_label()
+
+    def _disable_diarization(self):
+        self.db.set_settings({"diarization_segmentation":"","diarization_embedding":""})
+        self._update_diarization_label()
+        self.window.settings_changed.emit()
+
     def _set_person_model(self, path: str) -> None:
         self._save("person_model_path", path)
         self.person_model_label.setText(path or "Disabled — select installed local YOLOX ONNX weights")
@@ -569,6 +595,7 @@ class SettingsPage(BasePage):
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)
+        self._update_diarization_label()
         self.person_model_label.setText(values.get('person_model_path','') or 'Disabled — select installed local YOLOX ONNX weights')
         self.music_path_label.setText(values.get('background_music','') or 'No background music')
         self.out_path_label.setText(values.get('output_dir',''))

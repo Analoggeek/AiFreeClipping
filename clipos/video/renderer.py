@@ -555,7 +555,7 @@ class ClipRenderer:
             if keys:
                 vf_parts.append(_crop_expr(src_w, src_h, settings.width, settings.height,
                                            keys, clip_dur, settings.fps))
-                result.steps.append("Smart reframe follows the active speaker")
+                result.steps.append("Face-prominence reframing (heuristic; not verified speaker identity)")
             else:
                 vf_parts.append(
                     f"scale={settings.width}:{settings.height}:force_original_aspect_ratio=increase,"

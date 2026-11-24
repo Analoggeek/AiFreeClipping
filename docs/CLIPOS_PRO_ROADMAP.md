@@ -300,3 +300,33 @@ artifact rejection, coverage gates and cut remapping. Synthetic body observation
 are not real YOLO weight/accuracy evidence. Native live playback, full multitrack,
 actual diarization and OS-disconnected real-model acceptance remain pending.
 See [BODY_REFRAMING.md](BODY_REFRAMING.md).
+
+### Multi-source workspace / audio clock / neural diarization implementation
+
+A new additive sidebar workspace now has real independent overlapping video and
+audio tracks, editable start/source trim/speed/gain/geometry/opacity, track states,
+split, track-local ripple delete, layer order, relink, atomic save/reopen/backup,
+autosave/recovery and runtime undo/redo. Export composites multiple sources and
+mixes independent audio; output failure/cancellation preserves previous output.
+The legacy editor and its persisted undo remain intact. This is currently a
+working track table, not the complete requested professional drag timeline.
+
+Decoded preview has bounded queues/decoders and is not an intermediate rendered
+movie. Separate audio mode sends actual mixed PCM to QAudioSink and uses processed
+audio time as the video clock. No device/backend => explicit error, not fake A/V
+success. Native driver/device performance and synchronization are still pending.
+
+Optional neural diarization now invokes actual sherpa-onnx segmentation,
+embeddings and clustering with installed local weights in a fault-isolated child.
+Pipeline/Settings, frozen-app worker routing, progress/cancellation, anonymous
+turns, unknown-overlap handling, word labels and atomic hashed artifacts are wired.
+No trained diarization weights were run successfully here; tests intentionally
+invalidated native models to establish isolation, not inference quality.
+Diarization labels are not yet associated with visible faces/body IDs.
+
+Full local suite: **520 passed, 10 skipped** (100.95 s); generated-video E2E:
+**35/35 passed**. Native audio-sink test skipped because Qt multimedia cannot load.
+Headless Qt stubs do not certify native audio/graphics. CI includes new tests and
+optional runtimes; latest native outcomes remain pending. Full implementation,
+limits and evidence: [MULTITRACK_AND_DIARIZATION.md](MULTITRACK_AND_DIARIZATION.md).
+OS-enforced real-model disconnected acceptance is still blocked, not complete.

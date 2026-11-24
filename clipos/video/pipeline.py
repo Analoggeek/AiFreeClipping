@@ -57,6 +57,7 @@ class AnalysisResult:
     transcript: Optional[Transcript] = None
     transcription_available: bool = True
     transcription_error: str = ""
+    diarization: dict = field(default_factory=dict)
     clips: list = field(default_factory=list)
     elapsed: float = 0.0
 
@@ -65,6 +66,7 @@ class AnalysisResult:
             "duration": self.duration,
             "transcription_available": self.transcription_available,
             "transcription_error": self.transcription_error,
+            "diarization": self.diarization,
             "clips": len(self.clips),
             "person_tracking": self.visual.person_tracking if self.visual else {},
             "elapsed": round(self.elapsed, 2),
@@ -201,8 +203,22 @@ class ClipOSPipeline:
             result.transcription_error = "No audio track in source video"
         self._check_cancel()
 
+        segmentation=self.db.get_setting("diarization_segmentation","")
+        embedding=self.db.get_setting("diarization_embedding","")
+        if (segmentation or embedding) and info.has_audio:
+            from ..ai.diarization import diarize
+            if not segmentation or not embedding:
+                raise RuntimeError("Select both installed local diarization models or disable diarization")
+            try:
+                result.diarization=diarize(wav_path,segmentation,embedding,
+                    PATHS.projects/str(self.project_id)/"analysis"/"diarization.json",
+                    cancel_cb=self._cancel_requested,transcript=result.transcript,
+                    progress_cb=lambda p,m:self._report("speakers",78.+p*.015,m))
+            except FFmpegCancelled as exc:raise PipelineCancelled("Diarization cancelled") from exc
+            self._check_cancel()
+
         # -- speaker tracking ---------------------------------------------------
-        self._report("speakers", 80.0, "Identifying the active speaker")
+        self._report("speakers", 80.0, "Estimating visual subject; heuristic is separate from neural speaker labels")
         if result.visual:
             result.speaker = speaker_tracking.analyze_speakers(
                 result.visual, result.audio or audio_analysis.AudioAnalysis()

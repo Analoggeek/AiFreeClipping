@@ -8,9 +8,10 @@ Strategy
     speaker is actively talking -- that is the person whose voice is driving.
 4.  Produce a per-timeline "active subject" so the reframer can follow them.
 
-This works fully offline with no diarisation model: the audio energy envelope is
-correlated with face prominence over time, which is a robust signal for podcasts and
-talking-head footage.
+This legacy heuristic works offline without a diarization model. It measures
+face prominence alongside audio energy; it does NOT establish who is speaking.
+Neural diarization lives separately in diarization.py and is not automatically
+mapped to face/body identities.
 """
 from __future__ import annotations
 
