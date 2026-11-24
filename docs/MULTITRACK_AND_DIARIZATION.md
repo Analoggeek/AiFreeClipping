@@ -178,3 +178,34 @@ Latest local validation after this increment: **522 passed, 10 skipped in 94.41 
 Workflow 45403335558 subsequently reported **Windows installer job success**;
 Linux/macOS remained in progress. Installer build success is not physical audio
 or disconnected acceptance.
+
+## Graphical track gestures increment
+
+The workspace now additionally includes a native painted graphical timeline
+above the retained table inspector. Each lane displays its actual items using
+persisted start and output duration. Drag clip bodies to move; drag either edge
+to trim source/time ranges. A ghost rectangle previews changes without mutating
+the project. Release commits one validated transaction, with existing autosave,
+undo/redo and project save/reopen. Locked lanes do not emit edits. Trimming cannot
+read before source start or beyond source end; model validation also rejects
+invalid fades rather than silently changing their shape.
+
+Click the ruler to seek. Enable snapping to nearby item boundaries/playhead,
+otherwise the project frame grid; Shift temporarily bypasses snapping. Zoom is
+5–240 pixels/second with horizontal/vertical scrolling. Selection is shared with
+the table inspector. Edits remain independent per item; there is no implicit
+video/audio link or cross-lane move. Same-lane overlaps remain allowed by the
+compositor. No fabricated thumbnails/waveforms are drawn.
+
+This closes the previous table-only limitation, not the entire professional
+specification. Waveforms, thumbnails/proxies, keyframe/automation editing,
+caption/adjustment lanes, grouped operations, cross-track ripple, drag-between-
+track gestures and audiovisual speaker association remain pending. Snap gestures
+use project frame timing; source VFR accuracy remains unverified. Native pointer/
+high-DPI/accessibility acceptance is still separate from headless Qt tests.
+
+Validation: **527 passed, 10 skipped in 95.54 seconds**. Five new tests include
+actual Qt mouse move/release/edge trims, non-mutating drag preview, save/reopen,
+undo, seek, snapping and locked-lane behavior. The native build and release gates
+include this module on regular and isolated Intel Python runs. Real model and
+physical audio/disconnected acceptance blockers recorded above are unchanged.

@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,QDoubleSpinBox,QFileDialog,QHBoxLayout,QLabel,QPushButton,
-    QProgressBar,QTableWidget,QTableWidgetItem,
+    QProgressBar,QTableWidget,QTableWidgetItem,QScrollArea,
 )
 
 from ...core.config import PATHS
@@ -21,6 +21,7 @@ from ...video.multitrack import MultitrackProject
 from ...video.multitrack_preview import FrameCompositor
 from ...video.multitrack_render import export_project
 from .base import BasePage
+from ..widgets.multitrack_timeline import MultitrackTimeline
 
 
 class FrameWorker(QThread):
@@ -112,11 +113,27 @@ class MultitrackPage(BasePage):
         self.preview_status=QLabel('Silent decoded preview — no audio clock; not final effects playback')
         transport.addWidget(self.preview_status,1)
         self.content_layout.addLayout(transport)
+        timeline_controls=QHBoxLayout()
+        snap=QCheckBox('Snap to edges / playhead / frames');snap.setChecked(True)
+        snap.toggled.connect(lambda enabled:setattr(self.timeline,'snap',enabled))
+        timeline_controls.addWidget(snap)
+        zoom=QDoubleSpinBox();zoom.setRange(5,240);zoom.setValue(60);zoom.setSuffix(' px/s')
+        zoom.valueChanged.connect(lambda value:self.timeline.set_scale(value))
+        timeline_controls.addWidget(zoom);timeline_controls.addStretch()
+        self.content_layout.addLayout(timeline_controls)
+        self.timeline=MultitrackTimeline()
+        self.timeline.seekRequested.connect(self.cursor.setValue)
+        self.timeline.selected.connect(self._timeline_selected)
+        self.timeline.editRequested.connect(self._timeline_edit)
+        timeline_scroll=QScrollArea();timeline_scroll.setWidget(self.timeline)
+        timeline_scroll.setMinimumHeight(200);timeline_scroll.setMaximumHeight(340)
+        self.content_layout.addWidget(timeline_scroll)
         self.table=QTableWidget(0,17)
         self.table.setHorizontalHeaderLabels(['Track (later rows on top)','Type','Source','Start','Source in',
             'Source length','Speed','Gain','X','Y','Width','Height','Opacity','Enabled','Locked','Fade in (s)','Fade out (s)'])
         self.table.setMinimumHeight(240)
         self.table.itemChanged.connect(self._cell_changed)
+        self.table.itemSelectionChanged.connect(self._table_selection_changed)
         self.content_layout.addWidget(self.table)
         edits=QHBoxLayout()
         self.ripple=QCheckBox('Ripple delete within selected track');edits.addWidget(self.ripple)
@@ -216,11 +233,29 @@ class MultitrackPage(BasePage):
         if selected in self._rows:self.table.setCurrentCell(self._rows.index(selected),column)
         else:self.table.setCurrentCell(-1,-1)
         self._building=False
+        self.timeline.set_project(self.project)
         self.cursor.setMaximum(self.project.duration)
         if self.project.duration<=0:
             self.preview.clear();self.preview.setText('Import local media to preview. No example video is loaded.')
             self.preview_status.setText('No active media')
         self._seek(self.cursor.value())
+
+    def _table_selection_changed(self):
+        if self._building:return
+        row=self.table.currentRow()
+        self.timeline.selection=self._rows[row] if 0<=row<len(self._rows) else None
+        self.timeline.update()
+
+    def _timeline_selected(self,lane,item):
+        if (lane,item) in self._rows:
+            self.table.setCurrentCell(self._rows.index((lane,item)),3)
+
+    def _timeline_edit(self,lane,item,values):
+        try:
+            self.project.change_item(lane,item,**values)
+            self._changed()
+        except Exception as exc:
+            self._error(str(exc));self._rebuild()
 
     def _selected(self):
         row=self.table.currentRow()
@@ -264,6 +299,7 @@ class MultitrackPage(BasePage):
         if self.project.redo():self._changed()
 
     def _seek(self,position):
+        self.timeline.set_position(position)
         if self.playing and not self._clock_update:self._stop()
         if self.project.duration>0:self.frames.request(self.project,position,self.generation)
 
