@@ -327,3 +327,48 @@ not verified here. The prior real trained OCR test remains separate evidence.
 
 Latest validation: full suite **576 passed / 11 skipped**, E2E **35/35**.
 The additional skip is the optional Torch random-checkpoint/forward contract.
+
+### Installed-runtime verification follow-up
+
+The sandbox runtime is now installed: Torch 2.6.0, torchaudio 2.6.0,
+Transformers 4.48.3, and python_speech_features 0.6. Hardware probing reports no
+available CUDA GPU; both new engines explicitly execute on CPU. The optional
+TalkNet strict-checkpoint roundtrip and CPU forward test now **runs and passes**.
+An additional small AST model is generated locally, written as safetensors,
+reloaded through the production loader and run on actual FFmpeg-decoded PCM
+with socket connections blocked. Its scores are finite and bounded. Both tests
+use random weights and establish runtime compatibility, **not trained-model
+quality**. Full installed-runtime suite: **579 passed / 10 skipped**.
+
+The acceptance runner now supports AV-only checks without requiring unrelated
+YOLO/diarization models, while preserving its original command-line interface:
+
+```sh
+python scripts/accept_real_models.py --video authorized-dialogue.mp4 \
+  --talknet /local/models/pretrain_TalkSet.model \
+  --sound-model /local/models/ast-hf-directory \
+  --report /local/results/av-smoke.json
+```
+
+Either AV flag can be used independently. TalkNet audio is decoded from the
+same source video, not an unrelated WAV. A run with zero eligible scored face
+tracks fails instead of passing on an empty result. Reports include platform,
+package versions, source/model/config hashes, scores, explicit unmeasured
+accuracy/isolation fields, and failures. Inputs cannot be overwritten by the
+report path. Reports do not establish weight provenance or physical A/V sync.
+
+Trained-weight access remains blocked in this sandbox: the pinned official
+TalkNet demo uses Google Drive ID `1AbN9fCf9IexMxEKXLQY2KYBlb-IhSEea`
+(the actual upstream ID is recorded in `demoTalkNet.py`; use its current official
+instructions). GitHub API inspection of `acano15/MM-VAP` commit
+`59bf2344c29815e04c48574f2735dac5f1baea2f`,
+`assets/asd/pretrain_TalkSet.model`, returned only an LFS pointer
+(`d985ddd07dca08864a28337726f5b7d91b6426bebc7327f0e9b21cf9ff1cc937`,
+63,227,827 declared bytes), not a downloaded checkpoint. It is not treated as
+verified official weights. Original AST checkpoints are linked from the
+YuanGongND/ast README on Dropbox; production currently requires the compatible
+local Transformers AST safetensors layout instead. Google Drive, Dropbox,
+Hugging Face and GitHub LFS media delivery hosts are not accessible under this
+workspace's outbound policy. No network restriction was bypassed and no
+trained TalkNet/AST inference is claimed. To run that last smoke check here,
+supply compatible local checkpoints plus authorized sample video as attachments.

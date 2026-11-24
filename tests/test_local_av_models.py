@@ -123,3 +123,39 @@ def test_optional_talknet_architecture_safe_checkpoint_and_cpu_forward(tmp_path)
     assert scores.shape==(25,2) and torch.isfinite(scores).all()
     del state['lossAV.FC.bias'];torch.save(state,path)
     with pytest.raises(RuntimeError):load_model(str(path))
+
+
+def test_optional_ast_real_runtime_local_safetensors_and_audio_forward(tmp_path):
+    torch=pytest.importorskip('torch')
+    pytest.importorskip('transformers')
+    pytest.importorskip('torchaudio')
+    from transformers import ASTConfig,ASTFeatureExtractor,ASTForAudioClassification
+    from clipos.ai.game_sound import review
+    torch.set_num_threads(2)
+    model_dir=tmp_path/'ast';model_dir.mkdir()
+    config=ASTConfig(hidden_size=24,num_hidden_layers=1,num_attention_heads=3,
+        intermediate_size=48,num_labels=2,id2label={0:'Synthetic class A',1:'Synthetic class B'})
+    # Random weights establish local loading/runtime compatibility ONLY.
+    ASTForAudioClassification(config).save_pretrained(model_dir,safe_serialization=True)
+    ASTFeatureExtractor().save_pretrained(model_dir)
+    source=tmp_path/'sine.wav'
+    subprocess.run([require_ffmpeg(),'-v','error','-f','lavfi','-i',
+        'sine=frequency=440:duration=1','-ar','16000',str(source)],check=True,capture_output=True)
+    with patch('socket.socket.connect',side_effect=AssertionError('No network allowed for local AST inference')):
+        result=review(source,[{'id':'actual-runtime','start':0.,'end':1.}],str(model_dir))
+    assert len(result[0]['sound'][0]['labels'])==2
+    assert all(0<=item['score']<=1 for item in result[0]['sound'][0]['labels'])
+    assert len(result[0]['model_sha256'])==64
+
+
+def test_acceptance_runner_rejects_absent_models_and_input_overwrite(tmp_path):
+    from scripts import accept_real_models
+    source=tmp_path/'source.mp4';source.write_bytes(b'do not overwrite')
+    model=tmp_path/'checkpoint.model';model.write_bytes(b'checkpoint')
+    with patch.object(sys,'argv',['accept','--video',str(source),'--talknet',str(model),'--report',str(model)]):
+        with pytest.raises(SystemExit) as error:accept_real_models.main()
+        assert error.value.code==2
+    assert model.read_bytes()==b'checkpoint'
+    with patch.object(sys,'argv',['accept','--video',str(source),'--report',str(tmp_path/'report.json')]):
+        with pytest.raises(SystemExit) as error:accept_real_models.main()
+        assert error.value.code==2
