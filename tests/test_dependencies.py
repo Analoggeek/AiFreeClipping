@@ -83,10 +83,20 @@ class TestInstallScript(unittest.TestCase):
         self.assertIn("--force-reinstall", self.text)
         self.assertIn("opencv-python-headless>=4.8,<5", self.text)
 
-    def test_it_never_installs_pytorch(self):
-        # PyTorch is several gigabytes and is only used to *detect* a GPU;
-        # faster-whisper uses CTranslate2 and needs no PyTorch at all.
-        self.assertNotIn("torch", self.text.replace("PyTorch", ""))
+    def test_pytorch_is_only_installed_for_explicit_av_model_opt_ins(self):
+        # Core/STT and ordinary builds must remain lightweight. Actual optional
+        # TalkNet/AST inference, unlike GPU detection, genuinely needs PyTorch.
+        from scripts import install_deps as installer
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        for talknet,sound in ((False,False),(True,False),(False,True)):
+            commands=[]
+            with patch.object(installer,'run',side_effect=lambda cmd,what:commands.append(cmd)), \
+                 patch.object(installer,'uninstall'), \
+                 patch.object(installer.subprocess,'run',return_value=SimpleNamespace(returncode=0,stdout='',stderr='')):
+                installer._install(SimpleNamespace(build=False,talknet=talknet,sound=sound))
+            torch_commands=[cmd for cmd in commands if any(arg.startswith('torch>=') for arg in cmd)]
+            self.assertEqual(bool(torch_commands),talknet or sound)
 
     def test_it_verifies_the_result(self):
         self.assertIn("CascadeClassifier", self.text)

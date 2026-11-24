@@ -371,6 +371,9 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
         "--exclude-module", "IPython",
     ]
     import importlib.util
+    for optional in ('transformers','python_speech_features'):
+        if importlib.util.find_spec(optional) is not None:
+            args += ['--collect-all',optional]
     if importlib.util.find_spec('rapidocr_onnxruntime') is not None:
         args += ['--collect-all','rapidocr_onnxruntime','--collect-all','shapely','--collect-all','pyclipper']
     icon = ROOT / "resources" / "icons" / (

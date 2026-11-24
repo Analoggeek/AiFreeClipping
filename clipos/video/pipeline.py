@@ -72,6 +72,7 @@ class AnalysisResult:
             "selection": self.selection,
             "clips": len(self.clips),
             "person_tracking": self.visual.person_tracking if self.visual else {},
+            "active_speaker": self.visual.active_speaker if self.visual else {},
             "elapsed": round(self.elapsed, 2),
         }
 
@@ -223,6 +224,18 @@ class ClipOSPipeline:
             result.diarization['source_signature']=result.source_signature
             self._check_cancel()
 
+        from ..core.editing import enabled
+        if enabled(self.db.get_setting('talknet_enabled','0')):
+            if not info.has_audio or not result.visual:
+                raise RuntimeError('TalkNet requires source audio and visual analysis')
+            from ..ai.active_speaker import analyze as analyze_active_speaker
+            self._report('speakers',79.,'Running local TalkNet audiovisual association (CPU)')
+            try:
+                result.visual.active_speaker=analyze_active_speaker(source,wav_path,result.visual,
+                    self.db.get_setting('talknet_checkpoint',''),cancel_cb=self._cancel_requested)
+            except FFmpegCancelled as exc:raise PipelineCancelled('Active-speaker inference cancelled') from exc
+            self._check_cancel()
+
         # -- speaker tracking ---------------------------------------------------
         self._report("speakers", 80.0, "Estimating visual subject; heuristic is separate from neural speaker labels")
         if result.visual:
@@ -276,10 +289,12 @@ class ClipOSPipeline:
         from ..ai.preferences import learn
         preferences=learn(self.db) if enabled(self.db.get_setting('learn_selection_preferences','0')) else None
         evidence_reviewer=None
-        if enabled(self.db.get_setting('selection_visual_review','0')) or enabled(self.db.get_setting('selection_ocr_review','0')):
+        if enabled(self.db.get_setting('selection_visual_review','0')) or enabled(self.db.get_setting('selection_ocr_review','0')) or enabled(self.db.get_setting('selection_sound_review','0')):
             from ..ai.game_evidence import review
             source=self.db.get_project(self.project_id)['source_path']
             evidence_reviewer=lambda rows:review(source,rows,signature=analysis.source_signature,
+                sound=enabled(self.db.get_setting('selection_sound_review','0')),
+                sound_model=self.db.get_setting('selection_sound_model',''),
                 ocr=enabled(self.db.get_setting('selection_ocr_review','0')),
                 vision=enabled(self.db.get_setting('selection_visual_review','0')),
                 host=self.db.get_setting('ollama_host','http://127.0.0.1:11434'),

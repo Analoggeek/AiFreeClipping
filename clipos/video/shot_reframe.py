@@ -1,15 +1,23 @@
 """Shot-held face framing: never smooth identities/positions across camera cuts.
 
-Subject choice is explicitly face-coverage/prominence, NOT audiovisual speaking
-identity. Manual/gaming/body policies retain their own priority at the caller.
+Subject choice uses available TalkNet shot evidence, otherwise face coverage.
+Anonymous face IDs do not establish named people or diarization identities. Manual/gaming/body policies retain their own priority at the caller.
 """
 import math
 import statistics
 
 
+def validate_binding(visual,source):
+    from .waveform import source_signature
+    evidence=getattr(visual,'active_speaker',{})
+    if evidence.get('status')=='available' and evidence.get('source_signature')!=source_signature(source):
+        raise ValueError('Active-speaker source changed; rerun analysis')
+
+
 def shot_centers(visual,start,end):
     cuts=sorted({float(t) for t in visual.scenes.times if math.isfinite(t) and start<t<end})
-    if not cuts:return []
+    evidence=getattr(visual,'active_speaker',{})
+    if not cuts and evidence.get('status')!='available':return []
     if len(cuts)>95:raise ValueError('Shot-held reframing supports at most 96 shots per segment')
     edges=[start,*cuts,end];output=[]
     for left,right in zip(edges,edges[1:]):
@@ -20,7 +28,13 @@ def shot_centers(visual,start,end):
             if faces:candidates.append((len(faces),statistics.median(f.area for f in faces),track.track_id,faces))
         if candidates:
             # Stable tie break; choose ONE track, not the mean position of two people.
-            _,_,_,faces=max(candidates,key=lambda row:(row[0],row[1],-row[2]))
+            chosen=max(candidates,key=lambda row:(row[0],row[1],-row[2]))
+            if evidence.get('status')=='available':
+                for shot in evidence.get('shots',[]):
+                    if shot['start']<=left and shot['end']>=right and shot.get('track_id') is not None:
+                        chosen=next((row for row in candidates if row[2]==shot['track_id']),chosen)
+                        break
+            _,_,_,faces=chosen
             cx=statistics.median(f.center[0] for f in faces);cy=statistics.median(f.center[1] for f in faces)
         else:cx,cy=.5,.5  # no evidence from another shot is carried forward
         output.append((left,right,cx,cy))

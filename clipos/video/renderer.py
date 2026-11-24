@@ -529,8 +529,9 @@ class ClipRenderer:
 
         shot_graph=None
         if settings.smart_reframe and settings.shot_aware_reframe and settings.editing_preset!='gaming' and not body_graph and visual:
-            from .shot_reframe import crop_filter
+            from .shot_reframe import crop_filter,validate_binding
             try:
+                validate_binding(visual,source)
                 shot_graph=crop_filter(visual,start,end,keeps if len(keeps)>1 else [(0.,clip_dur)],
                     src_w,src_h,settings.width,settings.height)
             except ValueError as exc:result.warnings.append(str(exc)+'; existing framing retained')
@@ -838,12 +839,13 @@ class ClipRenderer:
                         result.steps.append(f"Body reframe follows person track {chosen} (not speaker identity)")
                 shot_graph=None
                 if not body_graph and settings.smart_reframe and settings.shot_aware_reframe and visual and seg.zoom==1 and seg.crop_x==.5 and seg.crop_y==.5:
-                    from .shot_reframe import crop_filter
+                    from .shot_reframe import crop_filter,validate_binding
                     try:
+                        validate_binding(visual,source)
                         shot_graph=crop_filter(visual,seg.start,seg.end,[(0.,seg.source_duration)],
                             source_info.video.width,source_info.video.height,settings.width,settings.height)
                     except ValueError as exc:result.warnings.append(str(exc)+'; manual/center framing retained')
-                    if shot_graph:result.steps.append('Shot-held face framing with cut reset (heuristic)')
+                    if shot_graph:result.steps.append('Shot-held face framing (TalkNet evidence when available, otherwise heuristic)')
                 parts.append(body_graph or shot_graph or segment_video_filter(seg, settings.width, settings.height))
             color=_build_color_filter(settings)
             if color:parts.append(color)

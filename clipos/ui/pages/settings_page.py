@@ -335,6 +335,20 @@ class SettingsPage(BasePage):
         self.selection_intent_check.setChecked(enabled(settings.get('selection_compile_intent','0')))
         self.selection_intent_check.toggled.connect(lambda v:self._save('selection_compile_intent',int(v)))
         form4.addRow('',self.selection_intent_check)
+        self.talknet_check=QCheckBox('Use local TalkNet audiovisual face association (CPU, explicit checkpoint)')
+        self.talknet_check.setChecked(enabled(settings.get('talknet_enabled','0')))
+        self.talknet_check.toggled.connect(lambda v:self._save('talknet_enabled',int(v)))
+        form4.addRow('',self.talknet_check)
+        self.talknet_checkpoint_field=QLineEdit(str(settings.get('talknet_checkpoint','')))
+        self.talknet_checkpoint_field.editingFinished.connect(lambda:self._save('talknet_checkpoint',self.talknet_checkpoint_field.text()))
+        form4.addRow('Trusted local TalkNet checkpoint',self.talknet_checkpoint_field)
+        self.selection_sound_check=QCheckBox('Local AST sound classification (explicitly installed runtime and model)')
+        self.selection_sound_check.setChecked(enabled(settings.get('selection_sound_review','0')))
+        self.selection_sound_check.toggled.connect(lambda v:self._save('selection_sound_review',int(v)))
+        form4.addRow('',self.selection_sound_check)
+        self.selection_sound_model_field=QLineEdit(str(settings.get('selection_sound_model','')))
+        self.selection_sound_model_field.editingFinished.connect(lambda:self._save('selection_sound_model',self.selection_sound_model_field.text()))
+        form4.addRow('Local AST model directory',self.selection_sound_model_field)
         self.selection_ocr_check=QCheckBox('Read finalist on-screen text with explicitly installed local OCR models')
         self.selection_ocr_check.setChecked(enabled(settings.get('selection_ocr_review','0')))
         self.selection_ocr_check.toggled.connect(lambda v:self._save('selection_ocr_review',int(v)))
@@ -638,11 +652,11 @@ class SettingsPage(BasePage):
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setValue(values[key]);widget.blockSignals(False)
-        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe'),('automatic_selection_check','automatic_selection'),('selection_rerank_check','selection_local_rerank'),('learn_preferences_check','learn_selection_preferences'),('speaker_colors_check','speaker_caption_colors'),('selection_vision_check','selection_visual_review'),('selection_intent_check','selection_compile_intent'),('shot_reframe_check','shot_aware_reframe'),('selection_ocr_check','selection_ocr_review')]:
+        for name,key in [('offline_check','offline_mode'),('restore_check','restore_on_launch'),('low_mem_check','low_memory_mode'),('music_duck_check','bgm_ducking'),('body_reframe_check','body_reframe'),('automatic_selection_check','automatic_selection'),('selection_rerank_check','selection_local_rerank'),('learn_preferences_check','learn_selection_preferences'),('speaker_colors_check','speaker_caption_colors'),('selection_vision_check','selection_visual_review'),('selection_intent_check','selection_compile_intent'),('shot_reframe_check','shot_aware_reframe'),('selection_ocr_check','selection_ocr_review'),('selection_sound_check','selection_sound_review'),('talknet_check','talknet_enabled')]:
             widget=getattr(self,name,None)
             if widget is not None:
                 widget.blockSignals(True);widget.setChecked(enabled(values[key]));widget.blockSignals(False)
-        for key in ('selection_include','selection_exclude','selection_direction','selection_vision_model'):
+        for key in ('selection_include','selection_exclude','selection_direction','selection_vision_model','selection_sound_model','talknet_checkpoint'):
             widget=getattr(self,key+'_field',None)
             if widget is not None:
                 widget.blockSignals(True);widget.setText(str(values.get(key,'')));widget.blockSignals(False)

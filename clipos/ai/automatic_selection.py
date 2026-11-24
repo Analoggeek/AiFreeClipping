@@ -134,6 +134,7 @@ def select(candidates,duration,count,policy,*,host='http://127.0.0.1:11434',mode
                'measured_heuristic_score':row['candidate'].virality_score,
                'explicit_phrase_matches':row['matches'],
                'visual_evidence':next(({'scene':e.get('scene','unknown'),'description':e.get('description',''),
+                   'sound':e.get('sound',[]),
                    'ocr_text':' | '.join(o['text'] for o in e.get('ocr',[]))[:1200]}
                    for e in report['visual_review'].get('evidence',[]) if e['id']==row['id']),None)} for row in pool]
         try:

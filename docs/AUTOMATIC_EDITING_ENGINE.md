@@ -253,3 +253,77 @@ network requests blocked. Ollama responses are mocked in automated contracts;
 those tests do not prove real visual/intent model quality. Skips/headless runs
 do not certify physical A/V sync, disconnected OS operation, or native
 Windows/macOS hardware acceptance. No release is implied by these results.
+
+## Optional audiovisual model engines
+
+The subsequent increment implements local TalkNet face/audio inference and
+AST sound inference behind separate, disabled-by-default Settings opt-ins.
+These replace the previous implementation-status statement above; they do not
+replace its real-model/hardware acceptance caveats.
+
+### TalkNet
+
+`python scripts/install_deps.py --talknet` installs the optional runtime, not
+weights. Settings accepts a user-provided trusted local TalkNet checkpoint.
+The four MIT architecture modules are vendored directly from TaoRuijie/TalkNet-ASD
+commit `6d6821479af485e251c4991487e40573b42181b4`, with package-relative
+imports and normalized whitespace only. MIT notices cover TalkNet and its
+credited deep_avsr visual frontend. No upstream demo/training/application code
+or AGPL reference code is vendored.
+
+Checkpoint loading uses CPU, `weights_only=True`, strict architecture/head key
+matching, a 500MB limit and PyTorch >=2.6. No generic pickle loading, GPU
+assumption, shell clone or download occurs during analysis. A shot-centred
+window of at most two seconds is decoded at 25Hz with aligned 16kHz MFCC audio
+and 112px grayscale face-context crops. At most 96 shots and four eligible
+face tracks per shot are accepted. Missing/gappy tracks are not extrapolated
+across shots. Cancellation is checked during decode and between model calls.
+
+The class-1 raw logits are reported as logits, not probabilities. A positive
+winner with >=0.5 margin over another candidate can guide shot-held framing;
+ambiguous/no evidence uses existing face-coverage framing. A sampled two-second
+window cannot establish every speaker change in a long shot. No anonymous
+face track is asserted to be a diarization voice identity or a named person.
+Manual/gaming/body framing keeps precedence. Evidence includes the checkpoint
+hash and source signature; stale evidence cannot guide the renderer.
+
+### Sound
+
+`python scripts/install_deps.py --sound` installs the optional AST inference
+runtime, not a checkpoint. Point Settings at an explicitly downloaded local
+Transformers AST model directory (`config.json`, `preprocessor_config.json`,
+`model.safetensors`); weights and their license must be supplied explicitly.
+A model hub ID is not accepted. Only the AST class is loaded, local-files-only,
+with safetensors required and no remote code. No pickle fallback is used.
+
+At most four finalists and three <=10-second windows per finalist are decoded
+through cancellable FFmpeg to bounded mono PCM. CPU model logits are passed
+through sigmoid as independent AudioSet-style class scores, not calibrated
+probabilities. Five labels per window, exact source intervals and the weights
+hash are recorded. They are labelled fallible evidence for optional local
+semantic reranking, not an automatic kill/win claim or a replacement for the
+measured audio score. OCR/vision/sound providers fail independently; cancellation
+propagates instead of being reported as an unavailable model.
+
+### Packaging and acceptance boundaries
+
+Ordinary installs/builds do not pull multi-gigabyte PyTorch dependencies just
+for GPU detection. Builders that want these engines must explicitly install
+`--talknet --sound` before freezing; optional installed Transformers/MFCC data
+is collected, and PyInstaller's Torch hooks handle Torch itself. Standard
+installer workflows currently include OCR, not these large optional runtimes.
+PyTorch >=2.6 availability on genuine Intel macOS is an unresolved runtime
+constraint; these engines must not be advertised as certified on that target.
+No optional-model weights have been shipped in this repository.
+
+Automated tests cover real source PCM decoding with fake model logits,
+provider independence, cancellation, safe local path rejection, face crops,
+shot bounds, source freshness, and active-face selection versus prominence.
+An optional random-weight CPU checkpoint/forward test runs only when Torch is
+installed. Random weights/fake logits prove contracts, not trained inference
+quality. The sandbox lacks installed TalkNet/AST runtimes and trained weights;
+real trained TalkNet/AST inference and native hardware acceptance are therefore
+not verified here. The prior real trained OCR test remains separate evidence.
+
+Latest validation: full suite **576 passed / 11 skipped**, E2E **35/35**.
+The additional skip is the optional Torch random-checkpoint/forward contract.

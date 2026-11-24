@@ -122,6 +122,7 @@ class VisualAnalysis:
     motion: list[float] = field(default_factory=list)
     keyframe_times: list[float] = field(default_factory=list)
     person_tracking: dict = field(default_factory=dict)
+    active_speaker: dict = field(default_factory=dict)
 
     def track_for(self, t: float) -> FaceTrack | None:
         """Best track covering time t, weighted by face size."""
