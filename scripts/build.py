@@ -329,6 +329,7 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
     # The source path may be absolute, but the destination must be relative to
     # the bundle root so the files land in the right place inside the app.
     bundles = [
+        ("THIRD_PARTY_NOTICES.md", "."),
         ("resources/ffmpeg", "resources/ffmpeg"),
         ("resources/cascades", "resources/cascades"),
         ("resources/models", "resources/models"),

@@ -123,3 +123,27 @@ no longer accesses the old publishing token.
   uses supported CUDA or CPU int8, not an unsupported MPS backend.
 - Native playback/thermal/driver measurements still require physical Windows and
   macOS testing; Linux policy/regression tests do not establish native frame rates.
+
+
+### Additional studio layouts (DigiRG Cloud adaptation)
+
+In **Select & style**, choose the **Gameplay + Facecam** preset and then a
+**Studio layout**. Existing recipes/caption styles and the original gameplay-above,
+player-below default are retained. Added choices are camera above, blurred fill,
+full-screen fill, selected gameplay, four corner overlays, circular camera and
+side-by-side columns (11 choices including the original default).
+
+- Camera size controls 20–50% of the relevant output dimension; corner overlays
+  are bounded by output height. Camera layouts need a real selected/detected camera.
+  Failed detection falls back to gameplay, never an invented person/camera.
+- Blur/fill/gameplay-only do not require a facecam. Blur keeps the complete source
+  over a low-resolution blurred backdrop; fill crops the complete source.
+- Layout icons illustrate geometry. **Preview recipe** renders your real source;
+  batch editing and the advanced timeline use the same layout settings/graphs.
+- Existing clean/podcast/story presets retain their original framing; the new
+  studio-layout selector applies to the Gameplay preset only.
+- These layouts run locally in FFmpeg; circle masking/blur can cost more CPU than
+  the original stacked layout. No cloud service or new model is needed.
+
+Upstream and full MIT license: see `THIRD_PARTY_NOTICES.md`, also included in
+frozen application data. Native installer verification remains a separate gate.

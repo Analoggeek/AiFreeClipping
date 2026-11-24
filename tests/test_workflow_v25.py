@@ -132,6 +132,8 @@ def test_wizard_replaces_gaming_navigation_and_upload_controls(db,tmp_path):
     try:
         assert window.current_key=='workflow' and 'gaming' not in window.nav_buttons
         page=window.pages['workflow'];assert page.stack.count()==4
+        assert page.studio_layout.count()==11 and page.studio_layout.currentData()=='bottom'
+        assert all(not page.studio_layout.itemIcon(i).isNull() for i in range(11))
         assert not any('upload' in b.text().lower() or 'youtube account' in b.text().lower() for b in page.findChildren(QPushButton))
         source=tmp_path/'file.mp4';source.write_bytes(b'not decoded')
         pid=db.create_project(name='Shared project',source_path=str(source),duration=60,width=640,height=360)
@@ -194,7 +196,10 @@ def test_real_one_click_import_edit_review_export_flow(db,tmp_path):
             wait_until(lambda:bool(page._last_folder) and not page._busy())
             assert len(list(Path(page._last_folder).glob('*.mp4')))==1
             assert page._last_folder.startswith(str(tmp_path/'delivery'))
-    finally:window.close();app.processEvents()
+    finally:
+        from PySide6.QtWidgets import QMessageBox
+        with patch.object(QMessageBox,'question',return_value=QMessageBox.StandardButton.Yes):
+            window.close();app.processEvents()
 
 
 def test_actual_advanced_timeline_split_layout_captions_and_thread_budget(tmp_path):

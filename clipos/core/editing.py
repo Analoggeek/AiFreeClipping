@@ -34,6 +34,8 @@ def render_settings(db, overrides=None):
     # OS-specific native encoder selection remains capability-probed at render.
     rs.platform_profile = 'macOS / VideoToolbox' if platform.system()=='Darwin' else ('Windows / NVENC · QSV · CPU' if platform.system()=='Windows' else 'Linux / detected hardware')
     rs.cpu_preset = 'veryfast' if rs.low_memory else 'fast'
+    rs.studio_layout = data.get('studio_layout', 'bottom')
+    rs.camera_size = float(data.get('camera_size', 1/3))
     mode = data.get('framing_mode','auto')
     rs.auto_facecam = mode == 'auto'
     if mode == 'gameplay': rs.facecam_rect = None

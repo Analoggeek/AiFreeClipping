@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -51,6 +52,8 @@ class RenderSettings:
     """User-facing editing options for one clip."""
     editing_preset: str = "clean"
     auto_facecam: bool = True
+    studio_layout: str = "bottom"
+    camera_size: float = 1/3
     gameplay_rect: tuple = (0., 0., 1., 1.)
     gaming_enhance: bool = False
     facecam_rect: tuple = (0.0, 0.0, 0.25, 0.3)
@@ -496,7 +499,7 @@ class ClipRenderer:
         if settings.editing_preset == "gaming":
             from .presets import gaming_filter
             facecam, gameplay = settings.facecam_rect, settings.gameplay_rect
-            if settings.auto_facecam:
+            if settings.auto_facecam and settings.studio_layout not in ("blur", "fill", "game"):
                 from ..ai.gaming_layout import detect_layout
                 if progress_cb:
                     progress_cb(2.0, "Finding a stable player facecam")
@@ -507,12 +510,12 @@ class ClipRenderer:
                     result.steps.append(f"Facecam confidence {layout.confidence:.0%}; {layout.observations} observations")
                 else:
                     result.warnings.append("No stable facecam detected; gameplay-only crop used. Review framing or select a manual facecam rectangle.")
-            vf_parts.append(gaming_filter(settings.width, settings.height, src_w, src_h, facecam, gameplay))
+            vf_parts.append(gaming_filter(settings.width, settings.height, src_w, src_h, facecam, gameplay, settings.studio_layout, settings.camera_size))
             if settings.gaming_enhance:
                 # Subtle SDR clarity, NOT genuine HDR conversion.
                 vf_parts.append("eq=contrast=1.04:saturation=1.06,unsharp=5:5:0.25:5:5:0")
                 result.steps.append("SDR clarity and restrained colour enhancement (not HDR)")
-            result.steps.append("Gameplay above, player below" if facecam else "Gameplay only")
+            result.steps.append(f"Studio layout: {settings.studio_layout}" if facecam or settings.studio_layout in ("blur","fill") else "Gameplay only")
         elif settings.smart_reframe and visual and speaker and visual.tracks:
             keys = _smooth_keys(
                 _subject_keyframes(speaker, visual, start, end, step=0.5)
@@ -768,20 +771,21 @@ class ClipRenderer:
             if settings.editing_preset == "gaming":
                 from .presets import gaming_filter
                 facecam,gameplay=settings.facecam_rect,settings.gameplay_rect
-                if settings.auto_facecam:
+                if settings.auto_facecam and settings.studio_layout not in ("blur", "fill", "game"):
                     from ..ai.gaming_layout import detect_layout
                     layout=detect_layout(source,seg.start,seg.end,cancel_cb)
                     facecam=layout.facecam if layout else None
                     gameplay=layout.gameplay if layout else gameplay
                     if not layout:result.warnings.append("No stable facecam: gameplay-only. Select a manual camera rectangle in Create clips.")
-                parts.append(gaming_filter(settings.width,settings.height,source_info.video.width,source_info.video.height,facecam,gameplay))
+                parts.append(gaming_filter(settings.width,settings.height,source_info.video.width,source_info.video.height,facecam,gameplay,settings.studio_layout,settings.camera_size))
             else:
                 parts.append(segment_video_filter(seg, settings.width, settings.height))
             color=_build_color_filter(settings)
             if color:parts.append(color)
             graph=",".join(parts)
-            for label in ("game","cam","upper","lower"):
-                graph=graph.replace(f"[{label}]",f"[{label}{len(seg_filters)}]")
+            # Namespace every internal label, including imported layout graphs.
+            graph=re.sub(r"\[([A-Za-z][A-Za-z0-9_]*)\]",
+                         lambda m:f"[{m.group(1)}_seg{len(seg_filters)}]",graph)
             seg_filters.append(graph)
 
         # ---- audio filter ---------------------------------------------------------

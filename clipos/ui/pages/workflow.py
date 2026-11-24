@@ -79,6 +79,15 @@ class WorkflowPage(BasePage):
         row=QHBoxLayout();self.crop_target=QComboBox();self.crop_target.addItems(['Player / facecam region','Gameplay region']);row.addWidget(self.crop_target)
         self._button('Use playhead frame',self._snapshot,row);self._button('Clear crops',self._clear_crops,row);card.add_layout(row)
         self.framing=QComboBox();self.framing.addItem('Automatic player detection (review results)','auto');self.framing.addItem('Manual: gameplay above + selected player below','manual');self.framing.addItem('Gameplay only (no player camera)','gameplay');card.add(self.framing)
+        from ...video.layouts import CATALOG
+        from ..widgets.preset_preview import layout_thumbnail
+        row=QHBoxLayout();row.addWidget(QLabel('Studio layout (Gameplay preset)'))
+        self.studio_layout=QComboBox();self.studio_layout.setIconSize(QSize(64,80))
+        for key,title,description in CATALOG:
+            self.studio_layout.addItem(QIcon(layout_thumbnail(key)),title,key)
+            self.studio_layout.setItemData(self.studio_layout.count()-1,description,Qt.ItemDataRole.ToolTipRole)
+        row.addWidget(self.studio_layout,1)
+        self.camera_size=QDoubleSpinBox();self.camera_size.setRange(20,50);self.camera_size.setDecimals(1);self.camera_size.setSuffix(' % camera');self.camera_size.setValue(100/3);row.addWidget(self.camera_size);card.add_layout(row)
         self.crop_label=QLabel('No manual player region. Draw on the source image to select.');self.crop_label.setWordWrap(True);card.add(self.crop_label)
         row=QHBoxLayout();self.range_start=QDoubleSpinBox();self.range_end=QDoubleSpinBox()
         for spin in (self.range_start,self.range_end):spin.setRange(0,999999);spin.setDecimals(2);spin.setSuffix(' s');row.addWidget(spin)
@@ -240,11 +249,12 @@ class WorkflowPage(BasePage):
     def _clear_crops(self):self.facecam=None;self.gameplay=(0.,0.,1.,1.);self.crop.rect=None;self.crop.update();self.framing.setCurrentIndex(0);self._crop_text();self._save_state()
 
     def _preferences(self):
-        return {'editing_preset':self.presets.currentItem().data(Qt.ItemDataRole.UserRole) if self.presets.currentItem() else 'gaming','caption_style':self.caption.currentData(),'auto_caption':self.caption_on.isChecked(),'caption_size':self.cap_size.value(),'default_clip_count':self.count.value(),'default_clip_duration':self.duration.currentText(),'gaming_enhance':self.enhance.isChecked(),'framing_mode':self.framing.currentData()}
+        return {'editing_preset':self.presets.currentItem().data(Qt.ItemDataRole.UserRole) if self.presets.currentItem() else 'gaming','caption_style':self.caption.currentData(),'auto_caption':self.caption_on.isChecked(),'caption_size':self.cap_size.value(),'default_clip_count':self.count.value(),'default_clip_duration':self.duration.currentText(),'gaming_enhance':self.enhance.isChecked(),'framing_mode':self.framing.currentData(),'studio_layout':self.studio_layout.currentData(),'camera_size':(1/3 if self.camera_size.value()==33.3 else self.camera_size.value()/100)}
 
     def _load_preferences(self):
         if self._busy():return
         self._loading=True;s=self.db.get_settings()
+        self.studio_layout.setCurrentIndex(max(0,self.studio_layout.findData(s.get('studio_layout','bottom'))));self.camera_size.setValue(float(s.get('camera_size',1/3))*100)
         key=s.get('editing_preset','gaming');self.presets.setCurrentRow(list(PRESETS).index(key) if key in PRESETS else 0)
         self.caption.setCurrentIndex(max(0,self.caption.findData(s.get('caption_style','clean_professional'))));self.caption_on.setChecked(bool(s.get('auto_caption',True)));self.cap_size.setValue(int(s.get('caption_size',48)));self.count.setValue(int(s.get('default_clip_count',5)));self.duration.setCurrentText(s.get('default_clip_duration','30-45'));self.enhance.setChecked(bool(s.get('gaming_enhance',False)));self.destination.setText(s.get('output_dir',str(PATHS.exports)));self._loading=False
 

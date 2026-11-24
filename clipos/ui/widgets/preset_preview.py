@@ -35,3 +35,20 @@ def preset_thumbnail(key, title='', source=None, width=180, height=144):
     p.drawText(QRectF(5,height-27,width-10,27),Qt.AlignmentFlag.AlignCenter,title or key.replace('_',' ').title())
     p.end()
     return image
+
+
+def layout_thumbnail(key, width=64, height=80):
+    """Geometry illustration, not a claim of a rendered source preview."""
+    from ...video.layouts import geometry
+    spec=geometry(key,width=width,height=height)
+    pix=QPixmap(width,height);pix.fill(QColor('#182431'))
+    painter=QPainter(pix)
+    if spec['mode']=='blur':
+        painter.fillRect(10,20,width-20,height-40,QColor('#52718d'))
+    for layer in spec['layers']:
+        rect=QRectF(layer['x'],layer['y'],layer['w'],layer['h'])
+        painter.setBrush(QColor('#62cdb9' if layer['source']=='cam' else '#375674'))
+        painter.setPen(QPen(QColor('#101923'),1))
+        if layer.get('circle'):painter.drawEllipse(rect)
+        else:painter.drawRect(rect)
+    painter.end();return pix
