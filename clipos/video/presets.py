@@ -70,3 +70,15 @@ def gameplay_outside(facecam):
     regions=[r for r in regions if r[2]>.05 and r[3]>.05]
     if not regions: raise ValueError("Player region leaves no gameplay. Select a smaller camera region.")
     return max(regions,key=lambda r:r[2]*r[3])
+
+
+# Adapted source-placement presets from DigiRG Cloud app.js (MIT), revision
+# 0987925fa4e99c5d90c68239dc8071421c56d121. See THIRD_PARTY_NOTICES.md.
+# These are editable starting regions, never a claim that a camera was detected.
+CAMERA_SOURCE_PRESETS = {
+    'tl': ((0.,0.,.24,.32),(.24,0.,.76,1.)),
+    'tr': ((.76,0.,.24,.32),(0.,0.,.76,1.)),
+    'bl': ((0.,.68,.24,.32),(.24,0.,.76,1.)),
+    'br': ((.76,.68,.24,.32),(0.,0.,.76,1.)),
+    'bc': ((.37,.68,.26,.32),(0.,0.,1.,.68)),
+}

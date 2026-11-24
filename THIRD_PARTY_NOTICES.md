@@ -4,8 +4,10 @@
 
 Source: https://github.com/DIGIRGCLOUD/DIGIRGCLIPPINGFREE
 
-Revision: `0987925fa4e99c5d90c68239dc8071421c56d121`, `layouts.py`.
-Adapted in `clipos/video/layouts.py`; integration and normalized crop adapter are CLIPOS changes.
+Revision: `0987925fa4e99c5d90c68239dc8071421c56d121`, `layouts.py` and the camera source-placement preset values in `app.js`.
+Adapted in `clipos/video/layouts.py`; integration and normalized crop adapter are CLIPOS changes. The dual-region canvas
+and source/composition preview are independently implemented in native Qt,
+inspired by the reference player interaction.
 
 ```text
 MIT License

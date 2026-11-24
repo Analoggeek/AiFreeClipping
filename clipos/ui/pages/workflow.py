@@ -2,6 +2,7 @@
 from pathlib import Path
 import json
 import threading
+import time
 
 from PySide6.QtCore import Qt, QThread, Signal, QUrl, QSize
 from PySide6.QtGui import QDesktopServices, QIcon
@@ -37,7 +38,7 @@ class WorkflowPage(BasePage):
 
     def build(self):
         self.project_id=None;self.task=None;self.ranges=[];self.facecam=None;self.gameplay=(0.,0.,1.,1.)
-        self._loading=False;self.player=None;self._last_folder='';self._review_rows=[]
+        self._loading=False;self.player=None;self.source_sink=None;self._frame_at=0.;self._last_folder='';self._review_rows=[]
         steps=QHBoxLayout();self.step_buttons=[];self.group=QButtonGroup(self)
         for i,label in enumerate(('1  Import','2  Select & style','3  Edit & review','4  Export')):
             b=QPushButton(label);b.setCheckable(True);self.group.addButton(b);b.clicked.connect(lambda _=False,n=i:self.go(n));steps.addWidget(b);self.step_buttons.append(b)
@@ -48,9 +49,14 @@ class WorkflowPage(BasePage):
         self.progress=QProgressBar();self.progress.setRange(0,100);self.content_layout.addWidget(self.progress)
         self.status=QLabel('Choose a recording. Your videos are not uploaded.');self.status.setWordWrap(True);self.content_layout.addWidget(self.status)
         self.errors=QTextEdit();self.errors.setReadOnly(True);self.errors.setMaximumHeight(150);self.errors.setPlaceholderText('Per-clip warnings and real export errors appear here.');self.errors.hide();self.content_layout.addWidget(self.errors)
+        self.retry_no_captions=QPushButton('Retry edit without speech captions');self.retry_no_captions.hide();self.retry_no_captions.clicked.connect(self._retry_without_captions);self.content_layout.addWidget(self.retry_no_captions)
         self.cancel=QPushButton('Cancel current task');self.cancel.setEnabled(False);self.cancel.clicked.connect(self._cancel);self.content_layout.addWidget(self.cancel)
         self.window.project_changed.connect(self._project_changed)
         self.window.settings_changed.connect(self.refresh)
+        for control in (self.caption,self.duration,self.framing):control.currentIndexChanged.connect(self._preference_changed)
+        for control in (self.caption_on,self.enhance):control.toggled.connect(self._preference_changed)
+        for control in (self.cap_size,self.count,self.camera_size):control.valueChanged.connect(self._preference_changed)
+        self.studio_layout.currentIndexChanged.connect(self._layout_changed)
         self.go(0);self._load_preferences()
 
     def _button(self,text,handler,layout,primary=False):
@@ -68,16 +74,27 @@ class WorkflowPage(BasePage):
     def _select_ui(self,layout):
         card=Card();self.project_label=QLabel('No recording selected');self.project_label.setWordWrap(True);card.add(self.project_label)
         card.add(SectionHeader('Choose moments','Use seconds or preview playback. Add multiple ranges, or leave empty for the whole recording.'))
-        self.source_video = None
-        try:
-            from PySide6.QtMultimediaWidgets import QVideoWidget
-            self.source_video=QVideoWidget();self.source_video.setMinimumHeight(220);self.source_video.setMaximumHeight(320);card.add(self.source_video)
-            source_controls=QHBoxLayout();self._button('Play / pause source',self._play,source_controls)
-            self.source_seek=QSlider(Qt.Orientation.Horizontal);self.source_seek.sliderMoved.connect(lambda p:self.player.setPosition(p) if self.player else None);source_controls.addWidget(self.source_seek,1);card.add_layout(source_controls)
-        except (ImportError,OSError):pass
-        self.crop=CropSelector();self.crop.selected.connect(self._crop_selected);card.add(self.crop)
+        from ..widgets.composition_preview import CompositionPreview
+        self.source_video = None  # Compatibility; source frames go to the interactive canvas.
+        canvases=QHBoxLayout()
+        self.crop=CropSelector();self.crop.selected.connect(self._crop_selected)
+        self.crop.changing.connect(lambda _:self._update_composition())
+        self.crop.frame_changed.connect(self._update_composition)
+        canvases.addWidget(self.crop,3)
+        self.composition=CompositionPreview();canvases.addWidget(self.composition,1)
+        card.add_layout(canvases)
+        note=QLabel('Pink = PLAYER · Cyan = GAMEPLAY. Choose a target below and drag on the source. Both regions stay visible. Right: live framing + sample caption style (not speech transcript/final effects).')
+        note.setWordWrap(True);card.add(note)
+        source_controls=QHBoxLayout();self._button('Play / pause source',self._play,source_controls)
+        self.source_seek=QSlider(Qt.Orientation.Horizontal);self.source_seek.sliderMoved.connect(lambda p:self.player.setPosition(p) if self.player else None);source_controls.addWidget(self.source_seek,1)
+        self.source_clock=QLabel('0:00 / 0:00');source_controls.addWidget(self.source_clock);card.add_layout(source_controls)
         row=QHBoxLayout();self.crop_target=QComboBox();self.crop_target.addItems(['Player / facecam region','Gameplay region']);row.addWidget(self.crop_target)
+        self.crop_target.currentIndexChanged.connect(lambda i:self.crop.set_active('player' if i==0 else 'gameplay'))
         self._button('Use playhead frame',self._snapshot,row);self._button('Clear crops',self._clear_crops,row);card.add_layout(row)
+        row=QHBoxLayout();row.addWidget(QLabel('Camera source placement'))
+        self.camera_preset=QComboBox();self.camera_preset.addItem('Choose a source-region preset…','')
+        for key,title in [('tl','Top left'),('tr','Top right'),('bl','Bottom left'),('br','Bottom right'),('bc','Bottom centre')]:self.camera_preset.addItem(title,key)
+        self.camera_preset.currentIndexChanged.connect(self._camera_preset_changed);row.addWidget(self.camera_preset,1);card.add_layout(row)
         self.framing=QComboBox();self.framing.addItem('Automatic player detection (review results)','auto');self.framing.addItem('Manual: gameplay above + selected player below','manual');self.framing.addItem('Gameplay only (no player camera)','gameplay');card.add(self.framing)
         from ...video.layouts import CATALOG
         from ..widgets.preset_preview import layout_thumbnail
@@ -120,6 +137,8 @@ class WorkflowPage(BasePage):
             from PySide6.QtMultimediaWidgets import QVideoWidget
             self.video=QVideoWidget();self.video.setMinimumHeight(300);self.video.setMaximumHeight(480)
             self.player=QMediaPlayer(self);self.audio=QAudioOutput(self);self.player.setAudioOutput(self.audio);self.player.setVideoOutput(self.video)
+            from PySide6.QtMultimedia import QVideoSink
+            self.source_sink=QVideoSink(self);self.source_sink.videoFrameChanged.connect(self._source_frame)
             self.player.errorOccurred.connect(lambda *_:self.status.setText('Embedded decoder could not play this file. Use Open in player; rendered files are preserved.'))
             card.add(self.video);row=QHBoxLayout();self._button('Play / Pause',self._play,row)
             self.seek=QSlider(Qt.Orientation.Horizontal);self.player.durationChanged.connect(self._duration_changed);self.player.positionChanged.connect(self._playhead);self.seek.sliderMoved.connect(self.player.setPosition);row.addWidget(self.seek,1)
@@ -142,8 +161,8 @@ class WorkflowPage(BasePage):
         self.stack.setCurrentIndex(index);self.step_buttons[index].setChecked(True)
         if self.player:
             self.player.pause()
-            if index==1 and self.source_video is not None:
-                self.player.setVideoOutput(self.source_video)
+            if index==1 and self.source_sink is not None:
+                self.player.setVideoSink(self.source_sink)
                 source=QUrl.fromLocalFile(self.db.get_project(self.project_id)['source_path'])
                 if self.player.source()!=source:self.player.setSource(source)
             elif index==2:
@@ -154,12 +173,19 @@ class WorkflowPage(BasePage):
 
     def _start(self,function,completed):
         if self._busy():return
+        if self.player:
+            self.player.stop();self.player.setSource(QUrl())  # release Windows decoder file handles
+        self.retry_no_captions.hide()
         self.stack.setEnabled(False);self.cancel.setEnabled(True);self.window.set_busy(True,'Processing local video…');self.errors.clear();self.errors.hide()
         task=Task(function,self);self.task=task
         task.progress.connect(lambda p,m:(self.progress.setValue(int(p)),self.status.setText(m)))
         task.failed.connect(self._failed);task.done.connect(completed);task.finished.connect(self._idle);task.start()
 
+    def _retry_without_captions(self):
+        self.caption_on.setChecked(False);self.retry_no_captions.hide();self._edit()
+
     def _failed(self,message):
+        self.retry_no_captions.setVisible(any(word in message.lower() for word in ('speech model','transcription','speech-to-text')))
         self.status.setText('Operation failed. See details below; no successful export was claimed.');self.errors.setPlainText(message);self.errors.show()
 
     def _idle(self):
@@ -217,7 +243,10 @@ class WorkflowPage(BasePage):
         state=json.loads(self.db.get_setting(f'workflow:{pid}','{}') or '{}');self.ranges=state.get('ranges',[]);self.facecam=state.get('facecam');self.gameplay=state.get('gameplay',(0.,0.,1.,1.));self._draw_ranges();self._crop_text()
         self._reload_review();self.window.set_active_project(pid)
         saved_mode=state.get('framing_mode','manual' if self.facecam else 'auto')
+        self._loading=True
         self.framing.setCurrentIndex(max(0,self.framing.findData(saved_mode)))
+        self._loading=False
+        self.crop.set_regions(self.facecam,self.gameplay);self._update_composition()
 
     def _project_changed(self,pid):
         if pid!=self.project_id:self.load_project(pid)
@@ -239,14 +268,68 @@ class WorkflowPage(BasePage):
         if n>=0:self.ranges.pop(n);self._draw_ranges();self._save_state()
 
     def _crop_selected(self,rect):
+        self._activate_studio()
         if self.crop_target.currentIndex()==0:self.facecam=rect;self.framing.setCurrentIndex(1)
         else:
             self.gameplay=rect
             if not self.facecam:self.framing.setCurrentIndex(2)
-        self._crop_text();self._save_state()
+        self._crop_text();self._save_state();self._preference_changed()
 
-    def _crop_text(self):self.crop_label.setText(f'Player: {self.facecam or "automatic / not selected"}   •   Gameplay: {self.gameplay}')
-    def _clear_crops(self):self.facecam=None;self.gameplay=(0.,0.,1.,1.);self.crop.rect=None;self.crop.update();self.framing.setCurrentIndex(0);self._crop_text();self._save_state()
+    def _crop_text(self):
+        def label(rect):
+            if not rect:return 'automatic / not selected'
+            x,y,w,h=rect;return f'x {x*100:.1f}%, y {y*100:.1f}%, width {w*100:.1f}%, height {h*100:.1f}%'
+        self.crop_label.setText(f'PLAYER (pink): {label(self.facecam)}\nGAMEPLAY (cyan): {label(self.gameplay)}')
+        self.crop.set_regions(self.facecam,self.gameplay);self._update_composition()
+
+    def _clear_crops(self):
+        self.facecam=None;self.gameplay=(0.,0.,1.,1.);self.framing.setCurrentIndex(0)
+        self.camera_preset.setCurrentIndex(0);self._crop_text();self._save_state()
+
+    def _activate_studio(self):
+        # Selecting a layout/crop must not silently remain on a non-gaming recipe.
+        blocked=self.presets.blockSignals(True)
+        self.presets.setCurrentRow(list(PRESETS).index('gaming'));self.presets.blockSignals(blocked)
+
+    def _camera_preset_changed(self,index):
+        key=self.camera_preset.itemData(index)
+        if not key or self._loading:return
+        from ...video.presets import CAMERA_SOURCE_PRESETS
+        self.facecam,self.gameplay=CAMERA_SOURCE_PRESETS[key]
+        self._activate_studio();self.framing.setCurrentIndex(1)
+        self._crop_text();self._save_state();self._preference_changed()
+
+    def _layout_changed(self,*_):
+        if self._loading:return
+        self._activate_studio();self._preference_changed()
+
+    def _preference_changed(self,*_):
+        if self._loading or self._busy():return
+        self.db.set_settings(self._preferences());self._save_state();self._update_composition()
+
+    def _source_frame(self,frame):
+        # Bound GUI conversions; no FFmpeg processes/AI in this callback.
+        if self.stack.currentIndex()!=1 or time.monotonic()-self._frame_at<1/15:return
+        image=frame.toImage()
+        if image.isNull():return
+        self._frame_at=time.monotonic()
+        image=image.scaled(1280,720,Qt.AspectRatioMode.KeepAspectRatio,Qt.TransformationMode.FastTransformation)
+        self.crop.set_frame(image)
+
+    def _update_composition(self,*_):
+        if not hasattr(self,'studio_layout') or not hasattr(self,'presets'):return
+        from ...core.config import ASPECT_RATIOS
+        key=self.presets.currentItem().data(Qt.ItemDataRole.UserRole) if self.presets.currentItem() else 'gaming'
+        facecam=self.crop.regions['player'];gameplay=self.crop.regions['gameplay']
+        if self.framing.currentData()=='gameplay':facecam=None
+        # Match implicit gameplay exclusion at render for a manually selected camera.
+        if facecam and tuple(gameplay)==(0.,0.,1.,1.):
+            from ...video.presets import gameplay_outside
+            try:gameplay=gameplay_outside(facecam)
+            except ValueError:pass
+        layout=self.studio_layout.currentData() if key=='gaming' else 'fill'
+        data=self.db.get_settings();aspect=data.get('aspect_ratio',data.get('default_aspect','9:16'))
+        self.composition.configure(self.crop.image,facecam,gameplay,layout,self.camera_size.value()/100,ASPECT_RATIOS.get(aspect,(1080,1920)),self.caption.currentData() if self.caption_on.isChecked() else None,self.cap_size.value())
 
     def _preferences(self):
         return {'editing_preset':self.presets.currentItem().data(Qt.ItemDataRole.UserRole) if self.presets.currentItem() else 'gaming','caption_style':self.caption.currentData(),'auto_caption':self.caption_on.isChecked(),'caption_size':self.cap_size.value(),'default_clip_count':self.count.value(),'default_clip_duration':self.duration.currentText(),'gaming_enhance':self.enhance.isChecked(),'framing_mode':self.framing.currentData(),'studio_layout':self.studio_layout.currentData(),'camera_size':(1/3 if self.camera_size.value()==33.3 else self.camera_size.value()/100)}
@@ -256,7 +339,7 @@ class WorkflowPage(BasePage):
         self._loading=True;s=self.db.get_settings()
         self.studio_layout.setCurrentIndex(max(0,self.studio_layout.findData(s.get('studio_layout','bottom'))));self.camera_size.setValue(float(s.get('camera_size',1/3))*100)
         key=s.get('editing_preset','gaming');self.presets.setCurrentRow(list(PRESETS).index(key) if key in PRESETS else 0)
-        self.caption.setCurrentIndex(max(0,self.caption.findData(s.get('caption_style','clean_professional'))));self.caption_on.setChecked(bool(s.get('auto_caption',True)));self.cap_size.setValue(int(s.get('caption_size',48)));self.count.setValue(int(s.get('default_clip_count',5)));self.duration.setCurrentText(s.get('default_clip_duration','30-45'));self.enhance.setChecked(bool(s.get('gaming_enhance',False)));self.destination.setText(s.get('output_dir',str(PATHS.exports)));self._loading=False
+        self.caption.setCurrentIndex(max(0,self.caption.findData(s.get('caption_style','clean_professional'))));self.caption_on.setChecked(bool(s.get('auto_caption',True)));self.cap_size.setValue(int(s.get('caption_size',48)));self.count.setValue(int(s.get('default_clip_count',5)));self.duration.setCurrentText(s.get('default_clip_duration','30-45'));self.enhance.setChecked(bool(s.get('gaming_enhance',False)));self.destination.setText(s.get('output_dir',str(PATHS.exports)));self._loading=False;self._update_composition()
 
     def _preset_changed(self,index):
         if index<0 or self._loading:return
@@ -264,14 +347,16 @@ class WorkflowPage(BasePage):
         from ...video.presets import apply_preset
         key=self.presets.item(index).data(Qt.ItemDataRole.UserRole);style=apply_preset(RenderSettings(),key).caption_style
         self.caption.setCurrentIndex(max(0,self.caption.findData(style)))
-        self.db.set_settings({**self._preferences(),'editing_preset':key,'caption_style':style});self.window.settings_changed.emit()
+        self.db.set_settings({**self._preferences(),'editing_preset':key,'caption_style':style})
+        self._update_composition()
+        if hasattr(self,'status'):self.status.setText(f'Applied {PRESETS[key][0]}. Live view shows framing; Preview recipe renders the actual edit. Run Edit all clips to apply to outputs.')
 
     def _settings(self):
         from ...core.editing import render_settings
         preferences=self._preferences();self.db.set_settings(preferences)
-        if self.framing.currentData()=='manual' and not self.facecam:raise ValueError('Draw the actual player region first, or choose automatic/gameplay-only framing.')
+        if self.framing.currentData()=='manual' and not self.facecam and self.studio_layout.currentData() not in ('blur','fill','game'):raise ValueError('Draw the actual player region first, or choose automatic/gameplay-only framing.')
         overrides={**preferences,'gameplay_rect':self.gameplay}
-        if self.facecam:overrides['facecam_rect']=self.facecam
+        overrides['facecam_rect']=self.facecam
         return render_settings(self.db,overrides)
 
     def _edit(self):
@@ -317,18 +402,25 @@ class WorkflowPage(BasePage):
         if 0<=index<len(self._review_rows) and self.player:self.player.setSource(QUrl.fromLocalFile(self._review_rows[index]['output_path']))
     def _play(self):
         if self.player:
+            if self.stack.currentIndex()==1 and self.project_id:
+                self.player.setVideoSink(self.source_sink)
+                source=QUrl.fromLocalFile(self.db.get_project(self.project_id)['source_path'])
+                if self.player.source()!=source:self.player.setSource(source)
             if self.player.playbackState()==self.player.PlaybackState.PlayingState:self.player.pause()
             else:self.player.play()
     def _duration_changed(self,duration):
         self.seek.setRange(0,int(duration))
         if hasattr(self,'source_seek'):self.source_seek.setRange(0,int(duration))
     def _playhead(self,pos):
-        if hasattr(self,'source_seek') and not self.source_seek.isSliderDown():self.source_seek.setValue(pos)
+        if self.stack.currentIndex()==1:
+            if not self.source_seek.isSliderDown():self.source_seek.setValue(pos)
+            duration=self.player.duration() if self.player else 0
+            self.source_clock.setText(f'{pos//60000}:{pos//1000%60:02d} / {duration//60000}:{duration//1000%60:02d}')
         if not self.seek.isSliderDown():self.seek.setValue(pos)
         self.clock.setText(f'{pos//60000}:{pos//1000%60:02d}')
     def _position(self):return self.player.position()/1000 if self.player else self.range_start.value()
     def _preview_source(self):
-        if self.project_id and self.player:self.player.setSource(QUrl.fromLocalFile(self.db.get_project(self.project_id)['source_path']));self.go(2);self.status.setText('Original recording preview. Set the playhead, then return to Select & style to mark ranges/crops.')
+        if self.project_id and self.player:self.go(1);self.player.play();self.status.setText('Source playback: draw PLAYER and GAMEPLAY regions; the live composition updates beside the source.')
     def _external_clip(self):
         index=self.review.currentRow()
         if 0<=index<len(self._review_rows):QDesktopServices.openUrl(QUrl.fromLocalFile(self._review_rows[index]['output_path']))
@@ -351,7 +443,9 @@ class WorkflowPage(BasePage):
         try:settings=self._settings()
         except ValueError as exc:self.status.setText(str(exc));return
         project=dict(self.db.get_project(self.project_id));start=self.ranges[0][0] if self.ranges else self.range_start.value();out=PATHS.projects/str(self.project_id)/'recipe-preview.mp4'
-        settings.width,settings.height=360,640;settings.encoder_preference='cpu';settings.show_captions=False
+        scale=min(640/settings.width,640/settings.height)
+        settings.width=max(2,int(settings.width*scale)//2*2);settings.height=max(2,int(settings.height*scale)//2*2)
+        settings.encoder_preference='cpu';settings.show_captions=False;settings.remove_silence=False
         def job(task):
             from ...video.renderer import ClipRenderer
             result=ClipRenderer(out.parent/'preview-work').render(project['source_path'],out,start,min(project['duration'],start+4),settings,cancel_cb=task.cancelled.is_set)
@@ -372,12 +466,10 @@ class WorkflowPage(BasePage):
         if not selected:self.status.setText('Edit clips and check at least one clip in step 3.');return
         root=self.destination.text().strip()
         if not root:self.status.setText('Choose an export folder.');return
-        try:settings=self._settings()
-        except ValueError as exc:self.status.setText(str(exc));return
-        expected=json.dumps({'preferences':self._preferences(),'ranges':self.ranges,'settings':settings.to_dict()},sort_keys=True)
-        saved=self.db.get_setting(f'edited_signature:{self.project_id}','')
-        if saved and saved!=expected:
-            self.status.setText('Style, ranges or settings changed after editing. Run Edit all clips again before exporting.');return
+        # Delivery copies the checked rendered files; current controls are not
+        # a reason to block exporting a completed edit (especially old projects).
+        # Re-edit is explicit, so stale renders are never called newly applied edits.
+        if self.player:self.player.stop();self.player.setSource(QUrl())  # release decoder handles before file operations
         self.db.set_setting('output_dir',root);pid=self.project_id;dbpath=self.db.path
         def job(task):
             from ...db.database import Database
@@ -387,7 +479,7 @@ class WorkflowPage(BasePage):
             finally:db.close()
         def completed(result):
             self._last_folder=result['output_dir'];errors=[r['error'] for r in result['results'] if r.get('error')];ok=len(result['results'])-len(errors)
-            self.export_summary.setText(f'{ok} clips exported together to:\n{self._last_folder}');self.status.setText(f'{ok} exported; {len(errors)} failed.');self.progress.setValue(100 if ok else 0)
+            self.export_summary.setText(f'{ok} clips exported together to:\n{self._last_folder}');self.status.setText(f'{ok} rendered clips exported; {len(errors)} failed. Changed styles require Edit all clips to update the videos.');self.progress.setValue(100 if ok else 0)
             if errors:self.errors.setPlainText('\n'.join(errors));self.errors.show()
         self._start(job,completed)
     def _open_folder(self):

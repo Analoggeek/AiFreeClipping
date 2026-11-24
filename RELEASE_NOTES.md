@@ -1,3 +1,37 @@
+# CLIPOS 2.5.1 — visible dual-region editing and unblocked rendered export
+
+By **Analoggeek**.
+
+- Independent, colour-labelled PLAYER and GAMEPLAY selections stay visible
+  together; source playback updates the canvas and live composition view.
+- Added editable source camera placement presets, based on DigiRG Cloud's MIT
+  presets; attribution retained. Native Qt interaction, not an embedded website.
+- Live framing and sample caption styling react while dragging/changing layouts;
+  the full rendered recipe/final output remains the effects/caption authority.
+- Persist style/layout/caption/count/duration controls so navigation cannot reset
+  them. Choosing a crop/layout activates the applicable Gameplay recipe.
+- Preserve the selected aspect ratio in actual short recipe renders.
+- Export checked finished videos independently from current edit controls; old
+  signatures or a missing current camera region no longer block copying a ready
+  clip. Changed effects still require an explicit re-edit before they appear.
+- Release playback decoder handles before edit/export operations (important for
+  Windows file locks), and update delivered clip status with real export records.
+- Explicit retry without captions when a speech model/transcription fails; no
+  fake speech captions or false success.
+- Regression coverage includes real GUI mouse drags, crop persistence, recipe
+  navigation, pixel-checked FFmpeg output and playable exported files. Real Qt
+  source decoding is mandatory in Windows/macOS CI, skipped only where minimal
+  Linux lacks multimedia system libraries.
+
+Local tests: **269 passed, 9 skipped**. Native build/release checks are required
+before publication; physical-device performance and installer/driver behaviour
+are not established by automated tests. macOS ad-hoc signing is not notarization;
+do not disable OS security. Existing local projects/data are retained.
+
+See [the updated workflow guide](docs/WORKFLOW_V25.md).
+
+---
+
 # CLIPOS 2.5.0 — connected editing and reliable batch export
 
 By **Analoggeek**.
