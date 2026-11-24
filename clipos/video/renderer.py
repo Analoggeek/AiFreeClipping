@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import math
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -51,6 +52,8 @@ class RenderSettings:
     """User-facing editing options for one clip."""
     editing_preset: str = "clean"
     auto_facecam: bool = True
+    studio_layout: str = "bottom"
+    camera_size: float = 1/3
     gameplay_rect: tuple = (0., 0., 1., 1.)
     gaming_enhance: bool = False
     facecam_rect: tuple = (0.0, 0.0, 0.25, 0.3)
@@ -90,6 +93,9 @@ class RenderSettings:
     hook_text: str = ""
     hook_duration: float = 2.0
     encoder_preference: str = "auto"
+    low_memory: bool = False
+    cpu_preset: str = "fast"
+    platform_profile: str = "auto"
     threads: int = 0
 
     def to_dict(self) -> dict:
@@ -331,6 +337,15 @@ def _escape_ass_path(p: Path) -> str:
     return s
 
 
+
+def _ass_filter(path: Path) -> str:
+    # fontsdir_arg is a prefix-style argument with a trailing colon. The old
+    # render path appended it directly to the filename, so every captioned
+    # export looked for "captions.assfontsdir=..." and failed.
+    directory = fontsdir_arg().rstrip(":")
+    return f"ass=filename='{_escape_ass_path(path)}'" + (":"+directory if directory else "")
+
+
 def segment_video_filter(segment, width, height):
     """Crop inside the scaled image, rather than cropping an already tight frame."""
     zoom = max(1.0, float(segment.zoom))
@@ -484,7 +499,7 @@ class ClipRenderer:
         if settings.editing_preset == "gaming":
             from .presets import gaming_filter
             facecam, gameplay = settings.facecam_rect, settings.gameplay_rect
-            if settings.auto_facecam:
+            if settings.auto_facecam and settings.studio_layout not in ("blur", "fill", "game"):
                 from ..ai.gaming_layout import detect_layout
                 if progress_cb:
                     progress_cb(2.0, "Finding a stable player facecam")
@@ -495,12 +510,12 @@ class ClipRenderer:
                     result.steps.append(f"Facecam confidence {layout.confidence:.0%}; {layout.observations} observations")
                 else:
                     result.warnings.append("No stable facecam detected; gameplay-only crop used. Review framing or select a manual facecam rectangle.")
-            vf_parts.append(gaming_filter(settings.width, settings.height, src_w, src_h, facecam, gameplay))
+            vf_parts.append(gaming_filter(settings.width, settings.height, src_w, src_h, facecam, gameplay, settings.studio_layout, settings.camera_size))
             if settings.gaming_enhance:
                 # Subtle SDR clarity, NOT genuine HDR conversion.
                 vf_parts.append("eq=contrast=1.04:saturation=1.06,unsharp=5:5:0.25:5:5:0")
                 result.steps.append("SDR clarity and restrained colour enhancement (not HDR)")
-            result.steps.append("Gameplay above, player below" if facecam else "Gameplay only")
+            result.steps.append(f"Studio layout: {settings.studio_layout}" if facecam or settings.studio_layout in ("blur","fill") else "Gameplay only")
         elif settings.smart_reframe and visual and speaker and visual.tracks:
             keys = _smooth_keys(
                 _subject_keyframes(speaker, visual, start, end, step=0.5)
@@ -563,7 +578,7 @@ class ClipRenderer:
 
         # ---- encoder --------------------------------------------------------------
         enc = choose_encoder(settings.encoder_preference, settings.codec,
-                             low_memory=False)
+                             low_memory=settings.low_memory)
         result.encoder = enc.description
         result.steps.append(f"Encoder: {enc.description}")
 
@@ -573,31 +588,23 @@ class ClipRenderer:
         filter_parts: list[str] = []
 
         if len(keeps) > 1:
-            # Multiple keep segments -> trim + concat
-            seg_args: list[str] = []
+            # Decode the source ONCE. Older exports opened one full decoder per
+            # silence cut, exhausting memory on real long/high-resolution sources.
+            input_args += ["-ss", f"{start:.3f}", "-t", f"{clip_dur:.3f}", "-i", str(source)]
+            n = len(keeps)
+            parts = ["[0:v]split="+str(n)+"".join(f"[sv{i}]" for i in range(n))]
+            if has_audio:
+                parts.append("[0:a]asplit="+str(n)+"".join(f"[sa{i}]" for i in range(n)))
             for i, (ks, ke) in enumerate(keeps):
-                abs_s = start + ks
-                abs_e = start + ke
-                seg_args += [
-                    "-ss", f"{abs_s:.3f}", "-t", f"{max(0.05, abs_e - abs_s):.3f}",
-                    "-i", str(source),
-                ]
-            inputs.append("concat")
-            # Build: [0:v]vf[v0];[1:v]vf[v1];...;[0:a][1:a]...concat
-            parts: list[str] = []
-            for i in range(len(keeps)):
-                segment_vf = vf
-                for label in ("game", "cam", "upper", "lower"):
-                    segment_vf = segment_vf.replace(f"[{label}]", f"[{label}{i}]")
-                parts.append(f"[{i}:v]{segment_vf}[v{i}]")
-            for i in range(len(keeps)):
+                parts.append(f"[sv{i}]trim=start={ks:.6f}:end={ke:.6f},setpts=PTS-STARTPTS[vt{i}]")
                 if has_audio:
-                    parts.append(f"[{i}:a]{af}[a{i}]" if af else f"[{i}:a]anull[a{i}]")
+                    parts.append(f"[sa{i}]atrim=start={ks:.6f}:end={ke:.6f},asetpts=PTS-STARTPTS[at{i}]")
                 else:
-                    ks, ke = keeps[i]
-                    parts.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={ke-ks:.6f}[a{i}]")
-            labels = "".join(f"[v{i}][a{i}]" for i in range(len(keeps)))
-            parts.append(f"{labels}concat=n={len(keeps)}:v=1:a=1[vcat][acat]")
+                    parts.append(f"anullsrc=r=48000:cl=stereo,atrim=duration={ke-ks:.6f}[at{i}]")
+            labels = "".join(f"[vt{i}][at{i}]" for i in range(n))
+            parts.append(f"{labels}concat=n={n}:v=1:a=1[vjoined][ajoined]")
+            parts.append(f"[vjoined]{vf}[vcat]")
+            parts.append(f"[ajoined]{af or 'anull'}[acat]")
             filter_parts.append(";".join(parts))
             final_v, final_a = "[vcat]", "[acat]"
         else:
@@ -606,8 +613,7 @@ class ClipRenderer:
             if ass_path:
                 fontsdir = fontsdir_arg()
                 filter_parts.append(
-                    f"[0:v]{vf}[vbase];[vbase]ass='{_escape_ass_path(ass_path)}'"
-                    f"{fontsdir}[v0]"
+                    f"[0:v]{vf}[vbase];[vbase]{_ass_filter(ass_path)}[v0]"
                 )
             else:
                 filter_parts.append(f"[0:v]{vf}[v0]")
@@ -620,13 +626,13 @@ class ClipRenderer:
             final_v, final_a = vlabel, alabel
 
         if ass_path and len(keeps) > 1:
-            filter_parts.append(f"{final_v}ass='{_escape_ass_path(ass_path)}'{fontsdir_arg()}[captioned]")
+            filter_parts.append(f"{final_v}{_ass_filter(ass_path)}[captioned]")
             final_v = "[captioned]"
 
         # Background music as a second input
         music_idx = None
         if settings.background_music and Path(settings.background_music).exists():
-            music_idx = len(keeps) if len(keeps) > 1 else 1
+            music_idx = 1
             input_args += ["-stream_loop", "-1", "-i", str(settings.background_music)]
             filter_parts.append(
                 f"[{music_idx}:a]volume={settings.bgm_volume:.3f},"
@@ -640,7 +646,7 @@ class ClipRenderer:
             sfx = self._find_sound_effect()
             if sfx:
                 sfx_idx = (music_idx + 1) if music_idx is not None else (
-                    len(keeps) if len(keeps) > 1 else 1
+                    1
                 )
                 input_args += ["-i", str(sfx)]
                 filter_parts.append(
@@ -656,9 +662,8 @@ class ClipRenderer:
         cmd: list[str] = []
         from ..core.hardware import suggest_worker_threads
         threads = suggest_worker_threads(settings.threads)
+        if settings.low_memory: threads = min(threads, 2)
         cmd += ["-hide_banner", "-nostdin", "-y", "-threads", str(threads), "-filter_complex_threads", str(threads)]
-        if len(keeps) > 1:
-            cmd += seg_args
         # input_args already carries the music and sound-effect inputs, in the
         # same order their indices were computed from -- do not add them again.
         cmd += input_args
@@ -672,7 +677,7 @@ class ClipRenderer:
         elif enc.hw_accel == "qsv":
             cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-b:v", f"{settings.bitrate_kbps}k"]
         else:
-            cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-crf", str(settings.crf),
+            cmd += ["-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
                     "-b:v", f"{settings.bitrate_kbps}k", "-maxrate", f"{int(settings.bitrate_kbps * 1.3)}k",
                     "-bufsize", f"{settings.bitrate_kbps * 2}k"]
 
@@ -704,9 +709,9 @@ class ClipRenderer:
             enc = choose_encoder("cpu", settings.codec)
             result.encoder = enc.description
             simple = ["ffmpeg", *cmd[:cmd.index("-c:v")],
-                "-c:v", enc.video_encoder, "-preset", "medium", "-crf", str(settings.crf),
+                "-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
                 "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart", str(output)]
+                "-movflags", "+faststart", "-threads", str(threads), str(output)]
             runner2 = FFmpegRunner(total_duration=clip_dur,
                                    progress_cb=lambda p, t: progress_cb(
                                        5.0 + p * 0.9, f"Rendering… {p:.0f}%"
@@ -751,7 +756,8 @@ class ClipRenderer:
         source = Path(source)
         output = Path(output)
         segments = list(timeline.segments)
-        has_audio = probe(source).has_audio
+        source_info = probe(source)
+        has_audio = source_info.has_audio
         if not segments:
             raise ValueError("Cannot render an empty timeline")
 
@@ -762,8 +768,25 @@ class ClipRenderer:
         seg_filters: list[str] = []
         for seg in segments:
             parts: list[str] = []
-            parts.append(segment_video_filter(seg, settings.width, settings.height))
-            seg_filters.append(",".join(parts))
+            if settings.editing_preset == "gaming":
+                from .presets import gaming_filter
+                facecam,gameplay=settings.facecam_rect,settings.gameplay_rect
+                if settings.auto_facecam and settings.studio_layout not in ("blur", "fill", "game"):
+                    from ..ai.gaming_layout import detect_layout
+                    layout=detect_layout(source,seg.start,seg.end,cancel_cb)
+                    facecam=layout.facecam if layout else None
+                    gameplay=layout.gameplay if layout else gameplay
+                    if not layout:result.warnings.append("No stable facecam: gameplay-only. Select a manual camera rectangle in Create clips.")
+                parts.append(gaming_filter(settings.width,settings.height,source_info.video.width,source_info.video.height,facecam,gameplay,settings.studio_layout,settings.camera_size))
+            else:
+                parts.append(segment_video_filter(seg, settings.width, settings.height))
+            color=_build_color_filter(settings)
+            if color:parts.append(color)
+            graph=",".join(parts)
+            # Namespace every internal label, including imported layout graphs.
+            graph=re.sub(r"\[([A-Za-z][A-Za-z0-9_]*)\]",
+                         lambda m:f"[{m.group(1)}_seg{len(seg_filters)}]",graph)
+            seg_filters.append(graph)
 
         # ---- audio filter ---------------------------------------------------------
         af = _build_audio_filter(settings, settings.background_music)
@@ -789,15 +812,18 @@ class ClipRenderer:
             result.steps.append(f"Captions: {style.name} ({len(cues)} cues)")
 
         # ---- encoder --------------------------------------------------------------
-        enc = choose_encoder(settings.encoder_preference, settings.codec, low_memory=False)
+        enc = choose_encoder(settings.encoder_preference, settings.codec, low_memory=settings.low_memory)
         result.encoder = enc.description
         result.steps.append(f"Encoder: {enc.description}")
 
         # ---- build inputs ---------------------------------------------------------
+        from ..core.hardware import suggest_worker_threads
+        threads=suggest_worker_threads(settings.threads)
+        if settings.low_memory:threads=min(threads,2)
         input_args: list[str] = []
         for seg in segments:
             input_args += [
-                "-ss", f"{seg.start:.3f}",
+                "-threads", str(threads), "-ss", f"{seg.start:.3f}",
                 "-t", f"{max(0.05, seg.source_duration):.3f}",
                 "-i", str(source),
             ]
@@ -839,13 +865,13 @@ class ClipRenderer:
         if ass_path:
             fontsdir = fontsdir_arg()
             parts.append(
-                f"{final_v}ass='{_escape_ass_path(ass_path)}'{fontsdir}[vout]"
+                f"{final_v}{_ass_filter(ass_path)}[vout]"
             )
             final_v = "[vout]"
 
         filter_complex = ";".join(parts)
 
-        cmd: list[str] = ["ffmpeg", "-hide_banner", "-nostdin", "-y"]
+        cmd: list[str] = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-filter_complex_threads",str(threads)]
         cmd += input_args
         cmd += _filter_args(filter_complex, self.work_dir, output.stem)
         cmd += ["-map", final_v, "-map", final_a]
@@ -854,12 +880,14 @@ class ClipRenderer:
             cmd += ["-c:v", enc.video_encoder, "-preset", "p5", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "videotoolbox":
             cmd += ["-c:v", enc.video_encoder, "-b:v", f"{settings.bitrate_kbps}k"]
+        elif enc.hw_accel == "qsv":
+            cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-b:v",f"{settings.bitrate_kbps}k"]
         else:
-            cmd += ["-c:v", enc.video_encoder, "-preset", "medium",
+            cmd += ["-c:v", enc.video_encoder, "-preset", settings.cpu_preset,
                     "-crf", str(settings.crf), "-maxrate", f"{settings.bitrate_kbps}k",
                     "-bufsize", f"{settings.bitrate_kbps * 2}k"]
         cmd += ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
-        cmd += ["-movflags", "+faststart", "-pix_fmt", "yuv420p", str(output)]
+        cmd += ["-movflags", "+faststart", "-pix_fmt", "yuv420p", "-threads", str(threads), str(output)]
 
         total = sum(s.duration for s in segments)
         if progress_cb:
@@ -883,12 +911,12 @@ class ClipRenderer:
             result.warnings.append(f"Timeline filter chain failed, retried simply: {exc}")
             # Preserve the complete graph: dropping speed/captions here silently
             # exports a different edit. Only the encoder is allowed to change.
-            cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y", *input_args,
+            cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-filter_complex_threads",str(threads), *input_args,
                 *_filter_args(filter_complex, self.work_dir, output.stem),
                 "-map", final_v, "-map", final_a,
-                "-c:v", enc.video_encoder, "-preset", "medium", "-crf", str(settings.crf),
+                "-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
                 "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart", str(output)]
+                "-movflags", "+faststart", "-threads",str(threads), str(output)]
             FFmpegRunner(total_duration=total, cancel_cb=cancel_cb).run(
                 cmd[1:], total_duration=total
             )
@@ -922,10 +950,10 @@ class ClipRenderer:
         ]
         if ass_path:
             fontsdir = fontsdir_arg()
-            cmd += ["-vf", f"{vf},ass='{_escape_ass_path(ass_path)}'{fontsdir}"]
+            cmd += ["-vf", f"{vf},{_ass_filter(ass_path)}"]
         else:
             cmd += ["-vf", vf]
-        cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-crf", str(settings.crf),
+        cmd += ["-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
                 "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart", str(output)]
         return cmd

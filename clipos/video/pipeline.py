@@ -15,6 +15,8 @@ import shutil
 import threading
 import time
 import traceback
+from datetime import datetime
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
@@ -129,8 +131,8 @@ class ClipOSPipeline:
             if ok:
                 result.audio = audio_analysis.analyze_audio(
                     wav_path,
-                    silence_threshold_db=-32.0,
-                    min_silence_duration=0.35,
+                    silence_threshold_db=float(self.db.get_setting("silence_threshold_db",-32.)),
+                    min_silence_duration=float(self.db.get_setting("min_silence_duration",.35)),
                 )
         else:
             self._report("audio", 12.0, "No audio track — visual analysis only")
@@ -163,6 +165,8 @@ class ClipOSPipeline:
                 try:
                     result.transcript = transcribe(
                         wav_path, model_size=stt_model, language=language or None,
+                        device="cpu" if self.db.get_setting("use_gpu", "auto")=="cpu" else "auto",
+                        threads=int(self.db.get_setting("processing_threads",0)),
                         progress_cb=lambda p, m: self._report(
                             "speech", 48.0 + p * 0.30, m),
                     )
@@ -200,11 +204,13 @@ class ClipOSPipeline:
         min_duration: float = 30.0,
         max_duration: float = 45.0,
         target_count: int = 10,
+        selected_ranges=None,
     ) -> list:
         """Run clip detection over an analysis result."""
         self._report("clips", 86.0, "Scoring candidate moments")
         clips = clip_detector.detect_clips(
             duration=analysis.duration,
+            selected_ranges=selected_ranges,
             audio=analysis.audio or audio_analysis.AudioAnalysis(),
             visual=analysis.visual or visual_analysis.VisualAnalysis(),
             transcript=analysis.transcript,
@@ -289,6 +295,7 @@ class ClipOSPipeline:
             cues = build_cues_for_clip(
                 analysis.transcript, clip["transcript_text"],
                 clip["start_time"], clip["end_time"],
+                words_per_cue=3 if settings.caption_style == "clean_professional" else 6,
             )
         self._check_cancel()
 
@@ -320,14 +327,17 @@ class ClipOSPipeline:
                 progress_cb=prog, cancel_cb=self._cancel_requested,
             )
         self._check_cancel()
+        if result.cancelled:
+            raise PipelineCancelled("Render cancelled")
+        if not Path(output).is_file() or Path(output).stat().st_size == 0:
+            raise RuntimeError("Renderer produced no playable output")
 
         # Thumbnails from the best frames in the clip
         thumb_paths: list[str] = []
         if make_thumbnails:
             self._report("render", 92.0, "Generating thumbnails")
             times = [
-                clip["start_time"] + (clip["end_time"] - clip["start_time"]) * f
-                for f in (0.25, 0.5, 0.75)
+                result.duration * f for f in (0.3,)
             ]
             # One folder per clip so the files never overwrite each other
             # and every clip keeps its own set of thumbnail candidates.
@@ -337,8 +347,8 @@ class ClipOSPipeline:
                 titles = json.loads(clip["titles"] or "[]")
                 text = titles[0] if titles else ""
                 thumb_paths = generate_thumbnails(
-                    source, thumb_dir, times,
-                    settings.width, settings.height, text=text,
+                    output, thumb_dir, times,
+                    settings.width, settings.height, text="",
                 )
             except Exception as exc:
                 log.warning("thumbnail generation failed: %s", exc)
@@ -384,7 +394,13 @@ class ClipOSPipeline:
         """
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
+        project = self.db.get_project(self.project_id)
+        batch = out_dir / datetime.now().strftime("%Y-%m-%d") / _safe_folder(project["name"] or Path(project["source_path"]).stem)
+        batch.mkdir(parents=True, exist_ok=True)
+        manifest_path = batch / "export-results.json"
         total = len(clip_ids)
+        previous_cancel = self.external_cancel
+        self.external_cancel = cancel_cb or previous_cancel
         results: list[dict] = []
 
         for index, clip_id in enumerate(clip_ids):
@@ -395,8 +411,7 @@ class ClipOSPipeline:
                 results.append({"clip_id": clip_id, "error": "clip not found"})
                 continue
 
-            folder = _safe_folder(clip["title"] or "clip")
-            target = out_dir / folder / f"clip_{clip_id:03d}.mp4"
+            target = batch / f"clip_{clip_id:03d}_{_safe_folder(clip['title'])}.mp4"
             target.parent.mkdir(parents=True, exist_ok=True)
 
             def cb(pct: float, msg: str, idx: int = index) -> None:
@@ -405,7 +420,7 @@ class ClipOSPipeline:
 
             try:
                 info = self.render_clip(
-                    clip_id, target, settings, analysis,
+                    clip_id, target, deepcopy(settings), analysis,
                     make_thumbnails=True, progress_cb=cb,
                 )
                 size = int(info.get("size_bytes", 0))
@@ -423,9 +438,13 @@ class ClipOSPipeline:
                     fps=int(settings.fps), codec=settings.codec,
                     bitrate=int(settings.bitrate_kbps),
                 )
-                info.update({"clip_id": clip_id, "export_id": export_id, "error": ""})
+                info.update({"clip_id": clip_id, "output_path": str(target), "export_id": export_id, "error": ""})
                 results.append(info)
+            except PipelineCancelled:
+                self.db.update_clip(clip_id, status="cancelled")
+                break
             except Exception as exc:
+                self.db.update_clip(clip_id, status="error")
                 log.exception("export failed for clip %s", clip_id)
                 self.db.create_export(
                     project_id=self.project_id, clip_id=clip_id,
@@ -436,13 +455,18 @@ class ClipOSPipeline:
                     "clip_id": clip_id, "output_path": str(target),
                     "size_bytes": 0, "error": str(exc),
                 })
+            manifest_path.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+        self.external_cancel = previous_cancel
         return results
 
 
 def _safe_folder(title: str) -> str:
     """Turn a clip title into a filesystem-safe folder name."""
     safe = "".join(ch if ch.isalnum() or ch in " -_" else "" for ch in (title or "clip"))
-    return safe.strip()[:48].rstrip() or "clip"
+    safe = safe.strip()[:64].rstrip(" .") or "video"
+    if safe.upper().split('.')[0] in {"CON", "PRN", "AUX", "NUL", *[f"{prefix}{n}" for prefix in ("COM", "LPT") for n in range(1,10)]}:
+        safe = "_" + safe
+    return safe
 
 
 # --------------------------------------------------------------------------------------
@@ -460,6 +484,7 @@ def run_full_analysis(
     language: str = "",
     progress_cb: Callable[[PipelineProgress], None] | None = None,
     cancel_cb: Optional[Callable[[], bool]] = None,
+    selected_ranges=None,
 ) -> AnalysisResult:
     """Analyse a project and generate + persist clips in one call."""
     pipe = ClipOSPipeline(db, project_id)
@@ -482,7 +507,7 @@ def run_full_analysis(
 
         lo, hi = CLIP_DURATION_PRESETS.get(duration_range, (30, 45))
         clips = pipe.detect_clips(
-            analysis, min_duration=lo, max_duration=hi, target_count=clip_count,
+            analysis, min_duration=lo, max_duration=hi, target_count=clip_count, selected_ranges=selected_ranges,
         )
         pipe.save_clips(clips, aspect=aspect)
         db.update_project(project_id, status="ready")
@@ -532,16 +557,11 @@ def run_one_click(
         stt_model=stt_model, language=language, progress_cb=progress_cb, cancel_cb=cancel_cb,
     )
 
-    from .presets import apply_preset
-    settings = apply_preset(RenderSettings.for_aspect(aspect), recipe or db.get_setting("editing_preset", "gaming"))
-    settings.caption_style = "clean_professional" if settings.editing_preset == "gaming" else db.get_setting("caption_style", "bold_viral")
-    settings.caption_position = "split" if settings.editing_preset == "gaming" else "bottom"
-    settings.threads = int(db.get_setting("processing_threads", 0))
-    settings.gaming_enhance = gaming_enhance or db.get_setting("gaming_enhance", "0") == "1"
-    settings.caption_size = int(db.get_setting("caption_size", 58))
-    settings.caption_font = db.get_setting("caption_font", "") or ""
-    settings.show_captions = db.get_setting("show_captions", "1") != "0"
-    settings.encoder_preference = db.get_setting("encoder", "auto")
+    from ..core.editing import render_settings
+    overrides = {"aspect_ratio":aspect}
+    if recipe: overrides["editing_preset"] = recipe
+    if gaming_enhance: overrides["gaming_enhance"] = True
+    settings = render_settings(db, overrides)
 
     clip_rows = db.list_clips(project_id)
     if not clip_rows:

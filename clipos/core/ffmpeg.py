@@ -400,6 +400,18 @@ class FFmpegRunner:
             errors="replace",
             creationflags=_CREATE_NO_WINDOW,
         )
+        # Lower only the render subprocess priority, never the UI process.
+        # No preexec_fn: Qt starts renders from threads and fork hooks can deadlock.
+        try:
+            import psutil
+            child = psutil.Process(proc.pid)
+            if sys.platform == "win32":
+                child.nice(psutil.BELOW_NORMAL_PRIORITY_CLASS)
+            else:
+                child.nice(5)
+        except Exception:
+            # Priority adjustment is best effort (sandbox/OS permissions).
+            pass
         assert proc.stderr is not None
         try:
             for line in proc.stderr:

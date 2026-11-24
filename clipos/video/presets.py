@@ -30,10 +30,29 @@ def _crop(rect, source_w, source_h):
     return f"crop={cw}:{ch}:{cx}:{cy}"
 
 
-def gaming_filter(width, height, source_w, source_h, facecam, gameplay=(0.,0.,1.,1.)):
+def gaming_filter(width, height, source_w, source_h, facecam, gameplay=(0.,0.,1.,1.), layout="bottom", camera_size=1/3):
     """Fill the top gameplay panel; crop the actual facecam into the bottom."""
+    from .layouts import CATALOG, render_graph
+    import math
+    if layout not in {item[0] for item in CATALOG}:
+        raise ValueError("Choose a valid studio layout")
+    if not math.isfinite(camera_size) or not .2 <= camera_size <= .5:
+        raise ValueError("Camera size must be between 20% and 50%")
+    if layout != "bottom" or camera_size != 1/3:
+        # No invented camera region: missing detection falls back to gameplay.
+        effective = layout
+        if facecam is None and layout not in ("blur", "fill", "game"):
+            effective = "game"
+        rects=[]
+        for rect in (facecam or (0.,0.,1.,1.), gameplay):
+            crop = _crop(rect,source_w,source_h).split("=",1)[1]
+            w,h,x,y = map(int,crop.split(":"))
+            rects.append((x,y,w,h))
+        graph=render_graph(effective,rects,camera_size,width,height)
+        # Renderer supplies its own input label and appends more filters.
+        return graph.replace("[0:v]", "", 1).removesuffix("[base]")
     if facecam is None:
-        return (f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+        return (f"{_crop(gameplay, source_w, source_h)},scale={width}:{height}:force_original_aspect_ratio=increase,"
                 f"crop={width}:{height},setsar=1")
     bottom = (height // 3) // 2 * 2
     top = height - bottom
@@ -43,3 +62,11 @@ def gaming_filter(width, height, source_w, source_h, facecam, gameplay=(0.,0.,1.
             f"crop={width}:{top},setsar=1[upper];"
             f"[cam]{cam},scale={width}:{bottom}:force_original_aspect_ratio=increase,"
             f"crop={width}:{bottom},setsar=1[lower];[upper][lower]vstack=inputs=2")
+
+
+def gameplay_outside(facecam):
+    x,y,w,h = facecam
+    regions=[(0.,0.,x,1.),(x+w,0.,1-x-w,1.),(0.,0.,1.,y),(0.,y+h,1.,1-y-h)]
+    regions=[r for r in regions if r[2]>.05 and r[3]>.05]
+    if not regions: raise ValueError("Player region leaves no gameplay. Select a smaller camera region.")
+    return max(regions,key=lambda r:r[2]*r[3])

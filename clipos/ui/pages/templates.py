@@ -1,6 +1,8 @@
 """Templates: ready-made caption and export presets."""
 from __future__ import annotations
 
+from PySide6.QtGui import QPixmap
+from ..widgets.preset_preview import preset_thumbnail
 from PySide6.QtWidgets import (
     QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
 )
@@ -61,6 +63,9 @@ class TemplatesPage(BasePage):
     def _template_card(self, preset) -> QWidget:
         name, aspect, fps, codec, bitrate, cap_style, detail = preset
         card = Card()
+        preview = QLabel()
+        preview.setPixmap(preset_thumbnail("podcast" if "Podcast" in name else "clean", name))
+        card.add(preview)
         title = QLabel(name)
         title.setObjectName("CardTitle")
         card.add(title)
@@ -82,6 +87,9 @@ class TemplatesPage(BasePage):
 
     def _caption_card(self, key: str, st) -> QWidget:
         card = Card()
+        preview = QLabel()
+        preview.setPixmap(preset_thumbnail(key, st.name))
+        card.add(preview)
         title = QLabel(st.name)
         title.setObjectName("CardTitle")
         card.add(title)
@@ -104,8 +112,10 @@ class TemplatesPage(BasePage):
             "editing_preset": recipe,
             "aspect_ratio": aspect,
             "caption_style": cap_style,
-            "default_clip_duration": "30-45",
+            "default_aspect": aspect, "fps": fps, "codec": codec,
+            "bitrate_kbps": bitrate, "default_clip_duration": "30-45",
         })
+        self.window.settings_changed.emit()
         self.window.notify(f"Applied the '{name}' preset")
         # Reflect the preset in the export page if it is open
         export_page = self.window.pages.get("export")

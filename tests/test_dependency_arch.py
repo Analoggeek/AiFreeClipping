@@ -42,7 +42,7 @@ class ArchitectureTests(unittest.TestCase):
         with patch.object(deps.sys, 'platform', 'darwin'), patch.object(deps.platform, 'machine', return_value='x86_64'):
             cmd = deps.pip('install', *deps.CORE)
             self.assertIn('--only-binary=cryptography', cmd)
-            self.assertIn('google-auth-oauthlib>=1.2,<2', cmd)
+            self.assertIn('faster-whisper>=1.0,<2', cmd)
 
     def test_verifier_rejects_wrong_interpreter(self):
         with patch.object(verify_arch.sys,'platform','darwin'), patch.object(verify_arch.platform,'machine',return_value='arm64'):

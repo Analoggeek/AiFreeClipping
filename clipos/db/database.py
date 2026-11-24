@@ -169,7 +169,7 @@ class Database:
         for key, raw in stored.items():
             merged[key] = _coerce_setting(raw, DEFAULT_SETTINGS.get(key))
         # Always keep output_dir pointing at a real path
-        merged["output_dir"] = str(PATHS.exports)
+        merged["output_dir"] = str(merged.get("output_dir") or PATHS.exports)
         return merged
 
     def get_setting(self, key: str, default: Any = None) -> Any:

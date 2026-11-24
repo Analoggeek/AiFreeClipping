@@ -33,9 +33,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # The packages CLIPOS actually needs, in a deliberate order.
 CORE = [
-    'google-api-python-client>=2.150,<3',
-    'google-auth-oauthlib>=1.2,<2',
-    'keyring>=25,<26',
+    "psutil>=6,<8",
     "yt-dlp>=2025.1.15",
     "PySide6>=6.6,<6.9",
     "numpy>=1.24",
