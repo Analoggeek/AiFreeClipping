@@ -24,6 +24,8 @@ class AudioClockPlayer(QObject):
     def __init__(self,project,start,parent=None):
         super().__init__(parent)
         try:
+            from ..core.media_backend import configure
+            configure()
             from PySide6.QtMultimedia import QAudioFormat,QAudioSink,QMediaDevices
         except ImportError as exc:
             raise AudioDeviceUnavailable('Qt multimedia backend unavailable; choose silent preview explicitly') from exc
