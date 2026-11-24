@@ -1,657 +1,367 @@
-# CLIPOS — AI Automatic Video Clipping Studio
+# CLIPOS 2.5 — Offline-first Video Clip Editor
 
-**CLIPOS** is a native, offline-first desktop application that turns a long video
-into upload-ready short-form clips. It runs entirely on your own machine: import
-a file, let the local AI find the engaging moments, and export finished vertical
-videos with captions, reframing, zoom and metadata — with no cloud account and
-no automatic upload of your media. Version 2.5 has no YouTube publishing or account connection.
+**CLIPOS**, developed by **Analoggeek**, is a native desktop application for
+turning long recordings into edited short-form videos. Import a recording,
+select moments and framing, apply editing presets and captions, review the
+rendered videos, and export the batch. Processing runs locally with **Python,
+PySide6, Faster-Whisper and FFmpeg**—no mandatory cloud account or subscription.
 
-Built with **Python** (AI + video pipeline) and **PySide6** (native desktop UI).
-Ships with genuine **FFmpeg/FFprobe** binaries for macOS (Intel + Apple Silicon)
-and Windows 10/11.
+**v2.5.0 is released.** YouTube publishing/account connection and the separate
+Gaming Studio 2.0 navigation have been removed; authorised URL import remains.
 
----
+## Download v2.5.0
 
-## New in 2.5.0 — one connected editing workflow
-
-**Import → Select & style → Edit & review → Export.** Choose ranges and drag
-player/gameplay crops, preview visual recipes, edit the whole batch, review actual
-MP4s, then export all checked clips into one date/video folder. One-click mode is
-also available. YouTube publishing and Gaming Studio 2.0 were removed.
-
-Captioned rendering and settings propagation are fixed; native hardware paths,
-low-memory processing and live CPU/RAM counters are included. See the complete
-[workflow, manual framing, export and limitations guide](docs/WORKFLOW_V25.md).
-
-## Table of contents
-
-- [What it does](#what-it-does)
-- [The five headline features](#the-five-headline-features)
-- [Screens](#screens)
-- [Install](#install)
-- [First run](#first-run)
-- [Where your data lives](#where-your-data-lives)
-- [How the AI works](#how-the-ai-works)
-- [Output formats](#output-formats)
-- [URL import — what works and what does not](#url-import--what-works-and-what-does-not)
-- [Model manager](#model-manager)
-- [Hardware acceleration](#hardware-acceleration)
-- [Building from source](#building-from-source)
-- [Building installers](#building-installers)
-- [Development](#development)
-- [Troubleshooting and logs](#troubleshooting-and-logs)
-- [Privacy](#privacy)
-- [Project layout](#project-layout)
-
----
-
-## What it does
-
-1. **Import** a local video (`MP4`, `MOV`, `MKV`, `AVI`, `WEBM`, `M4V`) by browsing
-   or dragging and dropping, or paste a direct media URL.
-2. **Analyse** the whole video locally — speech, audio energy, silence, scenes,
-   faces, subject tracking.
-3. **Detect** the engaging moments, rank them, and explain *why* each one was picked.
-4. **Generate** metadata: five titles, a description, hashtags, keywords and
-   thumbnail text.
-5. **Edit**: auto-reframe to 9:16 / 1:1 / 16:9 with speaker-aware cropping,
-   dynamic zoom, jump cuts over silence, colour and audio enhancement.
-6. **Caption** with synchronised, word-highlighted subtitles in eight styles.
-7. **Export** batch MP4s (H.264 / H.265, 1080×1920, 30/60 fps, configurable
-   bitrate, AAC) ready for YouTube Shorts, Instagram Reels and TikTok.
-
----
-
-## The five headline features
-
-| Feature | What it does |
+| Platform | Installer |
 | --- | --- |
-| **Virality Score** | Every clip gets a 0–100 shareability score, computed from hook strength, surprise, emotion, humour, questions, keyword density, audio energy, storytelling and length fit. It is a real weighted formula over measured signals — not a placeholder. |
-| **Auto Hook Generator** | For each clip, CLIPOS proposes concrete openings for the first 1–3 seconds (open on the punchline, cold open on the hook line, lead with the question), derived from the clip's own transcript and signals. |
-| **Multi-Clip Mode** | Ask for 5, 10, 15 or 20+ shorts from one source. Overlap suppression stops the detector from returning the same moment repeatedly, and it will return fewer clips rather than pad the list with duplicates. |
-| **Speaker Tracking** | Faces are detected with YuNet, clustered into people, and attributed speaking time from the audio. The reframe follows the person who is actually talking, so a two-person podcast stays on the right face. |
-| **One-Click Editing** | `Auto Clip Studio → One-Click Edit` runs the entire chain unattended — analyse, cut, caption, reframe, render, export — and writes finished MP4s to your output folder. |
+| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS-Setup.exe) |
+| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS-2.5.0-arm64.dmg) |
+| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS-2.5.0-intel.dmg) |
+| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS_2.5.0_amd64.deb) |
+| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v2.5.0/CLIPOS-2.5.0-linux-x86_64.zip) |
 
----
+[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v2.5.0)
+· [Release notes](RELEASE_NOTES.md)
+· [Detailed workflow guide](docs/WORKFLOW_V25.md)
 
-## Screens
+## Contents
 
-The application has eleven sections, all reachable from the left sidebar:
+- [What is new in 2.5](#what-is-new-in-25)
+- [Install and upgrade](#install-and-upgrade)
+- [Create your first batch](#create-your-first-batch)
+- [Studio layouts](#studio-layouts)
+- [Application sections](#application-sections)
+- [Local AI and models](#local-ai-and-models)
+- [Mac and Windows performance](#mac-and-windows-performance)
+- [Output and local data](#output-and-local-data)
+- [URL import and privacy](#url-import-and-privacy)
+- [Run from source](#run-from-source)
+- [Build native installers](#build-native-installers)
+- [Validation and limitations](#validation-and-limitations)
+- [Troubleshooting](#troubleshooting)
+- [Project structure and attribution](#project-structure-and-attribution)
 
-| Section | What it does |
+## What is new in 2.5
+
+- **One connected workflow:** Import → Select & style → Edit & review → Export,
+  with a one-click automatic import/edit option.
+- Source playback, playhead-based range selection and manual gameplay/player
+  region drawing. Automatic facecam detection is available, with review/manual
+  correction when recognition is uncertain.
+- Four editing recipes—Clean Studio, Podcast Focus, Gameplay + Facecam and Story
+  Highlight—plus eight caption styles, recipe thumbnails and real four-second
+  composition previews.
+- **11 studio layouts**, adjustable camera size, and shared composition settings
+  across recipe previews, batch rendering and the advanced timeline.
+- Review actual rendered MP4s and export checked clips together into
+  `YYYY-MM-DD / recording name /`, with per-clip results and batch manifests.
+- Fixed a reproduced caption-rendering defect in the ASS filename/`fontsdir`
+  arguments. This does not establish the cause of every historical export failure.
+- Shared project/settings updates, bounded render thread pools, reduced audio
+  analysis memory use, native encoder selection and measured CPU/RAM usage.
+
+## Install and upgrade
+
+### macOS
+
+Download the DMG matching your CPU (**Apple Silicon** or **Intel**), open it and
+drag **CLIPOS** to **Applications**. App archives are also on the release page.
+The Intel bundle is built and architecture-checked as x86_64, not renamed ARM.
+
+Bundles are ad-hoc signed unless Developer ID signing is configured. Bundle
+integrity checks are **not Apple notarization or Gatekeeper approval**. If macOS
+blocks installation, follow your organisation's policy and Apple's official
+application-verification guidance; do not disable system security.
+
+### Windows
+
+Download and run `CLIPOS-Setup.exe`, then launch CLIPOS from its shortcut.
+The release does not include a Windows portable ZIP. Publisher/reputation
+warnings may appear; verify the source and follow your system's security policy.
+
+### Linux
+
+On Debian / Ubuntu:
+
+```bash
+sudo apt install ./CLIPOS_2.5.0_amd64.deb
+```
+
+Alternatively, extract the Linux ZIP and launch the bundled executable on a
+compatible desktop system. RPM/AppImage files are not included in this release.
+
+### Existing projects
+
+Quit CLIPOS before upgrading. Application data lives separately from the installed
+binaries; upgrading is intended to preserve projects and settings. Back up
+important data before any upgrade. Physical install/update testing on every
+supported OS configuration has not been independently completed.
+
+Installers include the Python runtime, dependencies, target-platform FFmpeg /
+FFprobe and bundled face-detection resources. Speech models require a separate
+one-time download; local editing works offline once required resources exist.
+
+## Create your first batch
+
+1. **AI models:** download a speech model if you want transcription/captions.
+   Start with `base`, or `tiny` for a smaller/faster model. No transcript means no
+   genuine speech captions; models are not simulated.
+2. **Create clips → 1 Import:** choose a local video, or import an authorised
+   supported URL. One-click mode uses the current editing preferences.
+3. **2 Select & style:** play the source, add desired time ranges (or leave the
+   whole recording selected), choose the recipe/caption style and draw real
+   player/gameplay regions where necessary. For studio compositions, choose
+   **Gameplay + Facecam**, then **Studio layout**. Use **Preview recipe** for a
+   real short composition/colour render; speech captions are added during editing.
+4. **3 Edit & review:** run **Edit all clips**. Analysis detects candidate moments,
+   then the pipeline applies the selected edits and renders actual MP4s. Review
+   the outputs and check the clips you want. Use **Advanced editor** for timeline
+   split/trim, reorder, speed, crop/zoom, mute and undo/redo.
+5. **4 Export:** choose a destination and export the checked edited clips together.
+   If settings changed after rendering, re-edit before exporting so outputs match.
+
+Automatic mode does not guarantee perfect crops, captions, highlights or
+engagement. Review results before sharing; it is editing, not simply file cutting.
+
+## Studio layouts
+
+| Layout | Composition |
 | --- | --- |
-| **Home** | Dashboard with live SQLite statistics, recent projects, model status, hardware usage and the export queue. |
-| **New Project** | Drag-and-drop import, URL import, real metadata preview, project creation. |
-| **Auto Clip Studio** | Run the analysis, review the ranked clips, read the rationale, see the hooks and titles, render or export. |
-| **My Projects** | Search, open, rename, duplicate and delete projects. |
-| **Clip Library** | Every clip from every project, searchable and sortable by virality, engagement and date. |
-| **Templates** | Presets for YouTube Shorts, Instagram Reels and TikTok, plus caption-style previews. |
-| **Caption Studio** | Live animated preview of all eight caption styles, with font, size, position, stroke, shadow and background controls. |
-| **Preview Editor** | Timeline with waveform, split, trim, merge, reorder, speed, zoom, crop, mute, undo/redo and frame-by-frame navigation. |
-| **Export Center** | Batch export with a real queue, live progress, cancellation, output folder picker and export history. |
-| **AI Models** | Download, enable, disable and remove speech-to-text models; monitor the cache. |
-| **Settings** | Theme, language, defaults, caption style, Ollama, storage, privacy and hardware status. |
+| Gameplay + face | Large gameplay above, smaller camera below—the existing default |
+| Face + gameplay | Selected camera above gameplay |
+| Blurred fill | Complete source over a blurred backdrop |
+| Fill screen | Full-frame centre crop |
+| Gameplay only | Selected gameplay area without a camera panel |
+| Camera top-left / top-right | Floating selected camera in either upper corner |
+| Camera bottom-left / bottom-right | Floating selected camera in either lower corner |
+| Circle camera | Circular camera overlay above gameplay |
+| Side by side | Camera and gameplay columns |
 
----
+Camera proportion is adjustable from **20–50%**; overlay geometry is bounded by
+the output dimensions. Missing camera detection falls back to gameplay rather
+than inventing a facecam. Layout icons illustrate geometry, not finished footage.
+The layout selector applies to the Gameplay preset; other recipes retain their
+framing. Blur/circular masking may use more CPU than a simple stacked layout.
 
-## Install
+Layout geometry and FFmpeg graphs are adapted from the MIT-licensed
+[DigiRG Cloud project](https://github.com/DIGIRGCLOUD/DIGIRGCLIPPINGFREE).
+See [the review](docs/REFERENCE_FEATURE_REVIEW.md) and
+[full attribution/license](THIRD_PARTY_NOTICES.md). Live monitoring, creator
+recording and phone remote features were **not** imported.
 
-CLIPOS ships as a **native offline installer** for each platform. Installing
-it needs no internet connection: the package carries the application, the
-Python runtime, FFmpeg, the face-detection models and the sound effects.
+## Application sections
 
-### macOS (Intel or Apple Silicon)
+| Sidebar section | Purpose |
+| --- | --- |
+| Create clips | Four-step import, selection/style, editing/review and export workflow |
+| Projects | Find and reopen local projects |
+| Clip library | Browse clips across projects |
+| Advanced editor | Source timeline editing with saved edits and rendering |
+| Presets & captions | Recipe and caption-style preferences/previews |
+| AI models | Manage local speech models |
+| Settings | Processing, speech language, captions, storage, privacy and hardware information |
 
-1. Download the `.dmg` (or the `.app` bundle) for your architecture.
-2. Open the `.dmg` and drag **CLIPOS** into your `Applications` folder.
-3. Right-click the app once and choose **Open** the first time — macOS Gatekeeper
-   blocks unnotarised apps until you do this.
-4. Launch **CLIPOS**.
+## Local AI and models
 
-### Windows 10 / 11
+Highlight detection combines measured audio energy, silence, speech/transcript
+cues, scene changes and visual signals. Scores are deterministic heuristics,
+**not predictions or guarantees of virality**. Title/hook suggestions use source
+signals; an optional user-configured Ollama server can improve metadata, with a
+rule-based fallback when unavailable.
 
-1. Download `CLIPOS-Setup.exe` (installer) or the portable zip.
-2. Run the installer. It creates a Start-menu shortcut and a desktop icon.
-3. Launch **CLIPOS**.
+Faster-Whisper uses CTranslate2: supported CUDA hardware or CPU int8. It does not
+use PyTorch MPS on Macs. Model sizes and runtime memory vary; `tiny`/`base` favour
+speed, while larger models cost more RAM and processing time. Download models
+through **AI models**, then reuse them locally. PyTorch is not a required runtime
+dependency.
 
-> Windows SmartScreen may warn about an unknown publisher on first run. Choose
-> **More info → Run anyway** — the app is unsigned.
+## Mac and Windows performance
 
-### Linux (Debian / Ubuntu)
+| Platform/capability | Encoding path |
+| --- | --- |
+| macOS Intel / Apple Silicon, available VideoToolbox | H.264 / HEVC VideoToolbox |
+| Detected NVIDIA with available encoder | NVENC |
+| Detected Intel Quick Sync with available encoder | QSV |
+| Unsupported/unavailable accelerator | CPU `libx264` / `libx265` |
 
-```bash
-sudo apt install ./CLIPOS_1.0.0_amd64.deb
+A failed hardware render retries with software encoding; errors remain visible
+if that also fails. Hardware encoding does not mean every filter or AI operation
+runs on the GPU.
+
+- Automatic CPU pools reserve UI/OS headroom and cap at eight workers, or four
+  on machines with 8 GiB RAM or less. At 85% live RAM usage, new automatic pools
+  cap at two. Explicit thread settings are respected within detected CPU limits.
+- Render child processes use below-normal priority on Windows and nice +5 on
+  macOS/Linux, best effort; UI/playback priority is unchanged.
+- Live available RAM includes unified-memory Macs. GPU core counts are not
+  presented as VRAM. CPU/RAM usage is measured; GPU counters are shown only
+  where supported.
+- **Settings** shows detected hardware, selected auto encoder and the automatic
+  thread budget. Low-memory mode is available.
+
+Performance depends on source resolution, filters, model size, drivers, memory
+and cooling. Native build success does not establish smooth playback on every
+physical device or a particular frame rate.
+
+## Output and local data
+
+Output is MP4 with H.264 or H.265, configurable bitrate/frame rate, and AAC audio.
+Standard aspect choices include 9:16, 1:1 and 16:9. Shared batch delivery uses:
+
+```text
+chosen destination/
+└── YYYY-MM-DD/
+    └── recording name/
+        ├── clip files.mp4
+        └── batch results/manifest
 ```
 
-That installs the app into `/opt/CLIPOS` and adds a **CLIPOS** entry to your
-application menu, with a desktop icon. To remove it:
-
-```bash
-sudo apt remove clipos
-```
-
-### Linux (Fedora / RHEL / openSUSE)
-
-```bash
-sudo dnf install ./CLIPOS-1.0.0-1.x86_64.rpm
-```
-
-### Linux (no package manager)
-
-Download the portable zip, unpack it anywhere and run `CLIPOS` from the
-`CLIPOS/` folder. Everything it needs is inside — no system libraries beyond
-the usual desktop ones.
-
-### What the installers contain
-
-* The complete Python runtime and all Python dependencies.
-* Genuine **FFmpeg** and **FFprobe** binaries for the target platform.
-* The **YuNet** face-detection models and the **Haar** cascade fallbacks.
-* The eight caption styles and the UI design system.
-
-The only thing you download separately is the speech-to-text model (see
-[Model manager](#model-manager)). After that one download, the whole workflow
-runs offline.
-
----
-
-## First run
-
-1. Open **AI Models** and download a speech-to-text model.
-   * `tiny` — ~75 MB, fastest, good enough for hook detection.
-   * `base` — ~145 MB, noticeably better wording. **Recommended.**
-   * `small` — ~480 MB, best accuracy; needs ~2 GB of RAM while running.
-2. Open **New Project** and drag in a video.
-3. Press **Generate Clips with AI** in **Auto Clip Studio**.
-4. Review the ranked clips, then press **One-Click Edit** to produce finished
-   videos, or **Export All** to batch-render them.
-
-Everything after the model download works with the network switched off.
-
----
-
-## Where your data lives
+Default data locations:
 
 | Platform | Location |
 | --- | --- |
 | macOS | `~/Library/Application Support/CLIPOS` |
 | Windows | `%LOCALAPPDATA%\CLIPOS` |
-| Linux | `~/.local/share/clipos` |
+| Linux | `${XDG_DATA_HOME:-~/.local/share}/clipos` |
 
-Inside that folder:
+This folder holds `clipos.db`, projects, media, models, cache, exports and logs.
+The export destination is configurable. Keep the database **and referenced media**
+when backing up projects.
 
-```
-CLIPOS/
-├── clipos.db          SQLite database: projects, clips, transcripts, exports, settings
-├── projects/          Per-project work folders (thumbnails, captions, render artefacts)
-├── media/             Imported source files
-├── models/            Downloaded speech-to-text models
-├── cache/             Temporary WAVs, extracted frames, render scratch space
-├── exports/           Finished clips (the default output folder)
-├── logs/              Rotating application logs
-└── fonts/  sounds/  music/   Optional local assets
-```
+## URL import and privacy
 
-Nothing is uploaded. There is no account, no subscription, and no telemetry.
-The only outbound requests CLIPOS ever makes are:
+Local files need no network. Direct media links and supported public video URLs
+use explicit download/import actions, including `yt-dlp` for supported sites.
+You must own the recording or have permission. Private, paid, authenticated,
+DRM-protected or blocked sources are not bypassed. Site/extractor changes can
+cause download failures; local import remains available.
 
-* downloading a speech-to-text model, when you ask it to;
-* downloading a media file, when you paste a direct URL to import.
+There is no mandatory account, subscription, telemetry or background media
+upload. Explicit network features include media/model downloads and on-demand
+GitHub update checks. Optional Ollama uses the configured server address; keep
+it local if you want local-only metadata processing. Do not treat a preference
+checkbox as an OS-level network firewall.
 
----
+## Run from source
 
-## How the AI works
-
-### Clip detection
-
-CLIPOS scores every candidate window of the video on twelve measurable signals:
-
-| Signal | How it is measured |
-| --- | --- |
-| `energy` | RMS loudness over the window, normalised against the video's own average. |
-| `silence` | Reward for a healthy pause/speech rhythm rather than dead air. |
-| `speech_rate` | Words per minute from the transcript. |
-| `keywords` | Matches against a curated list of engaging content words. |
-| `questions` | Question marks and interrogative phrasing. |
-| `surprise` | Numbers, superlatives, "never", "nobody", "secret", "mistake"… |
-| `emotion` | Exclamation density and emotional vocabulary. |
-| `humor` | Laughter markers and playful phrasing. |
-| `scene_change` | Visual cuts detected by OpenCV frame differencing. |
-| `subject` | A face is present and visible. |
-| `story` | Narrative connective language ("because", "so", "then", "but"). |
-| `hook` | Strong opening lines that make sense out of context. |
-
-Those are combined with fixed weights into an **engagement score**. A separate
-**virality score** weights shareability factors — hook, surprise, emotion,
-humour, questions, keywords, energy, storytelling — then applies an opening-energy
-bonus and a length-fit curve (25–50 s is ideal for a short).
-
-Both scores are shown with the concrete reasons that produced them, so you can
-see *why* a moment was chosen.
-
-### Speech-to-text
-
-`faster-whisper` (CTranslate2) runs locally on CPU or GPU. Word-level
-timestamps come straight from the model, which is what makes the caption
-highlighting land on the exact frame.
-
-If no model is installed, CLIPOS still works: it falls back to audio, visual and
-scene signals, and the UI states plainly that transcription is unavailable
-rather than pretending.
-
-### Speaker tracking
-
-1. Every ~2 frames, faces are detected with the bundled **YuNet** ONNX model
-   (falling back to a Haar cascade if ONNX Runtime is unavailable).
-2. Face boxes are clustered into *people* by centre distance and size ratio.
-3. The audio energy envelope is split into speech ranges; the loudest speaker in
-   each range is matched to the nearest face cluster.
-4. The result is a per-time "active subject" timeline, sampled into smooth
-   keyframes that drive the crop.
-
-### Reframing
-
-For each frame the crop rectangle is computed from the active subject's position
-and size, then interpolated smoothly so the camera moves rather than jumps. The
-crop expression is time-gated, so the final keyframe only applies at the end of
-its own segment.
-
-### Captions
-
-Captions are rendered to an **ASS** subtitle file with a styled, per-word
-highlight and burned into the video by FFmpeg's `ass` filter. Eight styles ship
-in the box:
-
-`MrBeast` · `Minimal White` · `Neon Gaming` · `Modern Podcast` ·
-`Bold Viral` · `Cinematic` · `Karaoke` · `Clean Professional`
-
----
-
-## Output formats
-
-| Setting | Options |
-| --- | --- |
-| Aspect ratio | 9:16 (1080×1920), 1:1 (1080×1080), 16:9 (1920×1080) |
-| Video codec | H.264 (libx264), H.265 (libx265) |
-| Frame rate | 30, 60 |
-| Bitrate | configurable, default 8000 kbps |
-| Audio | AAC, 160 kbps, 48 kHz stereo |
-| Container | MP4 with `+faststart` (streams to the web immediately) |
-
----
-
-## URL import — what works and what does not
-
-CLIPOS will import a **direct media URL** (an `.mp4`, `.mov`, `.mkv` or similar
-that is served over HTTP/HTTPS) by downloading it and treating it exactly like a
-local file.
-
-It will **not** download from platforms that require authentication or that
-actively block automated access. When you paste such a link, CLIPOS says so
-explicitly and tells you to import the file locally instead:
-
-* YouTube — protected by DRM and ToS; CLIPOS does not attempt to bypass it.
-* Vimeo private/paid links — require an account.
-* Instagram, TikTok, Facebook — require authentication and block direct downloads.
-
-This is a deliberate design decision, not a missing feature. There is no DRM
-circumvention anywhere in CLIPOS. Download the video with the platform's own
-"save" feature, then drop the file into CLIPOS.
-
----
-
-## Model manager
-
-**AI Models** shows every available speech-to-text model with its size,
-compatibility, quality tier and whether it is already on disk.
-
-| Model | Size | Tier | Notes |
-| --- | --- | --- | --- |
-| `tiny` | ~75 MB | Fast | Good for hook detection, weak on proper nouns. |
-| `base` | ~145 MB | Balanced | Recommended default. |
-| `small` | ~480 MB | Accurate | Best wording; needs ~2 GB RAM. |
-| `medium` | ~1.5 GB | Best | Large download, slow on CPU. |
-| `large-v3` | ~3 GB | Maximum | GPU strongly recommended. |
-
-You can set a default model, remove models you no longer want, and clear the
-cache. Every model works offline once downloaded.
-
-An optional **Ollama** integration (Settings → Ollama) improves the generated
-titles and descriptions. CLIPOS talks to a local Ollama server on
-`http://127.0.0.1:11434` — no cloud provider is involved. When Ollama is not
-running, a built-in rule-based generator takes over and still produces five
-titles, a description, hashtags, keywords and thumbnail text.
-
----
-
-## Hardware acceleration
-
-CLIPOS probes the machine at startup and picks the best available encoder:
-
-| Platform | Encoder |
-| --- | --- |
-| NVIDIA (Windows/Linux) | `h264_nvenc` / `hevc_nvenc` |
-| Apple Silicon (macOS) | `h264_videotoolbox` / `hevc_videotoolbox` |
-| Intel with Quick Sync | `h264_qsv` / `hevc_qsv` |
-| Anything else | `libx264` / `libx265` on the CPU |
-
-If the GPU encoder fails mid-render, the renderer automatically retries on the
-CPU, so a render never silently dies.
-
-The **Settings → Hardware** section shows the detected CPU, core count, RAM, GPU
-and the encoder that will be used. You can force an encoder, set the thread
-count, and enable a low-memory mode.
-
----
-
-## Building from source
-
-### Requirements
-
-* Python 3.10, 3.11 or 3.12
-* A C toolchain is **not** required — all wheels ship prebuilt.
+Python **3.11** is the native CI baseline. Use the dependency installer rather
+than only `pip install -r requirements.txt`: it repairs overlapping OpenCV
+packages and pins the compatible headless build.
 
 ```bash
-git clone <your-fork-url> AiFreeClipping
+git clone https://github.com/Analoggeek/AiFreeClipping.git
 cd AiFreeClipping
-
 python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### Fetch the native binaries
-
-FFmpeg, FFprobe, the face cascades and the YuNet models are **not** committed to
-the repository. Fetch them with:
-
-```bash
-python scripts/vendor_ffmpeg.py      # FFmpeg + FFprobe for every platform
-python scripts/vendor_cascades.py    # Haar face cascades (from PyPI wheels)
-```
-
-`vendor_ffmpeg.py` downloads into `resources/ffmpeg/<platform>/` for
-`linux-x64`, `linux-ia32`, `darwin-x64`, `darwin-arm64`, `win32-x64` and
-`win32-ia32`.
-
-### Run it
-
-```bash
+source .venv/bin/activate        # Windows PowerShell: .venv\Scripts\Activate.ps1
+python scripts/install_deps.py --build
+python scripts/vendor_ffmpeg.py
+python scripts/vendor_cascades.py
 python -m clipos
 ```
 
-### Verify the installation
+The vendor scripts fetch/verify native resources. FFmpeg binaries are kept out of
+Git; internet is needed for dependency/resource setup. See the build scripts for
+target-platform and architecture selection.
+
+## Build native installers
+
+Build on the target operating system with the matching interpreter/dependencies:
 
 ```bash
-python scripts/e2e_test.py
-```
-
-This generates a real test video and runs the complete chain — import, analyse,
-detect, caption, render, batch export — asserting on the actual output files.
-It prints a PASS/FAIL line for every check.
-
----
-
-## Building installers
-
-```bash
-python scripts/build.py windows      # -> dist/CLIPOS-Setup.exe
-python scripts/build.py macos        # -> dist/CLIPOS.app and dist/CLIPOS.dmg
-python scripts/build.py linux        # -> dist/CLIPOS (AppImage)
-```
-
-The build script installs PyInstaller, vendors the native binaries, runs the
-end-to-end test, freezes the application, packages it, and then verifies the
-frozen bundle before it reports success.
-
-* **Windows**: PyInstaller produces a one-folder application, which is then
-  wrapped in a native `.exe` installer. Three back-ends are tried in order:
-
-  | Back-end | Produces | Needs |
-  |---|---|---|
-  | Inno Setup | `CLIPOS-Setup.exe` | `iscc` on the PATH |
-  | NSIS | `CLIPOS-Setup.exe` | `makensis` on the PATH |
-  | Built-in launcher | `CLIPOS-Setup.exe` | a C cross compiler — `pip install ziglang` |
-
-  The built-in launcher is a small Win32 program that carries the frozen
-  application inside itself and unpacks it on the first run, so a Windows
-  installer can be produced on any machine — including Linux and macOS.
-
-* **macOS**: PyInstaller produces `CLIPOS.app`; `hdiutil` builds a
-  drag-to-install `.dmg` with the app next to an `/Applications` symlink.
-  Build on each architecture, or use `--target-arch` for a universal build.
-  `scripts/installer_macos.py` can also sign the bundle with a Developer ID
-  and submit it to Apple's notary service, so Gatekeeper lets the app open
-  without a warning.
-
-* **Linux**: PyInstaller produces a folder, a portable zip and a native
-  `.deb` (plus an `.rpm` where `rpmbuild` is available).
-
-### Building the installers from GitHub Actions
-
-Two workflows do this for you, on the real target operating systems:
-
-| Workflow | Trigger | Produces |
-|---|---|---|
-| `build-installers.yml` | every push to `main`, every pull request | the installer for each platform, as a downloadable artifact |
-| `release.yml` | pushing a `v*` tag | the installers attached to a GitHub release |
-
-The Windows job runs on `windows-2022`, the macOS jobs on `macos-14`
-(Apple Silicon) and `macos-13` (Intel), and the Linux job on `ubuntu-22.04`.
-Each job runs the end-to-end test and the bundle verifier before it uploads
-anything.
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0        # the release workflow publishes the installers
-```
-
-### If PyInstaller cannot find the Python shared library
-
-PyInstaller's bootloader links against `libpython3.x.so`, so the interpreter
-that runs the build must provide it. Most Python installers do; some minimal
-Linux distributions do not.
-
-```bash
-# Debian / Ubuntu
-sudo apt install libpython3.11
-# Fedora / RHEL
-sudo dnf install python3-libs
-# macOS — use the python.org installer or Homebrew Python
-# or build inside a conda environment, which always ships it
-```
-
-If you cannot install packages, build the library yourself — this needs only a
-C compiler and `make`, and installs into a directory you own:
-
-```bash
-python scripts/build_python_shared.py --prefix /tmp/pyshare
-LD_LIBRARY_PATH=/tmp/pyshare/lib python scripts/build.py linux
-```
-
-The helper downloads the matching CPython source, enables the same core
-modules Debian compiles into the interpreter (`_struct`, `zlib`,
-`unicodedata`, …), and installs a working `libpython3.x.so`.
-
-### Verifying a bundle by hand
-
-```bash
+python scripts/build.py windows
+python scripts/build.py macos --target-arch arm64
+python scripts/build.py macos --target-arch x86_64
+python scripts/build.py linux
 python scripts/verify_bundle.py dist
 ```
 
-This checks that every bundled resource is present, that the FFmpeg binaries
-kept their executable bit, and that the application binary starts and reaches
-its ready state. Every build runs it automatically.
+`--target-arch` is not a promise that an arbitrary interpreter can cross-build:
+Intel Mac packaging needs an isolated x86_64 Python/dependency environment.
+See `scripts/setup_intel_python.sh` and `scripts/verify_python_arch.py`.
 
----
+GitHub Actions uses **windows-2022**, **macos-15** and **ubuntu-22.04**. macOS CI
+builds Apple Silicon and isolated Intel bundles, verifies architecture/integrity,
+and preserves application permissions/symlinks in release archives.
 
-## Development
+- [`build-installers.yml`](.github/workflows/build-installers.yml): native build
+  checks and downloadable artifacts for main/PR/tag events or manual dispatch.
+- [`release.yml`](.github/workflows/release.yml): tag/manual release builds;
+  publication requires successful platform builds, not a partial installer set.
+- [`macos-integrity.yml`](.github/workflows/macos-integrity.yml): packaging tests
+  and diagnostic recovery.
+
+## Validation and limitations
+
+For the v2.5 release work:
+
+- Local full suite: **263 passed, 8 skipped**.
+- Real FFmpeg tests cover five-clip captioned batch export, GUI
+  import/edit/review/delivery, every studio layout, and representative captioned
+  multi-segment timelines. End-to-end checks: **35/35 passed** locally.
+- [Native installer checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45343458484)
+  passed Windows, macOS Intel/Apple Silicon and Linux.
+- [Release pipeline](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45345465476)
+  succeeded after retrying Windows build-tools setup; all seven assets uploaded.
+
+These checks do **not** replace physical-device install/update, thermal,
+driver-specific playback, live-source network import or full speech-model
+accuracy testing. Automatic detection remains heuristic; no guaranteed
+engagement, genuine HDR conversion, universal GPU support or native OS blur is
+claimed.
+
+For development:
 
 ```bash
-# Headless UI smoke test — renders every page and screenshots it
-./scripts/run_headless.sh /tmp/test_ui.py
-
-# End-to-end pipeline test
+python -m pytest tests/ -q
 python scripts/e2e_test.py
-
-# Unit tests — timeline model, render_timeline() and GUI regressions
-python -m unittest discover -s tests -t .
-
-# Screenshot every page with real data (writes to /tmp/clipos_gui)
-./scripts/run_headless.sh scripts/gui_walkthrough.py
-
-# Verify a frozen bundle
 python scripts/verify_bundle.py dist
-
-# Generate test fixtures
-python scripts/make_test_video.py testdata/sample.mp4
-python scripts/make_face_video.py testdata/faces.mp4 14
-
-# Re-check that every UI icon renders on every platform
-python scripts/replace_icons.py
 ```
 
-### Headless Linux CI
-
-Bare containers have no `libGL`, `libEGL`, `libxkbcommon` or `libdbus`.
-`scripts/build_gl_stubs.py` generates no-op stubs for them and
-`scripts/run_headless.sh` launches Qt with the VNC platform plugin:
+For minimal Linux test containers, generate GL stubs and use a headless Qt platform
+(only for tests, not desktop playback):
 
 ```bash
 python scripts/build_gl_stubs.py
-./scripts/run_headless.sh your_script.py
+LD_LIBRARY_PATH="$PWD/.stublibs:${LD_LIBRARY_PATH:-}" QT_QPA_PLATFORM=minimal \
+  python -m pytest tests/ -q
 ```
 
----
+## Troubleshooting
 
-## Troubleshooting and logs
-
-Application logs are written to `<data dir>/logs/clipos.log` with rotation
-(5 files × 2 MB). Errors are also recorded in the SQLite `error_log` table and
-shown in **Settings → Storage**.
-
-| Symptom | Cause and fix |
+| Symptom | What to check |
 | --- | --- |
-| "FFmpeg not found" | The native binaries are missing. Run `python scripts/vendor_ffmpeg.py`. |
-| "Could not load whisper model" | No model is installed, or the download was interrupted. Open **AI Models** and download it again. |
-| Transcription is unavailable | `faster-whisper` is not installed: `pip install faster-whisper`. |
-| Face tracking is weak | The subject is small or poorly lit. YuNet needs a reasonably sized face in frame. |
-| The render falls back to the CPU | The GPU encoder failed. The render still completes; check **Settings → Hardware**. |
-| The app will not start on macOS | Right-click the app → **Open** (Gatekeeper). |
-| SmartScreen blocks the installer on Windows | **More info → Run anyway** — the build is unsigned. |
-| The caption font is wrong | Set an explicit caption font in **Settings → Captions**. |
+| Clip render/export failed | Read the per-clip error and `<data dir>/logs/clipos.log`; share logs rather than assuming the cause. |
+| No captions | Confirm a speech model is installed, transcription succeeded and burn-in captions are enabled. |
+| Wrong player/gameplay framing | Draw the actual regions in Select & style and re-edit; review the real recipe preview. |
+| Export blocked after changing settings | Re-edit the batch so the rendered files match the new settings. |
+| High CPU or memory usage | Try a smaller speech model, fewer threads/low-memory mode and a simpler layout. |
+| GPU encoder unavailable/fails | Use CPU fallback and inspect the reported warning; accelerator availability depends on drivers/hardware. |
+| Embedded preview fails | Use Open in player to inspect the preserved rendered file; report OS/driver and logs. |
+| Source checkout cannot find FFmpeg | Run `python scripts/vendor_ffmpeg.py`. |
+| OS blocks installation | Verify the release source and follow official OS security guidance; do not disable security protections. |
 
-To report a problem, include `clipos.log` from `<data dir>/logs/`.
+Include app version, OS, CPU/GPU, source resolution, selected recipe/layout and
+relevant logs in an issue. Avoid sharing private media/transcripts unnecessarily.
 
----
+## Project structure and attribution
 
-## Privacy
-
-* No account, no subscription, no telemetry, no analytics.
-* Your media, transcripts, projects and clips never leave the device.
-* No automatic cloud upload and no background network transmission.
-* The only network access is the one-time model download and importing a URL
-  you explicitly paste.
-* Setting **Offline mode** in Settings blocks outbound requests entirely.
-
----
-
-## Project layout
-
-```
+```text
 clipos/
-├── app.py                  Entry point: environment, logging, database, theme
-├── __main__.py             Enables `python -m clipos`
-├── core/
-│   ├── config.py           Paths, defaults, aspect ratios, duration presets
-│   ├── logging_setup.py    Rotating file + console logging
-│   ├── ffmpeg.py           Binary discovery, probing, extraction, loudness
-│   └── hardware.py         Hardware probe and encoder selection
-├── db/
-│   ├── schema.py           SQLite schema (version 4)
-│   └── database.py         Thread-local SQLite/WAL CRUD, migrations, statistics
-├── ai/
-│   ├── audio_analysis.py   Waveform, energy, silence, speech ranges, pitch
-│   ├── transcription.py    Faster-Whisper offline transcription
-│   ├── visual_analysis.py  Scenes, motion, brightness, YuNet/Haar faces
-│   ├── speaker_tracking.py Person clustering and speaking-time attribution
-│   ├── clip_detector.py    Signal scoring, virality, hooks, overlap suppression
-│   └── title_generator.py  Ollama metadata with a rule-based fallback
-├── captions/
-│   └── caption_engine.py   Eight ASS styles, cue building, highlighting
-├── video/
-│   ├── renderer.py         Real rendering: reframe, zoom, cuts, captions
-│   ├── pipeline.py         Orchestration: analysis, detection, render, export
-│   ├── timeline.py         Editable timeline model with undo/redo
-│   └── importer.py         Local and URL import with validation
-└── ui/
-    ├── theme.py            Dark/light palettes and the stylesheet
-    ├── fonts.py            Font registration and caption font selection
-    ├── main_window.py      Title bar, sidebar, navigation, shortcuts
-    ├── widgets/common.py   Reusable cards, tiles, badges, toasts
-    └── pages/              The eleven application pages
-
-resources/
-├── ffmpeg/                 Native FFmpeg + FFprobe (not in git)
-├── cascades/               Haar face cascades
-└── models/                 YuNet ONNX face detectors
-
-scripts/
-├── vendor_ffmpeg.py        Download the native FFmpeg binaries
-├── vendor_cascades.py      Download the Haar cascades
-├── build.py                Build the installers
-├── build_python_shared.py  Build a libpython for PyInstaller
-├── verify_bundle.py        Smoke-test a frozen bundle
-├── e2e_test.py             Full-pipeline verification
-├── build_gl_stubs.py       Headless Linux GL stubs
-├── run_headless.sh         Headless Qt launcher
-└── make_*_video.py         Test fixture generators
+├── core/       Paths, shared editing preferences, FFmpeg, hardware, logging
+├── db/         Local SQLite projects, clips, settings and export records
+├── ai/         Audio/visual analysis, transcription, clip and metadata generation
+├── captions/   Word-timed ASS caption cues and styles
+├── video/      Import, recipes/layouts, timeline, rendering, pipeline and delivery
+└── ui/         Native Qt pages, playback, crop selector, previews and usage display
+resources/      Native binaries and bundled model/assets
+scripts/        Dependency setup, vendor, test, build and bundle verification tools
+tests/          Unit, GUI, real rendering and architecture regressions
+docs/           Workflow/reference guides and the existing download website
 ```
 
----
+[Website documentation](docs/README.md) describes the separate static download
+site; updating the README does not redesign or republish that site.
 
-## Licence
-
-The bundled FFmpeg binaries are built under the LGPL/GPL terms of their
-respective projects. The YuNet models come from the OpenCV Zoo (MIT). The
-Haar cascades are part of OpenCV (Apache 2.0).
-
-## Creator workflow improvements (source branch)
-
-- **Editing recipes:** Settings → One-click editing recipe. Choose Clean Studio,
-  Podcast Focus, Gameplay + Facecam or Story Highlight. These are original local
-  rules, not model training or a promise of increased engagement.
-- **Gaming composition:** Export Center → Gameplay + Facecam. Set the source
-  facecam rectangle using X/Y/width/height percentages. Gameplay is fitted above,
-  the selected camera region below. The default rectangle is only a starting
-  point, not automatic facecam recognition. Use **Preview recipe · 4 seconds**
-  before exporting. This is a real draft-resolution render opened in your system
-  player; captions are previewed separately in Caption Studio.
-- **Saved edits:** timeline edits autosave by clip and are restored on reopen.
-  Batch export uses saved edits instead of silently reverting to original timing.
-  Clip captions are retimed through trims/speed changes in batch export.
-- **Export recovery:** a failed hardware encoder now retries using software
-  encoding. Timeline mute, zoom and crop are honoured. Inspect warnings if a
-  complex effect required the simplified recovery path.
-- **YouTube:** paste a public video URL and confirm permission. Requires internet
-  and `yt-dlp` (installed by `scripts/install_deps.py`). Downloads the highest
-  available video/audio streams and merges them locally. Private, DRM,
-  authentication and platform blocks are not bypassed. Source availability and
-  extractor changes can still cause failure; local import remains available.
-- **Updates:** Settings → Check for updates checks GitHub on demand and opens the
-  matching published installer download after confirmation. This is **not silent
-  auto-installation**. Quit CLIPOS and run the installer; project data lives in
-  the OS application-data folder, separately from application binaries. Back up
-  important projects before upgrading; migrations still need platform testing.
-- **Website:** [`docs/`](docs/README.md) contains the public download site and
-  GitHub Pages publication instructions. Buttons resolve actual release assets.
-  Publishing the site does not publish new application binaries.
-
-### Current validation limits
-
-Automated Linux tests exercise real FFmpeg exports and edited timelines. macOS
-and Windows native install/update tests, physical-device validation, live YouTube
-network imports and the full Whisper workflow with model weights still need
-verification. GPU availability and export speed depend on the device. No product
-can guarantee engagement or virality. A published older installer does not
-contain these source changes until a new verified release is built.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the DigiRG Cloud layout
+adaptation's full MIT notice. FFmpeg distributions have their own LGPL/GPL terms;
+YuNet models originate in OpenCV Zoo and Haar cascade resources in OpenCV.
+Review the corresponding upstream licenses when redistributing dependencies.
