@@ -823,7 +823,7 @@ class EditorPage(BasePage):
             self._after_edit()
             self.window.notify("Merged with the next segment")
         else:
-            self.window.notify("Nothing to merge — segments must be adjacent")
+            self.window.notify("Cannot merge — source ranges must touch and speed, crop, zoom and mute must match")
 
     def _trim(self, which: str) -> None:
         idx, seg = self._selected_segment()

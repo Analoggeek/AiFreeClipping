@@ -111,3 +111,19 @@ timeline music are fixed. Persisted local selection/level/ducking controls are
 connected. `AUDIO_DUCKING.md` records measured PCM and real MP4 evidence:
 189 selected tests passed / 2 Qt-dependent tests deselected. This is not speaker
 recognition, VAD, source separation or completed multitrack audio editing.
+
+### Follow-up: broader validation and safe edit execution
+
+New independent fixes: portable pitch-preserving tempo chains and merge guards
+that preserve distinct crop/zoom/speed/mute edits. Regression tests cover the
+editing data model and actual FFmpeg exports, not real AI inference weights.
+Native build/release gates now include recent feature tests,
+including an isolated x86_64 macOS regression step. On ARM macOS that interpreter
+uses Rosetta; physical Intel acceptance remains separate.
+
+Fresh complete local suite: **478 passed / 9 skipped**; generated-video E2E:
+**35/35 passed**. Earlier missing-dependency notes are superseded for this local
+run: development PyYAML/CTranslate2 and the existing headless GL stub utility
+allowed the full suite to execute. Stubs are not native graphics/playback proof.
+No new AI weights or genuine disconnected-model acceptance occurred. Latest
+native CI results remain pending, and the main PRO engines remain incomplete.

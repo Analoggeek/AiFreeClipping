@@ -215,3 +215,37 @@ libGL absence; no fresh native UI/full-suite claim. Loud game effects also key
 the compressor: this is not VAD/voice separation or semantic speech enhancement.
 Professional multitrack audio, automation, synchronization and native listening
 acceptance remain pending.
+
+### Full regression and edit-integrity follow-up
+
+Two additional actual editing defects are fixed: portable audio tempo stages now
+support the editor's 0.25×–4× range on older FFmpeg (each atempo stage stays within
+0.5–2), and merge refuses different speed/zoom/crop/mute settings instead of
+silently losing the second segment's edit. Merge also requires genuinely touching
+source ranges rather than filling a hidden 20–50 ms gap. Editor feedback explains
+these constraints. Tests include real slow/fast MP4 export, duration verification
+and FFT confirmation that tempo changes preserve the 440 Hz source pitch.
+
+Installer and release verification now includes the new audio, 30-caption,
+reference activity, encoder preflight, timeline history/recovery/integrity and
+creator-export regressions. macOS additionally runs the editing regressions under
+the isolated x86_64 interpreter after asserting its runtime architecture; on an
+ARM host this is Rosetta execution, **not physical Intel-machine acceptance**.
+The workflows still retain their separate architecture/bundle checks. No release
+workflow was manually dispatched, no PR merged and no version published here.
+
+Fresh whole-repository result: **478 passed, 9 skipped** in 103.25 s. Generated
+real-video pipeline E2E: **35/35 passed**. The earlier dependency-blocked local
+suite notes are historical: PyYAML/CTranslate2 were installed in the development
+environment and the repository's existing headless GL stub script was used for
+Qt import/widget tests. These are development-only stubs, never proof of working
+native GL, multimedia, drivers or physical installation. They are not newly added
+runtime dependencies or model weights. Native workflow execution/results for
+this latest source remain pending; configuration and local tests are not a claim
+that native CI has passed.
+
+The complete PRO specification is still not satisfied: continuous YOLO+ByteTrack,
+body detection, identity-aware multiple speakers, semantic scene perception,
+professional multitrack/live playback, advanced source separation and real-weight
+OS-level disconnected acceptance remain open. The earlier verified additions
+must not be mistaken for completion of these separate engines.

@@ -362,8 +362,12 @@ class Timeline:
         if index < 0 or index + 1 >= len(self.segments):
             return False
         a, b = self.segments[index], self.segments[index + 1]
-        # Merging only makes sense for contiguous source ranges.
-        if abs(a.end - b.start) > 0.05:
+        # A single segment cannot represent two different transforms. Refuse
+        # instead of silently dropping the second segment's speed/crop/mute.
+        if abs(a.end - b.start) > 1e-6:
+            return False
+        if any(getattr(a, name) != getattr(b, name)
+               for name in ("speed", "zoom", "crop_x", "crop_y", "muted")):
             return False
         merged = replace(a, end=max(a.end, b.end))
         new = self._snapshot()

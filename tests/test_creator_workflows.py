@@ -245,3 +245,24 @@ def test_music_is_mixed_into_actual_range_and_timeline_exports(video,tmp_path,ti
     t=np.arange(len(segment))/48000
     amplitude=2*abs(np.mean(segment*np.exp(-2j*np.pi*1000*t)))
     assert amplitude>.001
+
+
+@pytest.mark.parametrize('speed',[.25,4])
+def test_extreme_editor_speeds_really_export_with_pitch_preserved(video,tmp_path,speed):
+    import numpy as np
+    from clipos.core.ffmpeg import require_ffmpeg,probe
+    timeline=Timeline.from_clip(0,2,source_duration=2)
+    timeline.set_speed(timeline.segments[0].id,speed)
+    settings=RenderSettings(width=180,height=320,fps=15,show_captions=False,
+        normalize_audio=False,noise_reduction=False,sound_effects=False,encoder_preference='cpu')
+    output=tmp_path/'speed.mp4'
+    result=ClipRenderer(tmp_path/'work').render_timeline(video,output,timeline,settings)
+    assert result.size_bytes>0
+    assert probe(output).duration==pytest.approx(2/speed,abs=.2)
+    decoded=subprocess.run([require_ffmpeg(),'-v','error','-i',str(output),'-vn',
+        '-ar','16000','-ac','1','-f','f32le','-'],check=True,capture_output=True,timeout=15)
+    samples=np.frombuffer(decoded.stdout,dtype='<f4')
+    segment=samples[len(samples)//4:3*len(samples)//4]
+    frequencies=np.fft.rfftfreq(len(segment),d=1/16000)
+    peak=frequencies[np.argmax(abs(np.fft.rfft(segment)))]
+    assert peak==pytest.approx(440,abs=12)  # Tempo edit, not pitch shifting.

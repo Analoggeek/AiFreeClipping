@@ -369,6 +369,21 @@ def _build_color_filter(s: RenderSettings) -> str:
     return ",".join(parts)
 
 
+def tempo_filter(speed: float) -> str:
+    """Preserve pitch with portable 0.5–2.0 atempo stages (older FFmpeg too)."""
+    if isinstance(speed, bool) or not isinstance(speed, (int,float)) or not math.isfinite(speed) or not .05 <= speed <= 16:
+        raise ValueError("Playback speed must be finite and within 0.05–16")
+    factors = []
+    while speed > 2.:
+        factors.append(2.)
+        speed /= 2.
+    while speed < .5:
+        factors.append(.5)
+        speed /= .5
+    factors.append(speed)
+    return ",".join(f"atempo={factor:.8f}" for factor in factors)
+
+
 def _build_audio_filter(s: RenderSettings, music_path: str = "") -> str:
     parts: list[str] = []
     if s.noise_reduction:
@@ -857,7 +872,7 @@ class ClipRenderer:
             else:
                 a += "anull"
             if seg.speed != 1.0:
-                a += f",atempo={seg.speed:.6f}"
+                a += "," + tempo_filter(seg.speed)
             a += f"[a{i}]"
             parts.append(a)
 

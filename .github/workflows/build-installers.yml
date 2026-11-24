@@ -112,7 +112,7 @@ jobs:
             export LD_LIBRARY_PATH="$PWD/.stublibs:${LD_LIBRARY_PATH:-}"
           fi
           mkdir -p build
-          python -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py -q 2>&1 | tee build/editing-tests.log
+          python -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py tests/test_creator_workflows.py tests/test_timeline.py tests/test_timeline_recovery.py tests/test_timeline_history.py tests/test_animated_captions.py tests/test_audio_ducking.py tests/test_reference_enhancements.py tests/test_encoder_preflight.py tests/test_timeline_integrity.py -q 2>&1 | tee build/editing-tests.log
           exit "${PIPESTATUS[0]}"
 
       - name: Run the end-to-end test
@@ -293,7 +293,7 @@ jobs:
             export LD_LIBRARY_PATH="$PWD/.stublibs:${LD_LIBRARY_PATH:-}"
           fi
           mkdir -p build
-          python -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py -q 2>&1 | tee build/editing-tests.log
+          python -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py tests/test_creator_workflows.py tests/test_timeline.py tests/test_timeline_recovery.py tests/test_timeline_history.py tests/test_animated_captions.py tests/test_audio_ducking.py tests/test_reference_enhancements.py tests/test_encoder_preflight.py tests/test_timeline_integrity.py -q 2>&1 | tee build/editing-tests.log
           exit "${PIPESTATUS[0]}"
 
       - name: Run the end-to-end test
@@ -329,6 +329,14 @@ jobs:
       - name: Install isolated Intel dependencies
         shell: bash
         run: bash scripts/setup_intel_python.sh
+
+      - name: Verify editing under isolated Intel Python
+        shell: bash
+        run: |
+          mkdir -p build
+          "$CLIPOS_INTEL_PYTHON" -c 'import platform; assert platform.machine() == "x86_64"'
+          "$CLIPOS_INTEL_PYTHON" -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py tests/test_creator_workflows.py tests/test_timeline.py tests/test_timeline_recovery.py tests/test_timeline_history.py tests/test_animated_captions.py tests/test_audio_ducking.py tests/test_reference_enhancements.py tests/test_encoder_preflight.py tests/test_timeline_integrity.py -q 2>&1 | tee build/editing-tests-intel.log
+          exit "${PIPESTATUS[0]}"
 
       - name: Build the Intel application
         # The Intel application is built with an Intel Python and with
@@ -456,7 +464,7 @@ jobs:
             export LD_LIBRARY_PATH="$PWD/.stublibs:${LD_LIBRARY_PATH:-}"
           fi
           mkdir -p build
-          python -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py -q 2>&1 | tee build/editing-tests.log
+          python -m pytest tests/test_gaming_v2.py tests/test_workflow_v25.py tests/test_workflow_v251.py tests/test_local_editing_agent.py tests/test_imported_layouts.py tests/test_platform_performance.py tests/test_dependency_arch.py tests/test_creator_workflows.py tests/test_timeline.py tests/test_timeline_recovery.py tests/test_timeline_history.py tests/test_animated_captions.py tests/test_audio_ducking.py tests/test_reference_enhancements.py tests/test_encoder_preflight.py tests/test_timeline_integrity.py -q 2>&1 | tee build/editing-tests.log
           exit "${PIPESTATUS[0]}"
 
       - name: Run the end-to-end test
