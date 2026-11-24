@@ -98,3 +98,19 @@ class NativeIntegrityTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+def test_bundle_resources_prefer_application_over_ocr_models(tmp_path):
+    from scripts.verify_bundle import resource_root
+    app=tmp_path/'CLIPOS.app'
+    resources=app/'Contents'/'Resources'
+    (resources/'rapidocr_onnxruntime'/'models').mkdir(parents=True)
+    own=resources/'resources'
+    for name in ('ffmpeg','cascades','models','icons','sounds'):(own/name).mkdir(parents=True)
+    assert resource_root(app)==own
+    # PyInstaller can move real resources under Frameworks and symlink them.
+    import shutil
+    shutil.rmtree(own)
+    own=app/'Contents'/'Frameworks'/'resources'
+    for name in ('ffmpeg','cascades','models','icons','sounds'):(own/name).mkdir(parents=True)
+    assert resource_root(app)==own
