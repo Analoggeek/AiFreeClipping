@@ -167,6 +167,7 @@ class WorkflowPage(BasePage):
                 if self.player.source()!=source:self.player.setSource(source)
             elif index==2:
                 self.player.setVideoOutput(self.video)
+                self._review_clip(self.review.currentRow())
         self.scroll.verticalScrollBar().setValue(0)
 
     def _busy(self):return bool(self.task and self.task.isRunning())
@@ -399,7 +400,8 @@ class WorkflowPage(BasePage):
         if self.review.count():self.review.setCurrentRow(0)
 
     def _review_clip(self,index):
-        if 0<=index<len(self._review_rows) and self.player:self.player.setSource(QUrl.fromLocalFile(self._review_rows[index]['output_path']))
+        if self.stack.currentIndex()==2 and 0<=index<len(self._review_rows) and self.player:
+            self.player.setSource(QUrl.fromLocalFile(self._review_rows[index]['output_path']))
     def _play(self):
         if self.player:
             if self.stack.currentIndex()==1 and self.project_id:

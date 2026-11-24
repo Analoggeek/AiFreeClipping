@@ -170,3 +170,17 @@ def test_delivery_rejects_a_clip_from_a_different_project(window,video,tmp_path)
     result=deliver_clips(window.db,pid,[cid],tmp_path/'exports')
     assert result['results'][0]['error']=='Clip belongs to a different project'
     assert not list(Path(result['output_dir']).glob('*.mp4'))
+
+
+def test_review_refresh_cannot_steal_source_playback(window,video,app):
+    from PySide6.QtCore import QUrl
+    from unittest.mock import Mock
+    page,pid=load(window,video)
+    window.db.create_clip(project_id=pid,title='Existing edit',start_time=0,end_time=2,duration=2,output_path=str(video),status='rendered')
+    real_player=page.player
+    try:
+        page.player=Mock();page._reload_review()
+        page.player.setSource.assert_not_called()
+        page.stack.setCurrentIndex(2);page._review_clip(0)
+        page.player.setSource.assert_called_once_with(QUrl.fromLocalFile(str(video)))
+    finally:page.player=real_player
