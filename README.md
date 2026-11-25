@@ -273,3 +273,10 @@ playback and rendered snapshots are explicitly distinct; real-time composited
 playback is not yet implemented.
 This is **not yet the complete professional editor** or a new published release.
 See [phase status and limitations](docs/PRODUCTION_STUDIO_PLAN.md).
+
+The development inspector also supports selective color, transform, audio-fade
+and existing-caption-style application to current/selected/all/grouped timeline
+media, with atomic undo and JSON presets. Explicit future-import defaults are
+available for supported non-caption categories. Automatic caption creation and
+real-time composited playback are still separate unfinished integrations; see
+the phase-status document rather than treating this as a complete editor release.

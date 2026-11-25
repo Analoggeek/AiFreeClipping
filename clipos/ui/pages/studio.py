@@ -201,6 +201,10 @@ class StudioPage(BasePage):
                 ),
             ]
         )
+        from ..widgets.editing_panel import EditingPanel
+
+        self.editing = EditingPanel(self)
+        self.content_layout.addWidget(self.editing)
         self.window.data_changed.connect(self.refresh)
         self.refresh()
 
@@ -283,7 +287,9 @@ class StudioPage(BasePage):
             for clip in clips:
                 if worker.cancelled.is_set():
                     raise RuntimeError("Import cancelled")
-                draft.import_media(clip["output_path"], at=draft.duration)
+                draft.import_media(
+                    clip["output_path"], at=draft.duration, queue_clip_id=clip["id"]
+                )
             return draft.to_dict()
 
         self.worker = BackgroundJob(job, self)
@@ -298,9 +304,17 @@ class StudioPage(BasePage):
     def _imported(self, data):
         def replace(draft):
             incoming = MultitrackProject.from_dict(data)
+            new_ids = {m.id for m in incoming.media} - {m.id for m in draft.media}
+            self.editing.apply_future(incoming, new_ids)
             draft.media, draft.lanes = incoming.media, incoming.lanes
 
-        self.project.edit(replace)
+        try:
+            self.project.edit(replace)
+        except Exception as exc:
+            self.status.setText(
+                "Import settings failed; timeline unchanged: " + str(exc)
+            )
+            return
         self.status.setText(
             "Sources added. Originals are unchanged. Linked audio/video trims stay synchronized."
         )

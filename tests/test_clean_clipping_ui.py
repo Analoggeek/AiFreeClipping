@@ -264,3 +264,56 @@ def test_studio_track_controls_waveforms_and_actual_timeline_preview(native, tmp
     assert waveform["duration"] > 0
     assert len(waveform["peaks"]) > 0
     Path(output).unlink(missing_ok=True)
+
+
+def test_studio_selective_batch_group_and_future_import_settings(native, tmp_path):
+    from clipos.video.multitrack import MultitrackProject
+    from clipos.video.editing_preset import EditingPreset
+
+    app, db, window, paths = native
+    video = source(tmp_path, 320, 180)
+    pid = db.create_project(name="Selective edits", source_path=str(video), duration=2)
+    first = db.create_clip(
+        project_id=pid, title="A", output_path=str(video), duration=2
+    )
+    second = db.create_clip(
+        project_id=pid, title="B", output_path=str(video), duration=2
+    )
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video, queue_clip_id=first)
+    page.project.import_media(video, at=2, queue_clip_id=second)
+    page.queue_manager.group([first], "Interview")
+    page.draw_timeline()
+    page.refresh()
+    panel = page.editing
+    panel.scope.setCurrentIndex(panel.scope.findData("group"))
+    panel.group.setText("Interview")
+    panel.fields["brightness"].setValue(0.2)
+    panel.apply()
+    video_items = [
+        i for lane in page.project.lanes if lane.kind == "video" for i in lane.items
+    ]
+    assert video_items[0].brightness == 0.2 and video_items[1].brightness == 0
+    panel.scope.setCurrentIndex(panel.scope.findData("all"))
+    panel.apply()
+    assert all(
+        i.brightness == 0.2
+        for lane in page.project.lanes
+        if lane.kind == "video"
+        for i in lane.items
+    )
+    panel.set_future()
+    incoming = MultitrackProject.from_dict(page.project.to_dict())
+    new_id = incoming.import_media(video, at=4, queue_clip_id=second)
+    panel.fields["brightness"].setValue(0.4)  # saved future preset remains .2
+    page._imported(incoming.to_dict())
+    assert (
+        page.project.find(
+            page.project.lanes[-1].id, page.project.lanes[-1].items[0].id
+        )[1].brightness
+        == 0.2
+    )
+    assert page.project.media[-1].id == new_id
+    panel.clear_future()

@@ -26,6 +26,7 @@ class Media:
     duration: float
     has_video: bool
     has_audio: bool
+    queue_clip_id: int | None = None
 
 
 @dataclass
@@ -111,6 +112,8 @@ class MultitrackProject:
                 raise ValueError('Media must be a local file path')
             number(media.duration,.001,1e7)
             if type(media.has_video) is not bool or type(media.has_audio) is not bool:raise ValueError('Invalid source type')
+            if media.queue_clip_id is not None and (type(media.queue_clip_id) is not int or media.queue_clip_id <= 0):
+                raise ValueError('Invalid generated clip reference')
             sources[media.id]=media
         groups={}
         for lane in self.lanes:
@@ -235,11 +238,11 @@ class MultitrackProject:
         self.media,self.lanes=following.media,following.lanes
         return True
 
-    def import_media(self,path,at=0.):
+    def import_media(self,path,at=0.,queue_clip_id=None):
         path=Path(path).expanduser().resolve()
         if not path.is_file():raise FileNotFoundError(f'Media file not found: {path}')
         info=probe(path)
-        media=Media(uid(),str(path),info.duration,info.has_video,info.has_audio)
+        media=Media(uid(),str(path),info.duration,info.has_video,info.has_audio,queue_clip_id=queue_clip_id)
         group=uid() if info.has_video and info.has_audio else ''
         def operation(project):
             project.media.append(media)

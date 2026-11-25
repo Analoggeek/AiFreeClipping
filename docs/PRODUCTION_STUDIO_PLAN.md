@@ -68,3 +68,41 @@ referencing a real generated FFmpeg fixture, imports them in a worker, splits
 linked media and saves/reopens the assembly. It is NOT evidence of generating
 20 distinct AI clips. Physical permission dialogs and GPU acceptance remain
 manual/unrun gates. Prior actual Windows/macOS Ollama installation audit passed.
+
+
+## Selective batch configuration increment
+
+The integrated inspector now provides **Current timeline media**, **Selected
+queue clips on timeline**, **All timeline media**, and **Named queue group** scopes.
+Generated clip IDs travel with imported media and persist in assembly files, so
+selected duplicated library entries sharing one file can still be targeted
+independently. Older/manual imports without queue IDs use explicit path matching.
+
+Implemented categories are deliberately bounded to existing render support:
+
+- Color: brightness, contrast, saturation.
+- Transform: layer X/Y, width/height, opacity, rotation (canvas geometry, not a
+  replacement for the original immutable AI source crop).
+- Audio: static gain and duration-relative fade in/out.
+- Captions: registered style/options on **existing** caption items wholly inside
+  targeted video spans; this does not transcribe speech or copy dialogue.
+
+Only checked categories change. The complete target set validates as one undoable
+transaction; an affected locked track rejects everything without a partial apply.
+Source trims, caption text/timing, existing automation and unchecked properties
+are preserved. Audio fades adapt to each target's own duration. Overlapping video
+windows may share captions; containment is a timing rule, not speaker ownership.
+
+The inspector can read current item settings, save/load versioned JSON presets,
+and persist explicit defaults for future imports. Future defaults are device-local
+settings, not portable project metadata. Future caption defaults are explicitly
+rejected until caption generation is integrated. Preset load itself changes no
+project. Only Apply performs a transaction. This is not yet the complete CRUD
+preset-manager phase or a full caption studio.
+
+Latest tests: **658 passed, 15 skipped** (full suite); focused native editor/model
+render tests **38 passed, 1 skipped**. Added checks prove selective color-only and
+caption-only application, different-duration audio fades, locked-track rollback,
+undo/redo, JSON roundtrip, exact queue-group targeting, future imports and actual
+encoded color changes through FFmpeg. GPU, real-time playback and physical OS
+permission dialogs remain unverified by these headless tests.
