@@ -209,12 +209,15 @@ class CaptionStudioPage(BasePage):
 
         # --- preview ---
         preview_card = Card()
-        preview_card.add(SectionHeader("Typography Sample", "Illustrative background; export renders actual ASS motion"))
+        preview_card.body().setAlignment(Qt.AlignmentFlag.AlignTop)
+        preview_card.add(SectionHeader('Rendered caption', 'Local FFmpeg / libass · sample frame at 1.00 s'))
         self.preview = CaptionPreview()
         preview_card.add(self.preview)
-        self.rendered_frame=QLabel('Render a frame to verify actual ASS typography and motion at one second.');self.rendered_frame.setWordWrap(True);preview_card.add(self.rendered_frame)
+        self.preview.hide()
+        self.rendered_frame=QLabel('Render a frame to verify actual ASS typography and motion at one second.');self.rendered_frame.setWordWrap(True);self.rendered_frame.setAlignment(Qt.AlignmentFlag.AlignCenter);self.rendered_frame.setFixedHeight(576);preview_card.add(self.rendered_frame)
         self.render_button=QPushButton('Render actual caption frame');self.render_button.clicked.connect(self._render_actual);preview_card.add(self.render_button)
         self._render_worker=None
+        self._shutting_down=False
         self._render_generation=0
         self._active_render_generation=0
         self._render_timer=QTimer(self);self._render_timer.setSingleShot(True)
@@ -229,6 +232,7 @@ class CaptionStudioPage(BasePage):
 
         # --- controls ---
         controls = Card()
+        controls.body().setAlignment(Qt.AlignmentFlag.AlignTop)
         controls.add(SectionHeader("Style", f"{len(CAPTION_STYLES)} styles · 30 animated combinations"))
         from ...captions.customization import CATEGORIES
         self.category=QComboBox();self.category.addItems(CATEGORIES)
@@ -250,7 +254,10 @@ class CaptionStudioPage(BasePage):
             btn.clicked.connect(lambda _=False, k=key: self._select_style(k))
             self.style_buttons[key] = btn
             self.style_grid.addWidget(btn, i // 2, i % 2)
-        controls.add_layout(self.style_grid)
+        style_body=QWidget();style_body.setLayout(self.style_grid)
+        style_scroll=QScrollArea();style_scroll.setWidgetResizable(True);style_scroll.setWidget(style_body)
+        style_scroll.setMinimumHeight(180);style_scroll.setMaximumHeight(230)
+        controls.add(style_scroll)
 
         controls.add(SectionHeader("Typography", ""))
 
@@ -329,7 +336,7 @@ class CaptionStudioPage(BasePage):
 
     # -- handlers ------------------------------------------------------------------
     def _queue_render(self,*_):
-        if not hasattr(self,'_render_timer'):return
+        if not hasattr(self,'_render_timer') or self._shutting_down:return
         self._render_generation+=1
         self._render_timer.start()
 
@@ -353,11 +360,13 @@ class CaptionStudioPage(BasePage):
                     alignment_override=self.alignment_combo.currentData(),timing_offset=self.offset_spin.value())
 
     def _render_actual(self):
+        if self._shutting_down:return
         if self._render_worker and self._render_worker.isRunning():return
         self.render_button.setEnabled(False);self.rendered_frame.setText('Rendering with local FFmpeg / libass…')
         options=dict(font_override=self.preview.font_family,size_override=self.preview.size,position_override=self.preview.position,stroke_override=self.preview.stroke,shadow_override=self.preview.shadow,background_override=self.preview.background)
         options.update(self._extra_options());options['sample_text']=self.sample_text.text()
         self._active_render_generation=self._render_generation
+        if self._render_worker:self._render_worker.deleteLater()
         self._render_worker=CaptionRenderWorker(self.preview.style_key,options,self)
         self._render_worker.ready.connect(self._show_render)
         self._render_worker.failed.connect(self._render_failed)
@@ -369,7 +378,7 @@ class CaptionStudioPage(BasePage):
 
     def _render_finished(self):
         self.render_button.setEnabled(True)
-        if self._active_render_generation!=self._render_generation:self._render_timer.start()
+        if not self._shutting_down and self._active_render_generation!=self._render_generation:self._render_timer.start()
 
     def _show_render(self,data):
         if self._active_render_generation!=self._render_generation:return
@@ -378,6 +387,7 @@ class CaptionStudioPage(BasePage):
         else:self.rendered_frame.setText('Could not decode rendered frame')
 
     def shutdown(self):
+        self._shutting_down=True
         self._render_timer.stop()
         self.preview.stop()
         if self._render_worker and self._render_worker.isRunning():self._render_worker.wait(50000)

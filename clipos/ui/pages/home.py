@@ -27,6 +27,7 @@ class HomePage(BasePage):
     page_subtitle = "Turn long videos into ready-to-post shorts — entirely on your device."
 
     def __init__(self, window) -> None:
+        self._sys_stop=threading.Event()
         self._sys_thread: threading.Thread | None = None
         self._sys_data: dict = {}
         self._recent_container: QVBoxLayout | None = None
@@ -86,6 +87,7 @@ class HomePage(BasePage):
         # --- recent projects + system status --------------------------------------
         grid = QGridLayout()
         grid.setSpacing(Metrics.md)
+        grid.setColumnStretch(0,2);grid.setColumnStretch(1,2);grid.setColumnStretch(2,2)
 
         recent = Card()
         recent_header = SectionHeader("Recent Projects", "Pick up where you left off")
@@ -262,7 +264,7 @@ class HomePage(BasePage):
     # -- system monitor ----------------------------------------------------------
     def _start_system_monitor(self) -> None:
         def worker() -> None:
-            while True:
+            while not self._sys_stop.is_set():
                 try:
                     prof = detect_hardware()
                     self._sys_data = {
@@ -277,7 +279,7 @@ class HomePage(BasePage):
                     }
                 except Exception:
                     pass
-                time.sleep(3.0)
+                self._sys_stop.wait(3.0)
 
         self._sys_thread = threading.Thread(target=worker, daemon=True)
         self._sys_thread.start()
@@ -330,3 +332,9 @@ class HomePage(BasePage):
             elif "qsv" in e:
                 accel.append("QuickSync")
         row("◈", "Acceleration", ", ".join(accel) if accel else "CPU only", "#32d74b")
+
+
+    def shutdown(self):
+        self._sys_stop.set()
+        if hasattr(self,'_status_timer'):self._status_timer.stop()
+        if self._sys_thread:self._sys_thread.join(timeout=3.)

@@ -117,3 +117,26 @@ def test_wrapping_toolbar_fits_narrow_workspace():
         layout.setGeometry(QRect(0,0,350,narrow))
         assert all(layout.itemAt(i).geometry().right()<350 for i in range(layout.count()))
     finally:widget.close()
+
+
+def test_native_inspector_canvas_and_layout_actions(media,tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    import clipos.ui.pages.multitrack as module
+    monkeypatch.setattr(module,'PATHS',SimpleNamespace(projects=tmp_path/'projects'))
+    app=QApplication.instance() or QApplication([])
+    db=Database(tmp_path/'inspector.db');window=MainWindow(db)
+    try:
+        window.navigate('multitrack');page=window.pages['multitrack']
+        page.project=layered(media);page._rebuild();page.table.setCurrentCell(0,3)
+        assert page.canvas_combo.currentData()==(160,90)
+        assert page.fps_combo.currentData()==10
+        page.inspector_controls['brightness'].setValue(.2);page._inspect_edit('brightness')
+        assert page.project.lanes[0].items[0].brightness==.2
+        page._layout_selected((0.,0.,1.,2/3))
+        assert page.project.lanes[0].items[0].h==pytest.approx(2/3)
+        page._undo();assert page.project.lanes[0].items[0].h==1.
+        page.canvas_combo.setCurrentIndex(2);page.fps_combo.setCurrentIndex(1);page._canvas_changed()
+        assert (page.project.width,page.project.height,page.project.fps)==(1080,1080,60)
+        page._undo();assert page.project.width==160 and page.project.fps==10
+    finally:
+        window.close();app.processEvents();db.close()

@@ -141,7 +141,7 @@ class MultitrackPage(BasePage):
         self.canvas_combo=QComboBox()
         for label,dimensions in [('Vertical · 1080 × 1920',(1080,1920)),('Landscape · 1920 × 1080',(1920,1080)),('Square · 1080 × 1080',(1080,1080))]:self.canvas_combo.addItem(label,dimensions)
         self.canvas_combo.activated.connect(self._canvas_changed);canvas.addWidget(self.canvas_combo)
-        self.fps_combo=QComboBox();self.fps_combo.addItems(['30 fps','60 fps']);self.fps_combo.activated.connect(self._canvas_changed);canvas.addWidget(self.fps_combo)
+        self.fps_combo=QComboBox();self.fps_combo.addItem('30 fps',30);self.fps_combo.addItem('60 fps',60);self.fps_combo.activated.connect(self._canvas_changed);canvas.addWidget(self.fps_combo)
         self.content_layout.addLayout(canvas)
         transport=FlowLayout()
         self.play=QPushButton('Play silent preview');self.play.clicked.connect(self._toggle_play)
@@ -217,7 +217,7 @@ class MultitrackPage(BasePage):
 
     def _canvas_changed(self,*_):
         try:
-            width,height=self.canvas_combo.currentData();fps=30 if self.fps_combo.currentIndex()==0 else 60
+            width,height=self.canvas_combo.currentData();fps=self.fps_combo.currentData()
             def change(project):project.width=width;project.height=height;project.fps=fps
             self.project.edit(change);self._changed()
         except Exception as exc:self._error(str(exc))
@@ -326,8 +326,11 @@ class MultitrackPage(BasePage):
         if selected in self._rows:self.table.setCurrentCell(self._rows.index(selected),column)
         else:self.table.setCurrentCell(-1,-1)
         self._building=False
-        self.canvas_combo.setCurrentIndex(max(0,self.canvas_combo.findData((self.project.width,self.project.height))))
-        self.fps_combo.setCurrentIndex(1 if self.project.fps==60 else 0)
+        dimensions=(self.project.width,self.project.height)
+        if self.canvas_combo.findData(dimensions)<0:self.canvas_combo.addItem(f'Custom · {dimensions[0]} × {dimensions[1]}',dimensions)
+        self.canvas_combo.setCurrentIndex(self.canvas_combo.findData(dimensions))
+        if self.fps_combo.findData(self.project.fps)<0:self.fps_combo.addItem(f'{self.project.fps} fps',self.project.fps)
+        self.fps_combo.setCurrentIndex(self.fps_combo.findData(self.project.fps))
         self.timeline.set_project(self.project)
         self._refresh_keys()
         self.cursor.setMaximum(self.project.duration)

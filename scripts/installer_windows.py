@@ -150,7 +150,7 @@ def inno_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> st
 AppId={{{{{BUNDLE_ID_UPPER}}}}}
 AppName=Ai clipping PRO
 AppVersion={VERSION}
-AppVerName={APP_NAME} {VERSION}
+AppVerName=Ai clipping PRO {VERSION}
 DefaultDirName={{autopf}}\\{APP_NAME}
 DefaultGroupName={APP_NAME}
 OutputBaseFilename={APP_NAME}-Setup
@@ -168,13 +168,13 @@ PrivilegesRequiredOverridesAllowed=dialog
 AllowNoIcons=yes
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={{app}}\\{APP_NAME}.exe
-UninstallDisplayName={APP_NAME}
+UninstallDisplayName=Ai clipping PRO
 AppPublisher=CLIPOS Studio
 AppPublisherURL=https://github.com/Analoggeek/AiFreeClipping
 AppSupportURL=https://github.com/Analoggeek/AiFreeClipping/issues
 AppUpdatesURL=https://github.com/Analoggeek/AiFreeClipping/releases
 VersionInfoDescription=Turn long videos into upload-ready shorts, entirely offline.
-VersionInfoProductName={APP_NAME}
+VersionInfoProductName=Ai clipping PRO
 VersionInfoProductVersion={VERSION}
 VersionInfoCompany=CLIPOS Studio
 VersionInfoVersion={VERSION_DOTTED}
@@ -227,7 +227,7 @@ def nsis_script(app_dir_name: str = APP_NAME, app_dir: Path | None = None) -> st
     icon_line = f'!define MUI_ICON "{icon}"' if (ROOT / "resources" / "icons" / "app_icon.ico").exists() else ""
     return f""";!NSIS v3.0
 Unicode true
-Name "{APP_NAME}"
+Name "Ai clipping PRO"
 OutFile "{output}"
 InstallDir "$LOCALAPPDATA\\Programs\\{APP_NAME}"
 InstallDirRegKey HKCU "Software\\{APP_NAME}" "InstallDir"
@@ -266,7 +266,7 @@ Section "Install"
 
   WriteUninstaller "$INSTDIR\\uninstall.exe"
   WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\
-    "DisplayName" "{APP_NAME}"
+    "DisplayName" "Ai clipping PRO"
   WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\
     "DisplayIcon" "$INSTDIR\\{APP_NAME}.exe"
   WriteRegStr HKCU "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{APP_NAME}" \\

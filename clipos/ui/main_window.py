@@ -103,7 +103,7 @@ class TitleBar(QFrame):
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.setToolTip("")
         b.setStyleSheet(
-            f"QPushButton {{ background-color: {color}; border: none; border-radius: 6px; }}"
+            f"QPushButton {{ background-color: {color}; border: none; border-radius: 6px; min-width: 12px; max-width: 12px; min-height: 12px; max-height: 12px; padding: 0px; }}"
             f"QPushButton:hover {{ background-color: {color}; }}"
         )
         return b

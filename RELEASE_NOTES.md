@@ -1,3 +1,50 @@
+# Ai clipping PRO 3.5.0 — Native workspace and caption customization
+
+CLIPOS is now displayed as **Ai clipping PRO**. This release keeps existing local
+projects, data paths, database and bundle identities. Installer asset and executable
+filenames retain `CLIPOS` for upgrade and verification compatibility.
+
+## Implemented
+
+- Ten native destinations: Home, Create Clips, Projects, Clip Library, Editor (Pro),
+  Caption Studio, Templates, AI Models, Export Center and Settings.
+- Persistent collapsed navigation with tooltips and dark/light/system appearance.
+- Home database statistics, recent projects and grounded local Director handoff.
+- Searchable project gallery with name/duration/updated sorting and archive filter.
+- Restored Caption Studio with 38 working presets and category browsing; saved local
+  custom profiles; typography, text/highlight/outline colors, animation, alignment,
+  position and timing offset. Actual FFmpeg/libass preview frames update in the
+  background and share validated overrides with both clip/timeline export paths.
+- Existing independent-video/audio multitrack workspace is accessible from the clip
+  editor. Wrapping toolbars, a selected-layer inspector, brightness/contrast/
+  saturation/rotation, gameplay-above and facecam-below layouts, canvas sizes and
+  frame rates are connected to the real project model, undo history and renderer.
+- Export Center supports AAC quality selection in addition to the existing video
+  codec, aspect ratio, FPS, bitrate, hardware encoder and batch export controls.
+- Local model management remains explicit-consent/offline-first. Dependency versions
+  and file-presence checks do not pretend a model is running or compatible.
+
+## Validation and boundaries
+
+The local full suite passed **653 tests, with 21 skipped**. New regression cases
+include actual FFmpeg caption rasterization and actual multitrack color/rotation
+MP4 export, plus native widget navigation, profile persistence and inspector actions.
+Native CI results must be checked on the exact release revision before publication.
+
+This is **not full parity with every control in the showcase illustration**. The
+multitrack engine currently supports video/audio layers, fades and opacity/gain
+keyframes, not dedicated caption/effect/transition lanes. Caption burning uses the
+clip/timeline export pipeline. The decoded color preview is draft quality; final
+filters are rendered by FFmpeg. Caption preview displays a frame, not full animated
+playback. Existing bounded Director commands still require review and do not imply
+unrestricted autonomous video editing. No trained Gemma weights were available in
+the sandbox, so live model quality is not claimed. Native signing integrity is not
+Apple notarization or a promise that unsigned installers avoid OS warnings.
+
+No publishing/account integration or automatic media upload has been reintroduced.
+
+---
+
 # CLIPOS 3.1.1 — Native render crash stability update
 
 Developed by **Analoggeek**. Targets the reported Intel Mac exports terminating

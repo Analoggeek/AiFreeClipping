@@ -54,7 +54,7 @@ def _desktop_entry() -> str:
         f"""\
         [Desktop Entry]
         Type=Application
-        Name={APP_NAME}
+        Name=Ai clipping PRO
         GenericName=Video Clipping Studio
         Comment=Turn long videos into upload-ready shorts, entirely offline
         Exec=/opt/{APP_NAME}/{APP_NAME} %f
