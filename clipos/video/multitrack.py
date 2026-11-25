@@ -58,6 +58,8 @@ class Item:
     caption_words: list = field(default_factory=list)
     effects: list = field(default_factory=list)
     transition_mode: str = "dissolve_linear"
+    audio_effects: list = field(default_factory=list)
+    color_grade: dict = field(default_factory=dict)
     incoming_id: str = ""
     outgoing_id: str = ""
 
@@ -145,6 +147,12 @@ class MultitrackProject:
                 number(item.length,.001,media.duration);number(item.speed,.25,4);number(item.gain,0,4)
                 number(item.brightness,-1,1);number(item.contrast,0,3)
                 number(item.saturation,0,3);number(item.rotation,-180,180)
+                from .studio_color import validate_grade
+                validate_grade(item.color_grade)
+                if lane.kind!='video' and item.color_grade:raise ValueError('Color grading requires video items')
+                from .studio_audio import validate_audio_effects
+                validate_audio_effects(item.audio_effects)
+                if lane.kind!='audio' and item.audio_effects:raise ValueError('Audio processors require an audio lane')
                 from .studio_effects import validate_effects
                 validate_effects(item.effects)
                 if lane.kind!='video' and item.effects:raise ValueError('Video effects require a video lane')
@@ -293,7 +301,7 @@ class MultitrackProject:
         return targets
 
     def change_item(self,lane_id,item_id,*,linked=False,**values):
-        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options','caption_words','effects'}
+        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options','caption_words','effects','audio_effects','color_grade'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)

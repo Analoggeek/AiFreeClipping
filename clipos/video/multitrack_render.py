@@ -9,6 +9,7 @@ import time
 from ..core.ffmpeg import FFmpegRunner, probe
 from ..core.hardware import choose_encoder
 from .renderer import RenderResult, tempo_filter, _filter_args
+from .studio_audio import audio_filters
 
 
 def graph(project,work_dir=None,window=None):
@@ -53,7 +54,7 @@ def graph(project,work_dir=None,window=None):
             x=round(item.x*project.width);y=round(item.y*project.height)
             parts.append(f'[{stream}:v]setpts=(PTS-STARTPTS)/{item.speed:.8f},fps={project.fps},'
                 f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},'
-                f'setsar=1,' + video_effects(item) + 'format=rgba,' + video_opacity(item) +
+                f'setsar=1,' + video_effects(item,work_dir) + 'format=rgba,' + video_opacity(item) +
                 video_fades(item) + dissolve_filter(project,item) +
                 f'setpts=PTS+{item.at:.6f}/TB[layer{index}]')
             parts.append(f'{base}[layer{index}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:'
@@ -62,7 +63,7 @@ def graph(project,work_dir=None,window=None):
         else:
             delay=round(item.at*1000)
             parts.append(f'[{stream}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},'
-                f'aresample=48000,aformat=channel_layouts=stereo,' + audio_gain(item) +
+                f'aresample=48000,aformat=channel_layouts=stereo,' + audio_filters(item.audio_effects) + audio_gain(item) +
                 f'atrim=duration={item.duration:.6f},' + audio_envelope(item) + f'adelay={delay}|{delay}[audio{index}]')
             audio.append(f'[audio{index}]')
     # Compensate amix averaging; limit peaks without auto loudness boosting.
@@ -152,7 +153,7 @@ def audio_preview_command(project,start):
             delay=round(max(0,item.at-start)*1000)
             inputs+=['-threads','2','-ss',f'{source_in:.6f}','-t',f'{length:.6f}','-i',source.path]
             parts.append(f'[{index}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},aresample=48000,'
-                f'aformat=channel_layouts=stereo,' + audio_gain(item,offset) + audio_envelope(item,offset) + f'adelay={delay}|{delay}[p{index}]')
+                f'aformat=channel_layouts=stereo,' + audio_filters(item.audio_effects) + audio_gain(item,offset) + audio_envelope(item,offset) + f'adelay={delay}|{delay}[p{index}]')
             labels.append(f'[p{index}]');index+=1
     if index>64:raise ValueError('Audio preview supports at most 64 items')
     parts.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0,'
@@ -198,7 +199,7 @@ def video_opacity(item):
     return f"format=gbrap,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*({expression})',"
 
 
-def video_effects(item):
+def video_effects(item,work_dir=None):
     """Per-layer actual color and rotation filters, before alpha automation."""
     filters=[]
     if (item.brightness,item.contrast,item.saturation)!=(0.,1.,1.):
@@ -207,6 +208,8 @@ def video_effects(item):
         filters.append(f'rotate={item.rotation:.8f}*PI/180:ow=iw:oh=ih:c=black')
     from .studio_effects import effect_filters
     filters.extend(effect_filters(item.effects))
+    from .studio_color import grade_filters
+    filters.extend(grade_filters(item.color_grade,work_dir))
     return ','.join(filters)+(',' if filters else '')
 
 

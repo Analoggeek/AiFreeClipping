@@ -11,6 +11,12 @@ def validate_overlay(lane, item, number):
     from .studio_transitions import transition_recipes
     if not isinstance(item.transition_mode,str) or item.transition_mode not in transition_recipes():raise ValueError('Unsupported transition recipe')
     if lane.kind!='transition' and item.transition_mode!='dissolve_linear':raise ValueError('Transition recipe requires a transition lane')
+    from .studio_audio import validate_audio_effects
+    validate_audio_effects(item.audio_effects)
+    from .studio_color import validate_grade
+    validate_grade(item.color_grade)
+    if item.color_grade:raise ValueError('Color grading requires video items')
+    if item.audio_effects:raise ValueError('Audio processors require audio items')
     if item.effects:raise ValueError('Layer effects require video items')
     number(item.at, 0, 21600); number(item.length, .001, 21600)
     if item.at + item.length > 21600:

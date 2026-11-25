@@ -59,9 +59,9 @@ class EditingPanel(QWidget):
             for key, value in values.items():
                 if key == "caption_options":
                     continue
-                if key == "effects":
-                    field = QLineEdit("[]")
-                    field.setPlaceholderText("Validated effect configuration JSON list")
+                if key in ("effects", "audio_effects", "color_grade"):
+                    field = QLineEdit("{}" if key == "color_grade" else "[]")
+                    field.setPlaceholderText("Validated processing configuration JSON")
                 elif key == "caption_style":
                     field = QComboBox()
                     for style in CAPTION_STYLES.values():
@@ -123,7 +123,7 @@ class EditingPanel(QWidget):
             for key in defaults:
                 if key == "caption_options":
                     values[key] = deepcopy(self.caption_options)
-                elif key == "effects":
+                elif key in ("effects", "audio_effects", "color_grade"):
                     values[key] = json.loads(self.fields[key].text())
                 elif key == "caption_style":
                     values[key] = self.fields[key].currentData()
@@ -180,16 +180,16 @@ class EditingPanel(QWidget):
             raise ValueError("Select a timeline item")
         lane, item = self.studio.project.find(*target)
         category = {
-            "video": ("color", "transform", "effects"),
-            "audio": ("audio",),
+            "video": ("color", "transform", "effects", "color_grade"),
+            "audio": ("audio", "audio_effects"),
             "caption": ("captions",),
         }.get(lane.kind, ())
         if not category:
             raise ValueError("Select video, audio or caption item")
         for name in category:
             for key in DEFAULTS[name]:
-                if key == "effects":
-                    self.fields[key].setText(json.dumps(item.effects))
+                if key in ("effects", "audio_effects", "color_grade"):
+                    self.fields[key].setText(json.dumps(getattr(item, key)))
                 elif key == "caption_options":
                     self.caption_options = deepcopy(item.caption_options)
                 elif key == "caption_style":
@@ -261,7 +261,7 @@ class EditingPanel(QWidget):
             check.setChecked(category in preset.categories)
         for category, values in preset.categories.items():
             for key, value in values.items():
-                if key == "effects":
+                if key in ("effects", "audio_effects", "color_grade"):
                     self.fields[key].setText(json.dumps(value))
                 elif key == "caption_options":
                     self.caption_options = deepcopy(value)

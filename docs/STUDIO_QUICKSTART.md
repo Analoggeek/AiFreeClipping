@@ -50,3 +50,17 @@ Real physical-device audio sync/performance, high-resolution proxies, full
 advanced color/audio/motion workflows and new frozen installer acceptance remain
 separate gates. Hindi requires suitable installed Devanagari fonts and multilingual
 recognition review. See [phase status](PRODUCTION_STUDIO_PLAN.md).
+
+## Color and audio processing
+
+- **Color tab:** adjust exposure/gamma and RGB tonal balances, or explicitly
+  import a normalized `.cube` LUT. Verification happens in a worker. Set strength,
+  Load grade into Batch inspector, review targets and Apply. Keep the original LUT
+  file with your project; changed bytes require an explicit re-import.
+- **Audio tab:** choose an implemented processor and amount. Load or append it
+  into the inspector, review selected targets and Apply. The processor category
+  does not silently replace static gain/fades. Import local background audio at
+  the timeline cursor as a separate track, then trim and mix explicitly.
+- The current fixed-band controls are not a full parametric EQ UI, automatic
+  voice reconstruction, automatic music ducking or a full color-wheels/curves
+  grading suite. Review outputs before delivering them.

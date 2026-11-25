@@ -50,3 +50,20 @@ def test_native_stream_worker_cancels_under_backpressure(media):
     worker.stop()
     assert worker.wait(5000)
     assert worker.frames.maxsize == 24
+
+
+def test_pipe_adapter_never_exposes_windows_invalid_seek_callbacks():
+    import io
+    from clipos.video.live_playback import ReadOnlyPipe
+
+    class WindowsPipe(io.BytesIO):
+        def seek(self, *args):
+            raise OSError(22, "Invalid argument")
+
+        def tell(self):
+            raise OSError(22, "Invalid argument")
+
+    pipe = ReadOnlyPipe(WindowsPipe(b"actual stream bytes"))
+    assert pipe.readable() and not pipe.seekable()
+    assert not hasattr(pipe, "seek") and not hasattr(pipe, "tell")
+    assert pipe.read(6) == b"actual"

@@ -440,3 +440,63 @@ def test_composite_edit_guard_and_device_unavailability_are_explicit(native):
     page.live.play()
     assert not page.live.running
     assert "unavailable" in page.live.status.text().lower()
+
+
+def test_native_audio_import_processing_and_color_lut_controls(native, tmp_path):
+    import subprocess
+    from clipos.core.ffmpeg import require_ffmpeg
+    from clipos.video.multitrack import MultitrackProject
+    from tests.test_studio_color import cube
+
+    app, db, window, paths = native
+    video = source(tmp_path, 160, 90)
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video)
+    page.draw_timeline()
+    page.timeline.setCurrentItem(page.timeline.topLevelItem(0).child(0))
+    page.color_studio.import_lut(cube(tmp_path))
+    deadline = time.monotonic() + 10
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert page.color_studio.lut_sha
+    page.color_studio.load()
+    page.editing.apply()
+    assert (
+        page.project.lanes[0].items[0].color_grade["lut_sha256"]
+        == page.color_studio.lut_sha
+    )
+    audio = tmp_path / "music.wav"
+    subprocess.run(
+        [
+            require_ffmpeg(),
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=220:duration=0.3",
+            str(audio),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    page.split_time.setValue(1)
+    page.audio_studio.import_path(str(audio))
+    deadline = time.monotonic() + 10
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert page.project.lanes[-1].kind == "audio"
+    assert page.project.lanes[-1].items[0].at == 1
+    page.timeline.setCurrentItem(
+        page.timeline.topLevelItem(len(page.project.lanes) - 1).child(0)
+    )
+    page.audio_studio.load()
+    page.editing.apply()
+    assert page.project.lanes[-1].items[0].audio_effects[0]["kind"] == "bass"

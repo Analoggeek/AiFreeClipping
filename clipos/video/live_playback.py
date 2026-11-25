@@ -66,6 +66,27 @@ def stream_command(project, work_dir, *, start=0.0, max_size=960):
     ]
 
 
+class ReadOnlyPipe:
+    """Expose only read callbacks to PyAV; a live pipe has no seek/tell API.
+
+    Windows file objects have seek/tell methods which raise EINVAL for pipes.
+    Passing them directly lets some PyAV builds install an invalid seek callback.
+    Do not inherit IOBase (it would reintroduce those methods).
+    """
+
+    def __init__(self, pipe):
+        self._pipe = pipe
+
+    def read(self, size=-1):
+        return self._pipe.read(size)
+
+    def readable(self):
+        return True
+
+    def seekable(self):
+        return False
+
+
 def stream_frames(
     project, *, start=0.0, max_size=960, cancelled=None, process_ready=None
 ):
@@ -90,7 +111,7 @@ def stream_frames(
             if process_ready:
                 process_ready(process)
             try:
-                with av.open(process.stdout, format="nut") as container:
+                with av.open(ReadOnlyPipe(process.stdout), format="nut") as container:
                     for frame in container.decode():
                         if cancelled and cancelled():
                             return

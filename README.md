@@ -299,3 +299,10 @@ packs**. Playback performance/physical audio sync and new packaged builds still
 need native acceptance. The entire original professional-editor specification is
 not complete. See the [working-controls tutorial](docs/STUDIO_QUICKSTART.md) and
 [remaining acceptance gates](docs/PRODUCTION_STUDIO_PLAN.md).
+
+Recent development controls add exposure/gamma/RGB tonal grading, verified local
+`.cube` LUTs with strength, fixed-band EQ/noise reduction/compressor/limiter/echo,
+and independent background-audio import. These use the same selective preset and
+preview/export graph. Native macOS/Linux builds passed at `60350e0`; Windows found
+a non-seekable-pipe bug, now fixed locally and awaiting its native rerun. Physical
+audio-device sync and full motion-graphics asset packs are not certified/complete.

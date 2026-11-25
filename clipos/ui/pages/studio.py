@@ -263,6 +263,14 @@ class StudioPage(BasePage):
 
         self.effects = EffectsPanel(self)
         self.tools.addTab(self.effects, "Effects")
+        from ..widgets.audio_panel import AudioPanel
+
+        self.audio_studio = AudioPanel(self)
+        self.tools.addTab(self.audio_studio, "Audio")
+        from ..widgets.color_panel import ColorPanel
+
+        self.color_studio = ColorPanel(self)
+        self.tools.addTab(self.color_studio, "Color")
         from ..widgets.transitions_panel import TransitionsPanel
 
         self.transitions = TransitionsPanel(self)

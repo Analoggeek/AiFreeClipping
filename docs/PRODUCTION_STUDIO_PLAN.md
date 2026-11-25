@@ -252,3 +252,47 @@ multi-selection/global ripple, caption merge/speaker UX, rational timecode/proxy
 cache management, restart-resumable export jobs, broad export codecs/profiles,
 project autosave/recovery UI, and physical Windows/macOS/GPU release acceptance.
 No stable release or complete-professional-editor claim is made by this increment.
+
+## Native Windows pipe fix and color/audio processing increment
+
+Native run `45689688721` at `60350e0`: Linux package and macOS app/disk-image
+jobs PASSED (the macOS job includes Intel and Apple Silicon). Windows FAILED
+before packaging: PyAV attempted `fseek` on a Windows pipe and raised EINVAL;
+streaming tests and their dependent worker test caught this. This was not skipped.
+`ReadOnlyPipe` now exposes read callbacks only, with no seek/tell methods, so
+PyAV cannot install an invalid callback. A regression simulates Windows pipe
+seek/tell failures, and actual streaming/backpressure tests still pass locally.
+**The new Windows native rerun remains pending**, not certified by Linux tests.
+
+New implemented workflows:
+
+- Eight bounded audio processors: three fixed-band EQ controls (100 Hz, 2.5 kHz,
+  8 kHz), FFT noise-floor reduction, ratio-controlled compressor, peak limiter,
+  echo and rumble high-pass. They are not trained AI voice reconstruction.
+- Audio processor lists participate in selective batch presets, undo, saved
+  assemblies, shared-graph streaming, mixed export and the legacy audio preview
+  graph. Only checked audio-processing settings change. Audio gain/fades remain
+  independently selectable. Existing gain automation retains its current model
+  semantics and takes precedence over static gain.
+- A local background-audio import creates an independent audio lane at the
+  cursor in a worker. It never overwrites source audio, invents music, loops or
+  silently ducks it. Apply gain/fades or trim explicitly.
+- Color grading adds exposure stops, gamma and RGB shadows/midtones/highlights,
+  separate from basic brightness/contrast/saturation. Its own selective category
+  participates in presets, batch application, project save and the same render
+  graph. This is not complete RGB curves/wheels/HSL/temperature grading.
+- Local normalized 3D `.cube` LUT import supports sizes 2–65, finite bounded
+  samples, strict row counts, a 16 MiB cap and explicit SHA256 binding. Unsupported
+  domains/formats fail clearly. Strength blends the LUT samples against identity
+  in an isolated work asset. Modified or missing original assets fail rather than
+  silently changing the look. Presets reference LUT files, not embedded copies;
+  retain those authorized assets when moving projects.
+
+Evidence: full local suite **683 passed, 15 skipped** in 60.07s. All eight audio
+processors were actually encoded and an EQ/high-pass change was measured in
+streamed PCM. Tests encoded and inspected LUT pixels at full/zero strength,
+checked streaming uses the same LUT graph, rejected changed LUT bytes, exercised
+exposure/balance, roundtripped saved grades, and drove native audio/LUT controls.
+Physical speakers, long-session audio drift, GPU throughput, real human OS
+permission dialogs and full asset-based motion graphics remain unverified or
+unimplemented; none are claimed passed by this increment.
