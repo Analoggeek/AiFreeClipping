@@ -5,13 +5,19 @@ on:
     paths: [".github/workflows/intel-engine-audit.yml"]
 permissions:
   contents: read
+  issues: write
 jobs:
   audit:
     runs-on: macos-15-intel
     steps:
       - name: Inspect upstream Intel 6.0 compatibility candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          exec > >(tee audit.log) 2>&1
+          trap 'gh issue create --title "Intel candidate audit results" --body-file audit.log' EXIT
           base=https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0
           for name in ffmpeg-darwin-x64.gz darwin-x64.LICENSE darwin-x64.README; do
             curl -fL --retry 3 "$base/$name" -o "$name"
