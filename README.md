@@ -13,20 +13,19 @@ Gaming Studio 2.0 navigation have been removed; authorised URL import remains.
 
 [3.5 implementation and boundaries](docs/PRO_V35_IMPLEMENTATION.md) · [Release notes](RELEASE_NOTES.md)
 
-The table below remains the last published stable v3.1.1 until the v3.5 native
-release workflow has completed successfully. Source version alone is not a release.
-
-### Previous stable v3.1.1
+**v3.5.0 is published** with native Windows, macOS Apple Silicon, macOS Intel
+and Linux installers. Existing data paths are preserved; asset filenames retain
+`CLIPOS` for upgrade compatibility. The application is displayed as **Ai clipping PRO**.
 
 | Platform | Installer |
 | --- | --- |
-| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS-Setup.exe) |
-| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS-3.1.1-arm64.dmg) |
-| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS-3.1.1-intel.dmg) |
-| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS_3.1.1_amd64.deb) |
-| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS-3.1.1-linux-x86_64.zip) |
+| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.5.0/CLIPOS-Setup.exe) |
+| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.5.0/CLIPOS-3.5.0-arm64.dmg) |
+| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.5.0/CLIPOS-3.5.0-intel.dmg) |
+| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.5.0/CLIPOS_3.5.0_amd64.deb) |
+| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.5.0/CLIPOS-3.5.0-linux-x86_64.zip) |
 
-[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.1.1)
+[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.5.0)
 · [Release notes](RELEASE_NOTES.md)
 · [Detailed workflow guide](docs/WORKFLOW_V25.md)
 

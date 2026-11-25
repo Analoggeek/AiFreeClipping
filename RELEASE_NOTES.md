@@ -29,7 +29,7 @@ filenames retain `CLIPOS` for upgrade and verification compatibility.
 The local full suite passed **653 tests, with 21 skipped**. New regression cases
 include actual FFmpeg caption rasterization and actual multitrack color/rotation
 MP4 export, plus native widget navigation, profile persistence and inspector actions.
-Native CI results must be checked on the exact release revision before publication.
+Exact-revision native installer run [45622794542](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45622794542), Intel engine audit and signature/DMG checks passed. Tagged release run [45628180998](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45628180998) built and verified Windows, Apple Silicon, Intel and Linux installers before publishing all seven assets. Local end-to-end checks passed 35/35.
 
 This is **not full parity with every control in the showcase illustration**. The
 multitrack engine currently supports video/audio layers, fades and opacity/gain

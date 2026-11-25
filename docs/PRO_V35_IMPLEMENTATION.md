@@ -1,6 +1,9 @@
 # Ai clipping PRO 3.5 — implementation status
 
-This document describes the 3.5 release candidate. It is **not a claim of complete showcase parity**. Release availability is recorded on GitHub Releases, not inferred from the source version.
+**Ai clipping PRO v3.5.0 is published:** https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.5.0
+
+This is **not a claim of complete showcase parity**. Source PR #146 merged as
+`ada2e5906ad76101e8e93ca7022d13b65723251e`; the release tag points to that commit.
 
 ## Screen mapping
 
@@ -34,14 +37,20 @@ Application-facing name is **Ai clipping PRO**. Source version is **3.5.0** in p
 
 The sandbox's minimal Qt platform does not establish native audio/device/OS acceptance. Skipped tests remain skipped; no trained Gemma weights were downloaded or exercised.
 
-## Remaining release gates
+## Native release verification
+
+- Exact application revision: installer run [45622794542](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45622794542), Intel audit [45622891646](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45622891646) and signature/DMG integrity [45622794567](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45622794567) passed.
+- Official tagged release [45628180998](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45628180998): Windows, macOS Apple Silicon, macOS Intel and Linux builds, architecture/frozen-bundle verification and publication passed. All seven expected assets are uploaded and nonempty.
+- Local real end-to-end workflow: **35/35 passed**.
+
+## Known limitations / remaining roadmap
 
 - Full showcase parity remains a product roadmap item; the implemented inspector and wrapping controls do not imply every illustrated control exists.
 - Caption motion preview is an actual frame at one second, not a continuous libass playback viewer. The existing word-pop/reveal presets require actual word timestamps; missing timing falls back to cue motion, never invented synchronization.
 - Independent effects/transitions/caption tracks and additional editing controls beyond the existing engine's supported operations. Linking the existing multitrack workspace does not create missing engine features.
 - Full Director instruction acceptance with actual local Gemma weights; current bounded command implementation and review requirements remain documented in `GEMMA_DIRECTOR.md`.
 - Complete dependency/weights compatibility and memory reporting; installed package versions are not evidence that a model can execute.
-- Native Windows, Apple Silicon and Intel macOS installer/regression checks on this exact revision, plus manual import/edit/reopen/export acceptance.
-- Source PR review/merge and gated installer publication. No tag or release should be published merely because the source version was prepared.
+- All native CI installer/regression checks passed. This does not substitute for manual acceptance on every end-user device and source recording.
+- Dedicated multitrack caption/effect/transition lanes and full illustrated feature parity remain unimplemented; existing capabilities are not presented as those missing features.
 
-Public v3.1.1 download links remain untouched until a verified successor exists.
+Public download documentation now points to v3.5.0. Prior v3.1.1 assets remain available and unchanged.
