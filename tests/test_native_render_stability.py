@@ -148,3 +148,13 @@ def test_native_fault_keeps_remaining_session_renders_in_compatibility_mode():
         second.run(['-c:v','libx264','out2.mp4'])
     assert second.recovery_used and '-cpuflags' in run.call_args.args[0]
     assert run.call_count==1
+
+
+def test_bundle_exec_verification_distinguishes_metadata_from_real_binaries(tmp_path):
+    from scripts.verify_bundle import media_executables
+    folder=tmp_path/'ffmpeg'/'darwin-x64';folder.mkdir(parents=True)
+    for name in ('ffmpeg','ffprobe'):
+        path=folder/name;path.write_bytes(b'binary');path.chmod(0o755)
+    for name in ('ffmpeg-provenance.json','darwin-x64.LICENSE','darwin-x64.README'):
+        (folder/name).write_text('data')
+    assert {p.name for p in media_executables(tmp_path)}=={'ffmpeg','ffprobe'}
