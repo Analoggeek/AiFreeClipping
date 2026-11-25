@@ -151,6 +151,7 @@ class SettingsPage(BasePage):
             ("NVIDIA NVENC", "nvidia"),
             ("Apple VideoToolbox", "apple"),
             ("Intel Quick Sync", "intel"),
+            ("AMD AMF", "amd"),
         ):
             self.gpu_combo.addItem(label, value)
         idx = self.gpu_combo.findData(settings.get("use_gpu", "auto"))
@@ -671,9 +672,29 @@ class SettingsPage(BasePage):
             f"Data folder: {PATHS.root}"
         )
 
+        if not hasattr(self,'_hardware_worker'):
+            self.hw_label.setText('Detecting hardware in the background…')
+            self._hardware_worker=HardwareSummary(self)
+            self._hardware_worker.result.connect(self.hw_label.setText)
+            self._hardware_worker.start()
+
+    def shutdown(self):
+        for name in ('_hardware_worker','_update_worker'):
+            worker=getattr(self,name,None)
+            if worker and worker.isRunning():worker.wait()
+
+
+class HardwareSummary(QThread):
+    result=Signal(str)
+
+    def run(self):
+        try:self.result.emit(self.summary())
+        except Exception as exc:self.result.emit("Hardware diagnostics unavailable: "+str(exc))
+
+    def summary(self):
         prof = detect_hardware()
         enc = ", ".join(sorted(prof.ffmpeg_encoders.keys())) or "none detected"
-        self.hw_label.setText(
+        return (
             f"OS: {prof.os_name} {prof.os_version} ({prof.arch})\n"
             f"CPU: {prof.cpu_name} — {prof.cpu_cores} cores / {prof.cpu_threads} threads\n"
             f"RAM: {prof.ram_total_mb} MB total, {prof.ram_available_mb} MB available\n"

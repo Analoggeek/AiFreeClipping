@@ -35,7 +35,7 @@ def render_settings(db, overrides=None):
     if str(rs.encoder_preference).lower() in ('false','0'): rs.encoder_preference='cpu'
     # OS-specific native encoder selection remains capability-probed at render.
     rs.platform_profile = 'macOS / VideoToolbox' if platform.system()=='Darwin' else ('Windows / NVENC · QSV · CPU' if platform.system()=='Windows' else 'Linux / detected hardware')
-    rs.cpu_preset = 'veryfast' if rs.low_memory else 'fast'
+    rs.cpu_preset = 'veryfast'
     rs.studio_layout = data.get('studio_layout', 'bottom')
     rs.camera_size = float(data.get('camera_size', 1/3))
     mode = data.get('framing_mode','auto')

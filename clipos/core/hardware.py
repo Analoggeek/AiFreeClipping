@@ -64,7 +64,7 @@ class HardwareProfile:
         # Leave headroom for playback, Qt and the OS. FFmpeg filters and speech
         # inference each own worker pools; using all logical CPUs causes stutter.
         logical = max(1, self.cpu_threads)
-        budget = min(8, max(1, logical - max(1, logical // 4)))
+        budget = min(32, max(1, logical - max(1, logical // 8)))
         if 0 < self.ram_total_mb <= 8192:
             budget = min(budget, 4)
         return budget
@@ -332,7 +332,7 @@ def detect_hardware() -> HardwareProfile:
 class EncoderChoice:
     video_encoder: str = "libx264"
     audio_encoder: str = "aac"
-    hw_accel: str = "none"          # none | nvenc | qsv | videotoolbox
+    hw_accel: str = "none"          # none | nvenc | qsv | videotoolbox | amf
     extra_args: list = field(default_factory=list)
     description: str = "CPU (software) encoding"
 
@@ -347,7 +347,7 @@ class EncoderChoice:
 def _probe_encoder(binary: str, identity: tuple, name: str, epoch: int) -> bool:
     allowed = {
         "h264_nvenc", "hevc_nvenc", "h264_qsv", "hevc_qsv",
-        "h264_videotoolbox", "hevc_videotoolbox",
+        "h264_videotoolbox", "hevc_videotoolbox", "h264_amf", "hevc_amf",
     }
     if name not in allowed:
         return False
@@ -391,7 +391,7 @@ def choose_encoder(preference: str = "auto", codec: str = "h264",
                    low_memory: bool = False, *, verify: bool = True) -> EncoderChoice:
     """Pick the best available encoder.
 
-    ``preference`` is one of: auto, cpu, nvidia, intel, apple, nvenc, qsv, videotoolbox.
+    ``preference`` is one of: auto, cpu, nvidia, intel, apple, amd, nvenc, qsv, videotoolbox, amf.
     Falls back to CPU whenever the requested accelerator is unavailable -- we never
     hand ffmpeg an encoder it does not have. Hardware candidates must also pass
     a tiny runtime encode. ``verify=False`` is for nonblocking diagnostics only;
@@ -418,7 +418,7 @@ def choose_encoder(preference: str = "auto", codec: str = "h264",
     # NVENC
     nvenc_name = "hevc_nvenc" if want_hevc else "h264_nvenc"
     if preference in ("auto", "nvidia", "nvenc", "gpu"):
-        if enc.get(nvenc_name) and prof.gpu.cuda_available and (not verify or encoder_works(nvenc_name)):
+        if enc.get(nvenc_name) and (not verify or encoder_works(nvenc_name)):
             return EncoderChoice(
                 video_encoder=nvenc_name, audio_encoder="aac", hw_accel="nvenc",
                 extra_args=["-preset", "p4" if want_hevc else "p5", "-tune", "hq"],
@@ -438,13 +438,20 @@ def choose_encoder(preference: str = "auto", codec: str = "h264",
     # Intel QSV
     qsv_name = "hevc_qsv" if want_hevc else "h264_qsv"
     if preference in ("auto", "intel", "qsv", "gpu"):
-        if enc.get(qsv_name) and prof.gpu.qsv_available and (not verify or encoder_works(qsv_name)):
+        if enc.get(qsv_name) and (not verify or encoder_works(qsv_name)):
             return EncoderChoice(
                 video_encoder=qsv_name, audio_encoder="aac", hw_accel="qsv",
                 extra_args=["-preset", "medium", "-look_ahead", "0"],
                 description=f"Intel Quick Sync ({prof.gpu.name})",
             )
 
+    # AMD AMF is common on Windows laptops/desktops. Runtime probing also
+    # handles hybrid systems where the primary display GPU is a different vendor.
+    amf_name = "hevc_amf" if want_hevc else "h264_amf"
+    if preference in ("auto", "amd", "amf", "gpu"):
+        if enc.get(amf_name) and (not verify or encoder_works(amf_name)):
+            return EncoderChoice(video_encoder=amf_name,hw_accel="amf",
+                description="AMD AMF (hardware)")
     return cpu_choice()
 
 

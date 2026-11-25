@@ -183,7 +183,7 @@ class WorkflowPage(BasePage):
                 self._review_clip(self.review.currentRow())
         self.scroll.verticalScrollBar().setValue(0)
 
-    def _busy(self):return bool(self.task and self.task.isRunning())
+    def _busy(self):return bool(getattr(self,'_task_pending',False) or (self.task and self.task.isRunning()))
 
     def _start(self,function,completed):
         if self._busy():return
@@ -191,6 +191,7 @@ class WorkflowPage(BasePage):
             self.player.stop();self.player.setSource(QUrl())  # release Windows decoder file handles
         self.retry_no_captions.hide()
         self.stack.setEnabled(False);self.cancel.setEnabled(True);self.window.set_busy(True,'Processing local video…');self.errors.clear();self.errors.hide()
+        self._task_pending=True
         task=Task(function,self);self.task=task
         task.progress.connect(lambda p,m:(self.progress.setValue(int(p)),self.status.setText(m)))
         task.failed.connect(self._failed);task.done.connect(completed);task.finished.connect(self._idle);task.start()
@@ -203,6 +204,7 @@ class WorkflowPage(BasePage):
         self.status.setText('Operation failed. See details below; no successful export was claimed.');self.errors.setPlainText(message);self.errors.show()
 
     def _idle(self):
+        self._task_pending=False
         self.stack.setEnabled(True);self.cancel.setEnabled(False);self.window.set_busy(False)
         self.window.data_changed.emit()
         if getattr(self, '_pending_edit', False):

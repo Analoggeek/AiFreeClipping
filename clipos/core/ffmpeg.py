@@ -601,7 +601,7 @@ def list_encoders() -> dict:
     out: dict = {}
     want = {"libx264", "libx265", "h264_nvenc", "hevc_nvenc", "h264_qsv",
             "hevc_qsv", "h264_videotoolbox", "hevc_videotoolbox", "aac",
-            "libvpx-vp9", "libsvtav1"}
+            "libvpx-vp9", "libsvtav1", "h264_amf", "hevc_amf"}
     for line in text.splitlines():
         parts = line.split()
         # parts[0] is the flags blob like "V....." ; parts[1] is the encoder name

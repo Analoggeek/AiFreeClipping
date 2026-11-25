@@ -98,7 +98,7 @@ class RenderSettings:
     hook_duration: float = 2.0
     encoder_preference: str = "auto"
     low_memory: bool = False
-    cpu_preset: str = "fast"
+    cpu_preset: str = "veryfast"
     platform_profile: str = "auto"
     threads: int = 0
 
@@ -451,6 +451,31 @@ def compute_jump_cuts(
 # --------------------------------------------------------------------------------------
 
 
+def _atomic_render(method):
+    from functools import wraps
+    @wraps(method)
+    def render(self,source,output,*args,**kwargs):
+        target=Path(output)
+        if target.resolve()==Path(source).resolve():
+            raise ValueError('Render output must not overwrite source media')
+        target.parent.mkdir(parents=True,exist_ok=True)
+        fd,name=tempfile.mkstemp(prefix='.clipos-render-',suffix=target.suffix or '.mp4',dir=target.parent)
+        os.close(fd);temporary=Path(name)
+        try:
+            result=method(self,source,temporary,*args,**kwargs)
+            if not result.cancelled:
+                if not temporary.is_file() or temporary.stat().st_size==0:
+                    raise RuntimeError('Renderer produced no completed media')
+                if result.duration<=0 or result.width<=0 or result.height<=0:
+                    raise RuntimeError('Rendered media has no valid video/duration')
+                os.replace(temporary,target)
+            result.output_path=str(target)
+            return result
+        finally:
+            temporary.unlink(missing_ok=True)
+    return render
+
+
 class ClipRenderer:
     """Renders a finished short from a source video."""
 
@@ -458,6 +483,7 @@ class ClipRenderer:
         self.work_dir = Path(work_dir)
         self.work_dir.mkdir(parents=True, exist_ok=True)
 
+    @_atomic_render
     def render(
         self,
         source: str | Path,
@@ -717,11 +743,13 @@ class ClipRenderer:
         cmd += ["-map", final_v, "-map", final_a]
 
         if enc.hw_accel == "nvenc":
-            cmd += ["-c:v", enc.video_encoder, "-preset", "p5", "-b:v", f"{settings.bitrate_kbps}k"]
+            cmd += ["-c:v", enc.video_encoder, "-preset", "p4", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "videotoolbox":
             cmd += ["-c:v", enc.video_encoder, "-allow_sw", "0", "-b:v", f"{settings.bitrate_kbps}k"]
+        elif enc.hw_accel == "amf":
+            cmd += ["-c:v", enc.video_encoder, "-quality", "speed", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "qsv":
-            cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-b:v", f"{settings.bitrate_kbps}k"]
+            cmd += ["-c:v", enc.video_encoder, "-preset", "fast", "-b:v", f"{settings.bitrate_kbps}k"]
         else:
             cmd += ["-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
                     "-b:v", f"{settings.bitrate_kbps}k", "-maxrate", f"{int(settings.bitrate_kbps * 1.3)}k",
@@ -747,7 +775,9 @@ class ClipRenderer:
             result.cancelled = True
             return result
         except Exception as exc:
-            # Retry without the complex filter chain if the graph was rejected
+            if not enc.is_hardware:
+                raise  # repeating the same software graph cannot repair invalid media
+            # Preserve the exact edit; retry only the hardware encoder on CPU.
             log.warning("primary render failed (%s); retrying with CPU encoding", exc)
             result.warnings.append(f"Primary render failed, retried on CPU: {exc}")
             # An encoder being listed does not mean the driver/device works.
@@ -763,7 +793,10 @@ class ClipRenderer:
                                        5.0 + p * 0.9, f"Rendering… {p:.0f}%"
                                    ) if progress_cb else None,
                                    cancel_cb=cancel_cb)
-            runner2.run(simple[1:], total_duration=clip_dur)
+            try:runner2.run(simple[1:], total_duration=clip_dur)
+            except FFmpegCancelled:
+                result.cancelled=True
+                return result
 
         # ---- verify the output ----------------------------------------------------
         out_info = probe(output)
@@ -778,6 +811,7 @@ class ClipRenderer:
             progress_cb(100.0, "Render complete")
         return result
 
+    @_atomic_render
     def render_timeline(
         self,
         source: str | Path,
@@ -955,11 +989,13 @@ class ClipRenderer:
         cmd += ["-map", final_v, "-map", final_a]
 
         if enc.hw_accel == "nvenc":
-            cmd += ["-c:v", enc.video_encoder, "-preset", "p5", "-b:v", f"{settings.bitrate_kbps}k"]
+            cmd += ["-c:v", enc.video_encoder, "-preset", "p4", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "videotoolbox":
             cmd += ["-c:v", enc.video_encoder, "-allow_sw", "0", "-b:v", f"{settings.bitrate_kbps}k"]
+        elif enc.hw_accel == "amf":
+            cmd += ["-c:v", enc.video_encoder, "-quality", "speed", "-b:v", f"{settings.bitrate_kbps}k"]
         elif enc.hw_accel == "qsv":
-            cmd += ["-c:v", enc.video_encoder, "-preset", "medium", "-b:v",f"{settings.bitrate_kbps}k"]
+            cmd += ["-c:v", enc.video_encoder, "-preset", "fast", "-b:v",f"{settings.bitrate_kbps}k"]
         else:
             cmd += ["-c:v", enc.video_encoder, "-preset", settings.cpu_preset,
                     "-crf", str(settings.crf), "-maxrate", f"{settings.bitrate_kbps}k",
@@ -983,10 +1019,12 @@ class ClipRenderer:
             result.cancelled = True
             return result
         except Exception as exc:
+            if not enc.is_hardware:
+                raise
             log.warning("timeline render failed (%s); retrying on CPU", exc)
             enc = choose_encoder("cpu", settings.codec)
             result.encoder = enc.description
-            result.warnings.append(f"Timeline filter chain failed, retried simply: {exc}")
+            result.warnings.append(f"Hardware timeline encoder failed; exact edit retried on CPU: {exc}")
             # Preserve the complete graph: dropping speed/captions here silently
             # exports a different edit. Only the encoder is allowed to change.
             cmd = ["ffmpeg", "-hide_banner", "-nostdin", "-y", "-filter_complex_threads",str(threads), *input_args,
@@ -995,9 +1033,11 @@ class ClipRenderer:
                 "-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
                 "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart", "-threads",str(threads), str(output)]
-            FFmpegRunner(total_duration=total, cancel_cb=cancel_cb).run(
-                cmd[1:], total_duration=total
-            )
+            try:
+                FFmpegRunner(total_duration=total, cancel_cb=cancel_cb).run(cmd[1:],total_duration=total)
+            except FFmpegCancelled:
+                result.cancelled=True
+                return result
 
         out_info = probe(output)
         result.duration = out_info.duration

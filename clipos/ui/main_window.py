@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
         self.current_key = "home"
         self._busy = False
 
-        self.setWindowTitle("CLIPOS 3.0.0 — Video Clip Editor")
+        self.setWindowTitle("CLIPOS 3.1.0 — Video Clip Editor")
         self.setMinimumSize(1180, 760)
         self.resize(1440, 900)
 
@@ -207,7 +207,6 @@ class MainWindow(QMainWindow):
             ("projects", "", "Projects"),
             ("library", "", "Clip library"),
             ("editor", "", "Advanced editor"),
-            ("multitrack", "", "Multitrack workspace"),
             ("longform", "", "Automatic long-form"),
             ("templates", "", "Presets & captions"),
             ("models", "", "AI models"),
@@ -242,7 +241,6 @@ class MainWindow(QMainWindow):
         from .pages.caption_studio import CaptionStudioPage
         from .pages.clip_library import ClipLibraryPage
         from .pages.editor import EditorPage
-        from .pages.multitrack import MultitrackPage
         from .pages.longform import LongformPage
         from .pages.export_center import ExportCenterPage
         from .pages.workflow import WorkflowPage
@@ -259,18 +257,24 @@ class MainWindow(QMainWindow):
             ("templates", TemplatesPage),
             ("captions", CaptionStudioPage),
             ("editor", EditorPage),
-            ("multitrack", MultitrackPage),
             ("longform", LongformPage),
             ("export", ExportCenterPage),
             ("models", AiModelsPage),
             ("settings", SettingsPage),
         ]
-        for key, cls in page_classes:
-            page = cls(self)
-            self.pages[key] = page
+        self._page_classes = dict(page_classes)
+        # Build the main workflow only. Inactive editors/settings previously
+        # probed devices, allocated previews and opened databases at startup.
+        self._ensure_page('workflow')
+
+    def _ensure_page(self,key):
+        if key not in self.pages and key in self._page_classes:
+            page=self._page_classes[key](self)
+            self.pages[key]=page
             self.stack.addWidget(page)
-            if hasattr(page, "navigated"):
+            if hasattr(page,'navigated'):
                 page.navigated.connect(self._on_page_navigated)
+        return self.pages.get(key)
 
     def _build_shortcuts(self) -> None:
         shortcuts = [
@@ -306,7 +310,7 @@ class MainWindow(QMainWindow):
     def navigate(self, key: str) -> None:
         requested = key
         key = {"gaming":"workflow", "home":"workflow", "new":"workflow", "studio":"workflow", "export":"workflow"}.get(key,key)
-        if key not in self.pages:
+        if self._ensure_page(key) is None:
             return
         self.current_key = key
         page = self.pages[key]

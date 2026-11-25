@@ -271,6 +271,10 @@ def transcribe(
             cpu_threads=suggest_worker_threads(threads),
         )
     except Exception as exc:
+        if dev=='cuda':
+            log.warning('CUDA speech initialization failed; retrying local CPU inference: %s',exc)
+            if progress_cb:progress_cb(5.,'GPU speech runtime unavailable; retrying on CPU')
+            return transcribe(audio_path,model_size,language,device='cpu',progress_cb=progress_cb,vad=vad,threads=threads)
         raise TranscriptionUnavailable(f"Could not load whisper model '{model_size}': {exc}") from exc
 
     if progress_cb:

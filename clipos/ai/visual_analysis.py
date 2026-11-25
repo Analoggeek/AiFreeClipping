@@ -338,11 +338,15 @@ def detect_scenes(video_path: str | Path, progress_cb: Callable[[float, str], No
 
             video = open_video(str(video_path))
             sm = SceneManager()
+            # Scene boundaries need low-resolution differences, not full 4K
+            # colour conversion on every frame. Analyse ~8 fps at ~480px.
+            sm.auto_downscale = False
+            sm.downscale = max(1, int(video.frame_size[0] / 480))
             sm.add_detector(ContentDetector(threshold=27.0, min_scene_len=15))
-            sm.detect_scenes(video, show_progress=False)
+            sm.detect_scenes(video, show_progress=False, frame_skip=max(0,int(video.frame_rate / 8)-1))
             scenes = sm.get_scene_list(start_in_scene=True)
             result.times = [float(s[0].get_seconds()) for s in scenes[1:]]
-            result.method = "pyscenedetect/content"
+            result.method = "pyscenedetect/content-sampled-8fps"
             result.count = len(result.times)
             return result
         except Exception as exc:
@@ -366,7 +370,10 @@ def detect_scenes(video_path: str | Path, progress_cb: Callable[[float, str], No
     sample_every = max(1, int(fps / 2))  # 2 samples per second is plenty for cuts
 
     while True:
-        ok, frame = cap.read()
+        if frame_idx % sample_every == 0:
+            ok, frame = cap.read()
+        else:
+            ok = cap.grab()
         if not ok:
             break
         if frame_idx % sample_every == 0:
