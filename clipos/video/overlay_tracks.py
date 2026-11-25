@@ -28,6 +28,16 @@ def validate_overlay(lane, item, number):
             raise ValueError('Choose caption text and a registered caption preset')
     elif item.text or item.caption_options:
         raise ValueError('Text and caption options require a caption lane')
+    if not isinstance(item.caption_words,list) or len(item.caption_words)>256:
+        raise ValueError('Caption word list exceeds supported limit')
+    if lane.kind != 'caption' and item.caption_words:raise ValueError('Word timestamps require a caption lane')
+    previous=-1.
+    for word in item.caption_words:
+        if not isinstance(word,dict) or set(word)!={'w','s','e'} or not isinstance(word['w'],str) or not word['w'].strip() or len(word['w'])>256:
+            raise ValueError('Invalid timed caption word')
+        number(word['s'],0,item.duration);number(word['e'],0,item.duration)
+        if word['e']<=word['s'] or word['s']<previous:raise ValueError('Caption words must be ordered inside their cue')
+        previous=word['s']
     validate_caption_options(item.caption_options)
     for value in (item.incoming_id,item.outgoing_id):
         if not isinstance(value,str) or len(value)>128:
@@ -95,7 +105,7 @@ def write_caption(path,item,width,height):
     from ..captions.caption_engine import CaptionCue, write_ass
     style=CAPTION_STYLES[item.caption_style]
     options=dict(item.caption_options)
-    cues=offset_cues([CaptionCue(item.at,item.at+item.duration,item.text)],options.pop('timing_offset',0.))
+    cues=offset_cues([CaptionCue(item.at,item.at+item.duration,item.text,[{**w,'s':item.at+w['s'],'e':item.at+w['e']} for w in item.caption_words])],options.pop('timing_offset',0.))
     cues=[replace(c,start=max(item.at,c.start),end=min(item.at+item.duration,c.end)) for c in cues
           if max(item.at,c.start)<min(item.at+item.duration,c.end)]
     style=replace(style,size=max(8,round(style.size*width/1080)),margin_v=max(4,round(style.margin_v*height/1920)))

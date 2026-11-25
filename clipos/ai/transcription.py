@@ -250,8 +250,11 @@ def transcribe(
     progress_cb: Callable[[float, str], None] | None = None,
     vad: bool = True,
     threads: int = 0,
+    cancel_cb=None,
 ) -> Transcript:
     """Transcribe an audio file offline. Raises TranscriptionUnavailable if not possible."""
+    if cancel_cb and cancel_cb():
+        raise TranscriptionUnavailable('Transcription cancelled')
     audio_path = Path(audio_path)
     if not audio_path.exists():
         raise TranscriptionUnavailable(f"Audio file not found: {audio_path}")
@@ -280,7 +283,7 @@ def transcribe(
         if dev=='cuda':
             log.warning('CUDA speech initialization failed; retrying local CPU inference: %s',exc)
             if progress_cb:progress_cb(5.,'GPU speech runtime unavailable; retrying on CPU')
-            return transcribe(audio_path,model_size,language,device='cpu',progress_cb=progress_cb,vad=vad,threads=threads)
+            return transcribe(audio_path,model_size,language,device='cpu',progress_cb=progress_cb,vad=vad,threads=threads,cancel_cb=cancel_cb)
         raise TranscriptionUnavailable(f"Could not load whisper model '{model_size}': {exc}") from exc
 
     if progress_cb:
@@ -299,6 +302,8 @@ def transcribe(
     segments: list[Segment] = []
     total = float(getattr(info, "duration", 0.0) or 0.0)
     for seg in segments_iter:
+        if cancel_cb and cancel_cb():
+            raise TranscriptionUnavailable('Transcription cancelled')
         words = [
             Word(
                 word=(w.word or "").strip(),

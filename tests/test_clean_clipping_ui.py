@@ -317,3 +317,32 @@ def test_studio_selective_batch_group_and_future_import_settings(native, tmp_pat
     )
     assert page.project.media[-1].id == new_id
     panel.clear_future()
+
+
+def test_native_caption_correction_keeps_word_timing_and_is_undoable(native):
+    app, db, window, paths = native
+    window.navigate("studio")
+    page = window.pages["studio"]
+    lane_id, item_id = page.project.add_caption("hello world", 0, 2)
+    page.project.change_item(
+        lane_id,
+        item_id,
+        caption_words=[
+            {"w": "hello", "s": 0.0, "e": 0.8},
+            {"w": "world", "s": 1.0, "e": 1.8},
+        ],
+    )
+    page.draw_timeline()
+    page.timeline.setCurrentItem(page.timeline.topLevelItem(0).child(0))
+    panel = page.captions
+    panel.read()
+    assert panel.words.rowCount() == 2
+    panel.words.item(0, 0).setText("namaste")
+    panel.text.setText("namaste world")
+    panel.start.setValue(1)
+    panel.apply()
+    item = page.project.find(lane_id, item_id)[1]
+    assert item.text == "namaste world" and item.at == 1
+    assert item.caption_words[0]["w"] == "namaste"
+    assert page.project.undo()
+    assert page.project.find(lane_id, item_id)[1].text == "hello world"

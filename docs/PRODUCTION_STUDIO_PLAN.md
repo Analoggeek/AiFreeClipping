@@ -106,3 +106,35 @@ caption-only application, different-duration audio fades, locked-track rollback,
 undo/redo, JSON roundtrip, exact queue-group targeting, future imports and actual
 encoded color changes through FFmpeg. GPU, real-time playback and physical OS
 permission dialogs remain unverified by these headless tests.
+
+
+## Automatic Caption Studio integration increment
+
+- Offline local Whisper transcription is integrated into the editor's existing
+  target scopes. It never silently downloads a model; missing weights are an
+  actionable AI Models error.
+- Each enabled video item is transcribed from its actual trimmed source audio.
+  Source trims and speed are mapped to timeline cue/word times. This uses original
+  dialogue, not the muted/processed audio mix. Diarization is not claimed.
+- Actual word timestamps persist in project files and feed the shared ASS
+  export/composited-preview renderer. Manual corrections can change cue text,
+  timing, words and their times. Timed caption splits preserve bounded word data.
+- Registered styles and supported font/color/position/animation overrides are
+  exposed. Existing batch caption-style application preserves dialogue/timing.
+- Generation runs in a background worker, checks cancellation before extraction
+  and between transcription segments, and commits the entire new caption lane as
+  one undoable transaction. In-flight model inference is not forcibly killed.
+- Captions are explicitly appended, never silently replacing manual corrections.
+  Repeated generation therefore intentionally creates additional tracks.
+
+Full current regression: **662 passed, 15 skipped**. Local extraction/render tests
+use explicitly injected transcripts for deterministic timing contracts; those are
+not recognition-quality evidence. The live workflow now adds actual official JFK
+speech through the integrated editor path and exports/probes the result; its new
+revision result is pending until read from CI. Earlier standalone known-English
+speech inference passed, but does not certify this new integration.
+
+Still not complete: 50 original style thumbnails, full split/merge workflow,
+speaker detection, multilingual quality acceptance, automatic style previews,
+real-time playback, complete transition/template/effect libraries and batch
+export dashboard. Do not advertise a complete professional studio release.

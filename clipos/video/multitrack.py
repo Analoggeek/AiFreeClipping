@@ -55,6 +55,7 @@ class Item:
     text: str = ""
     caption_style: str = "bold_viral"
     caption_options: dict = field(default_factory=dict)
+    caption_words: list = field(default_factory=list)
     incoming_id: str = ""
     outgoing_id: str = ""
 
@@ -127,7 +128,7 @@ class MultitrackProject:
                     from .overlay_tracks import validate_overlay
                     validate_overlay(lane,item,number)
                     continue
-                if item.text or item.caption_options or item.incoming_id or item.outgoing_id:
+                if item.text or item.caption_options or item.caption_words or item.incoming_id or item.outgoing_id:
                     raise ValueError('Overlay metadata requires a dedicated overlay lane')
                 if item.media_id not in sources:raise ValueError('Missing media reference')
                 if not isinstance(item.group_id,str) or len(item.group_id)>128:raise ValueError('Invalid link group')
@@ -286,7 +287,7 @@ class MultitrackProject:
         return targets
 
     def change_item(self,lane_id,item_id,*,linked=False,**values):
-        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options'}
+        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options','caption_words'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)
@@ -364,6 +365,17 @@ class MultitrackProject:
                     midpoint=curve_value(keys,elapsed,1.)
                     setattr(right,field,[[0.,midpoint]]+[[t-elapsed,v] for t,v in keys if t>elapsed])
                     setattr(item,field,[[t,v] for t,v in keys if t<elapsed]+[[elapsed,midpoint]])
+            if lane.kind=='caption' and item.caption_words:
+                left_words=[];right_words=[]
+                for word in item.caption_words:
+                    if word['s'] < elapsed:
+                        left_words.append({**word,'e':min(word['e'],elapsed)})
+                    if word['e'] > elapsed:
+                        right_words.append({**word,'s':max(0.,word['s']-elapsed),'e':word['e']-elapsed})
+                if not left_words or not right_words:raise ValueError('Split timed captions at a spoken-word boundary or edit text first')
+                item.caption_words=left_words;right.caption_words=right_words
+                item.text=' '.join(w['w'] for w in left_words)
+                right.text=' '.join(w['w'] for w in right_words)
             item.length=used;item.fade_out=0.
             lane.items.insert(lane.items.index(item)+1,right)
         self.edit(operation)

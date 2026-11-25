@@ -205,6 +205,10 @@ class StudioPage(BasePage):
 
         self.editing = EditingPanel(self)
         self.content_layout.addWidget(self.editing)
+        from ..widgets.caption_panel import CaptionPanel
+
+        self.captions = CaptionPanel(self)
+        self.content_layout.addWidget(self.captions)
         self.window.data_changed.connect(self.refresh)
         self.refresh()
 
