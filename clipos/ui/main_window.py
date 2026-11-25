@@ -392,7 +392,9 @@ class MainWindow(QMainWindow):
             shutdown = getattr(page, "shutdown", None)
             if callable(shutdown):
                 try:
-                    shutdown()
+                    if shutdown() is False:
+                        event.ignore()
+                        return
                 except Exception as exc:
                     log.warning("page shutdown failed: %s", exc)
         if hasattr(self, 'usage_worker'):

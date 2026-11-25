@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
     QPushButton,
     QTableWidget,
+    QTabWidget,
     QTableWidgetItem,
     QTreeWidget,
     QTreeWidgetItem,
@@ -96,7 +97,7 @@ class StudioPage(BasePage):
             )
             self.content_layout.addWidget(self.video)
             self._buttons(
-                [("Play source", self.player.play), ("Pause", self.player.pause)]
+                [("Play source", self.play_source), ("Pause", self.player.pause)]
             )
         except ImportError as exc:
             self.content_layout.addWidget(
@@ -236,18 +237,36 @@ class StudioPage(BasePage):
                 ("Rename track", self.rename_track),
             ]
         )
+        self.tools = QTabWidget()
+        self.content_layout.addWidget(self.tools)
         from ..widgets.editing_panel import EditingPanel
 
         self.editing = EditingPanel(self)
-        self.content_layout.addWidget(self.editing)
+        self.tools.addTab(self.editing, "Batch inspector")
         from ..widgets.caption_panel import CaptionPanel
 
         self.captions = CaptionPanel(self)
-        self.content_layout.addWidget(self.captions)
+        self.tools.addTab(self.captions, "Captions")
         from ..widgets.batch_panel import BatchPanel
 
         self.batch = BatchPanel(self)
-        self.content_layout.addWidget(self.batch)
+        self.tools.addTab(self.batch, "Export queue")
+        from ..widgets.live_player import LivePlayer
+
+        self.live = LivePlayer(self)
+        self.tools.addTab(self.live, "Composited playback")
+        from ..widgets.creative_library import CreativeLibrary
+
+        self.creative = CreativeLibrary(self)
+        self.tools.addTab(self.creative, "Original library")
+        from ..widgets.effects_panel import EffectsPanel
+
+        self.effects = EffectsPanel(self)
+        self.tools.addTab(self.effects, "Effects")
+        from ..widgets.transitions_panel import TransitionsPanel
+
+        self.transitions = TransitionsPanel(self)
+        self.tools.addTab(self.transitions, "Transitions")
         self.window.data_changed.connect(self.refresh)
         self.refresh()
 
@@ -306,6 +325,9 @@ class StudioPage(BasePage):
         ]
 
     def preview_source(self):
+        if getattr(self, "live", None) and self.live.running:
+            self.status.setText("Stop composited playback before playing a source.")
+            return
         clips = self.selected_clips()
         if clips:
             url = QUrl.fromLocalFile(clips[0]["output_path"])
@@ -318,6 +340,9 @@ class StudioPage(BasePage):
                 QDesktopServices.openUrl(url)
 
     def add_selected(self):
+        if getattr(self, "live", None) and self.live.running:
+            self.status.setText("Stop composited playback before editing or rendering.")
+            return
         if self.worker and self.worker.isRunning():
             return
         clips = self.selected_clips()
@@ -422,6 +447,9 @@ class StudioPage(BasePage):
                 field.setValue(getattr(item, key))
 
     def action(self, fn):
+        if getattr(self, "live", None) and self.live.running:
+            self.status.setText("Stop composited playback before editing or rendering.")
+            return
         if self.worker and self.worker.isRunning():
             self.status.setText("Wait for source inspection to finish.")
             return
@@ -540,6 +568,9 @@ class StudioPage(BasePage):
             self.status.setText("Cancellation requested…")
 
     def _background(self, fn, done, label, on_progress=None):
+        if getattr(self, "live", None) and self.live.running:
+            self.status.setText("Stop composited playback before editing or rendering.")
+            return
         if self.worker and self.worker.isRunning():
             self.status.setText("Background work is already running.")
             return
@@ -686,3 +717,22 @@ class StudioPage(BasePage):
             )
 
         self.action(edit)
+
+    def shutdown(self):
+        if not self.live.stop():
+            return False
+        if self.worker and self.worker.isRunning():
+            self.worker.cancelled.set()
+            if not self.worker.wait(3000):
+                self.status.setText(
+                    "Cancellation pending; close again when the current inference segment ends."
+                )
+                return False
+        return True
+
+    def play_source(self):
+        if self.live.running:
+            self.status.setText("Stop composited playback before playing a source.")
+            return
+        if self.player:
+            self.player.play()

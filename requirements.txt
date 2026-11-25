@@ -15,6 +15,7 @@ psutil>=6,<8
 
 # ---- Video processing ----
 # FFmpeg/FFprobe binaries are vendored by scripts/vendor_ffmpeg.py (not pip)
+av>=14,<19  # bounded NUT demux/decode for shared-graph composited playback
 
 # ---- AI / inference ----
 numpy>=1.24

@@ -56,6 +56,8 @@ class Item:
     caption_style: str = "bold_viral"
     caption_options: dict = field(default_factory=dict)
     caption_words: list = field(default_factory=list)
+    effects: list = field(default_factory=list)
+    transition_mode: str = "dissolve_linear"
     incoming_id: str = ""
     outgoing_id: str = ""
 
@@ -128,6 +130,7 @@ class MultitrackProject:
                     from .overlay_tracks import validate_overlay
                     validate_overlay(lane,item,number)
                     continue
+                if item.transition_mode!='dissolve_linear':raise ValueError('Transition recipes require a transition lane')
                 if item.text or item.caption_options or item.caption_words or item.incoming_id or item.outgoing_id:
                     raise ValueError('Overlay metadata requires a dedicated overlay lane')
                 if item.media_id not in sources:raise ValueError('Missing media reference')
@@ -142,6 +145,9 @@ class MultitrackProject:
                 number(item.length,.001,media.duration);number(item.speed,.25,4);number(item.gain,0,4)
                 number(item.brightness,-1,1);number(item.contrast,0,3)
                 number(item.saturation,0,3);number(item.rotation,-180,180)
+                from .studio_effects import validate_effects
+                validate_effects(item.effects)
+                if lane.kind!='video' and item.effects:raise ValueError('Video effects require a video lane')
                 if lane.kind=='audio' and (item.brightness,item.contrast,item.saturation,item.rotation)!=(0.,1.,1.,0.):
                     raise ValueError('Color and rotation controls require a video track')
                 number(item.fade_in,0,item.duration);number(item.fade_out,0,item.duration)
@@ -268,7 +274,7 @@ class MultitrackProject:
         self.edit(operation)
         return lane_id,item.id
 
-    def add_dissolve(self,lane_id,item_id,duration):
+    def add_dissolve(self,lane_id,item_id,duration,mode="dissolve_linear"):
         incoming_lane,incoming=self.find(lane_id,item_id)
         if incoming_lane.kind!='video':raise ValueError('Select the incoming video layer')
         ordered=[item for lane in self.lanes if lane.enabled and lane.kind=='video' for item in lane.items]
@@ -277,7 +283,7 @@ class MultitrackProject:
                     if item.at<incoming.at<item.at+item.duration]
         if not candidates:raise ValueError('Arrange two overlapping video items first: incoming video starts later and is above the outgoing layer')
         return self._add_overlay('transition',Item(uid(),'',incoming.at,0.,duration,
-                                incoming_id=incoming.id,outgoing_id=candidates[-1].id))
+                                incoming_id=incoming.id,outgoing_id=candidates[-1].id,transition_mode=mode))
 
     def _linked_targets(self,lane_id,item_id):
         _,selected=self.find(lane_id,item_id)
@@ -287,7 +293,7 @@ class MultitrackProject:
         return targets
 
     def change_item(self,lane_id,item_id,*,linked=False,**values):
-        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options','caption_words'}
+        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options','caption_words','effects'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)

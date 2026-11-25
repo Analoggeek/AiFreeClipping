@@ -59,7 +59,10 @@ class EditingPanel(QWidget):
             for key, value in values.items():
                 if key == "caption_options":
                     continue
-                if key == "caption_style":
+                if key == "effects":
+                    field = QLineEdit("[]")
+                    field.setPlaceholderText("Validated effect configuration JSON list")
+                elif key == "caption_style":
                     field = QComboBox()
                     for style in CAPTION_STYLES.values():
                         field.addItem(style.name, style.key)
@@ -98,6 +101,11 @@ class EditingPanel(QWidget):
             layout.addWidget(button)
 
     def run(self, fn):
+        if getattr(self.studio, "live", None) and self.studio.live.running:
+            self.studio.status.setText(
+                "Stop composited playback before editing or rendering."
+            )
+            return
         if self.studio.worker and self.studio.worker.isRunning():
             self.studio.status.setText("Wait for background work to finish.")
             return
@@ -115,6 +123,8 @@ class EditingPanel(QWidget):
             for key in defaults:
                 if key == "caption_options":
                     values[key] = deepcopy(self.caption_options)
+                elif key == "effects":
+                    values[key] = json.loads(self.fields[key].text())
                 elif key == "caption_style":
                     values[key] = self.fields[key].currentData()
                 else:
@@ -170,7 +180,7 @@ class EditingPanel(QWidget):
             raise ValueError("Select a timeline item")
         lane, item = self.studio.project.find(*target)
         category = {
-            "video": ("color", "transform"),
+            "video": ("color", "transform", "effects"),
             "audio": ("audio",),
             "caption": ("captions",),
         }.get(lane.kind, ())
@@ -178,7 +188,9 @@ class EditingPanel(QWidget):
             raise ValueError("Select video, audio or caption item")
         for name in category:
             for key in DEFAULTS[name]:
-                if key == "caption_options":
+                if key == "effects":
+                    self.fields[key].setText(json.dumps(item.effects))
+                elif key == "caption_options":
                     self.caption_options = deepcopy(item.caption_options)
                 elif key == "caption_style":
                     self.fields[key].setCurrentIndex(
@@ -237,13 +249,21 @@ class EditingPanel(QWidget):
         )
         if not path:
             return
-        preset = EditingPreset.load(path)
+        self.populate(EditingPreset.load(path))
+        self.studio.status.setText(
+            "Preset loaded into inspector; click Apply to change timeline items."
+        )
+
+    def populate(self, preset):
+        preset.validate()
         self.name.setText(preset.name)
         for category, check in self.checks.items():
             check.setChecked(category in preset.categories)
         for category, values in preset.categories.items():
             for key, value in values.items():
-                if key == "caption_options":
+                if key == "effects":
+                    self.fields[key].setText(json.dumps(value))
+                elif key == "caption_options":
                     self.caption_options = deepcopy(value)
                 elif key == "caption_style":
                     self.fields[key].setCurrentIndex(self.fields[key].findData(value))

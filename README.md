@@ -290,3 +290,12 @@ in-session failed-job retry, and refuses existing output files. Full export
 profiles, real-time composited playback and the complete original creative
 libraries remain unfinished. Linear opacity/gain keyframes and track controls are
 available; this is not a claim of a fully completed professional editor.
+
+The development studio now includes shared-graph streaming composite playback,
+50 original caption compositions, 50 asset-free editing recipes, twenty video
+effect combinations and forty overlap-transition recipes. Counts describe
+parameterized compositions, **not distinct algorithms or motion-graphics asset
+packs**. Playback performance/physical audio sync and new packaged builds still
+need native acceptance. The entire original professional-editor specification is
+not complete. See the [working-controls tutorial](docs/STUDIO_QUICKSTART.md) and
+[remaining acceptance gates](docs/PRODUCTION_STUDIO_PLAN.md).

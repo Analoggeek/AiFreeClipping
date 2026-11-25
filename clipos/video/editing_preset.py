@@ -15,12 +15,14 @@ from .overlay_tracks import validate_caption_options
 
 FIELDS = {
     "color": {"brightness", "contrast", "saturation"},
+    "effects": {"effects"},
     "transform": {"x", "y", "w", "h", "opacity", "rotation"},
     "audio": {"gain", "fade_in_fraction", "fade_out_fraction"},
     "captions": {"caption_style", "caption_options"},
 }
 DEFAULTS = {
     "color": {"brightness": 0.0, "contrast": 1.0, "saturation": 1.0},
+    "effects": {"effects": []},
     "transform": {
         "x": 0.0,
         "y": 0.0,
@@ -76,6 +78,10 @@ class EditingPreset:
                         or not lo <= value <= hi
                     ):
                         raise ValueError("Invalid preset parameter: " + key)
+            if category == "effects":
+                from .studio_effects import validate_effects
+
+                validate_effects(values["effects"])
             if category == "transform" and (
                 values["x"] + values["w"] > 1.000001
                 or values["y"] + values["h"] > 1.000001
@@ -134,7 +140,7 @@ def apply_editing_preset(project, preset, media_ids):
     Captions qualify only when wholly inside a targeted video's time span. An
     unrelated/straddling overlay is not modified. Locked affected tracks reject
     the entire transaction; zero compatible targets is an error, not success.
-    Existing gain automation is preserved and multiplies the new static gain.
+    Existing gain automation is preserved and retains precedence over static gain.
     """
     preset.validate()
     selected = set(media_ids)
@@ -163,7 +169,10 @@ def apply_editing_preset(project, preset, media_ids):
                         ):
                             updates.update(deepcopy(values))
                     elif item.media_id in selected:
-                        if category in ("color", "transform") and lane.kind == "video":
+                        if (
+                            category in ("color", "transform", "effects")
+                            and lane.kind == "video"
+                        ):
                             updates.update(values)
                         elif category == "audio" and lane.kind == "audio":
                             updates.update(

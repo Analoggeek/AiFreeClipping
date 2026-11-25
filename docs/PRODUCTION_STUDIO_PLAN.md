@@ -184,3 +184,71 @@ The live speech diagnostic at `97bbf6f` confirms standalone known-English speech
 WER **0.0**. Integrated export stopped because that minimal CI job lacked FFmpeg,
 not because a captioned output passed. The job now explicitly installs/verifies
 FFmpeg and FFprobe before integrated speech acceptance. That retry remains pending.
+
+## Shared-graph playback and original creative library increment
+
+### Implemented
+
+- Streaming composited playback uses the **same FFmpeg filter graph** as final
+  export, including real captions, effects, transitions and mixed audio. NUT
+  packets are demuxed through PyAV into RGB frames and stereo S16LE PCM, without
+  rendering a whole preview video first. The native widget schedules video by
+  the audio sink's processed-sample clock. Pause/resume and cursor restart exist.
+- Queues and decoded buffers are bounded. Late video frames drop instead of
+  intentionally dropping audio. Unsupported/missing audio devices produce an
+  explicit error and offer the already-existing rendered snapshot alternative.
+  This is an implementation, NOT measured physical-device sync/throughput
+  certification. Full-res filter processing may still be slower than real time;
+  on-the-fly downscaled frames are not a persistent high-resolution proxy system.
+- Edits are guarded while composited playback runs. Shutdown refuses to destroy
+  a still-running worker; cancellation may need to wait for model inference or
+  source inspection to return. Source and composite playback are distinguished.
+- 50 original caption compositions: ten palette/typography families × five
+  implemented motion treatments. These are 50 distinct presets, not 50 animation
+  algorithms. Existing 38 compatibility styles remain. Script glyph coverage
+  depends on installed fonts; Hindi family names are not quality certification.
+- 50 original asset-free editing recipes: color/audio/transform/caption settings,
+  with real rendered demo thumbnails on request. They are not elaborate motion
+  graphics, title packs or replaceable-logo/music scene templates. Loading a
+  recipe changes no project until the user reviews target scope and clicks Apply.
+- Eight implemented adjustable video filters and twenty original combinations:
+  blur, sharpen, vignette, seeded grain, desaturation, hue, red/blue mixing and
+  negative exposure. Effect lists validate before execution, participate in
+  presets/Apply-to-All, persist in assemblies and render in shared-graph playback.
+  Arbitrary FFmpeg strings/scripts/URLs are rejected.
+- Forty overlap-based transition recipes: ten alpha-mask families × four curves.
+  They use actual overlapping incoming/outgoing video layers, not invented source
+  handles. Transition creation fails atomically when overlap is insufficient.
+  Cross dissolve compatibility is preserved. The legacy silent draft compositor
+  explicitly rejects unsupported new effects/transitions rather than showing an
+  incorrect preview; use shared-graph playback or snapshots instead.
+- Inspector, captions, export, playback and creative libraries are organized in
+  functional tabs. PyAV is an explicit installed/frozen dependency, not a lucky
+  transitive import. Frozen runtime checks now exercise real video/PCM streaming.
+
+### Evidence
+
+- Full local suite: **677 passed, 15 skipped**, 58.01s.
+- All 50 original caption presets rasterized through actual FFmpeg/libass.
+- All 40 transitions and all 28 primitive/combination effect cases encoded.
+- All 50 recipe configurations validated/applied/undone; five treatment variants
+  actually exported. This is NOT a claim that every recipe got full media QA.
+- Real streaming tests verify seek position, decoded source pixels, video frame
+  count, PCM duration, bounded worker backpressure and cancellation. Physical
+  speakers, audio drift, GPU performance and long-session memory need native QA.
+- Linux actual speech run `45687423349` at `18c71bc` PASSED: standalone known-English
+  WER 0.0; integrated editor emitted 4 cues / 22 timed words and exported/probed
+  captioned video. It is one English sample, not multilingual speech certification.
+- Local source-mode explicit runtime command emits 3 video and 15 audio frames.
+  New frozen/native builds still need their own results; source execution is not
+  evidence that a packaged build passed.
+
+### Still not the entire original specification
+
+Unfinished requirements include complete advanced curves/wheels/HSL/LUT grading,
+full audio EQ/compressor/ducking/music workflows, arbitrary/eased keyframes,
+professional motion graphics/stickers and replaceable-asset templates, graphical
+multi-selection/global ripple, caption merge/speaker UX, rational timecode/proxy
+cache management, restart-resumable export jobs, broad export codecs/profiles,
+project autosave/recovery UI, and physical Windows/macOS/GPU release acceptance.
+No stable release or complete-professional-editor claim is made by this increment.

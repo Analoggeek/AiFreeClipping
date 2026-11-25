@@ -205,10 +205,15 @@ def video_effects(item):
         filters.append(f'eq=brightness={item.brightness:.8f}:contrast={item.contrast:.8f}:saturation={item.saturation:.8f}')
     if item.rotation:
         filters.append(f'rotate={item.rotation:.8f}*PI/180:ow=iw:oh=ih:c=black')
+    from .studio_effects import effect_filters
+    filters.extend(effect_filters(item.effects))
     return ','.join(filters)+(',' if filters else '')
 
 
 def dissolve_filter(project,item):
     from .overlay_tracks import dissolve_duration
     duration=dissolve_duration(project,item.id)
-    return f'fade=t=in:st=0:d={duration:.8f}:alpha=1,' if duration else ''
+    if not duration:return ''
+    from .studio_transitions import alpha_filter
+    transition=next(t for lane in project.lanes if lane.kind=='transition' and lane.enabled for t in lane.items if t.incoming_id==item.id)
+    return alpha_filter(transition.transition_mode,duration)

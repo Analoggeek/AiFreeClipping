@@ -402,3 +402,41 @@ def test_native_automation_and_track_order_controls(native, tmp_path):
     assert page.project.lanes[1].id == lane_id
     page.snap_enabled.setChecked(False)
     assert not page.graph.snap
+
+
+def test_native_creative_library_recipe_load_and_real_thumbnail(native):
+    app, db, window, paths = native
+    window.navigate("studio")
+    page = window.pages["studio"]
+    library = page.creative
+    assert library.list.count() == 50
+    library.kind.setCurrentIndex(1)
+    assert library.list.count() == 50
+    library.load_selected()
+    assert page.editing.name.text() == next(iter(library.catalog.values()))["name"]
+    library.preview()
+    deadline = time.monotonic() + 15
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert library.image.pixmap() is not None and not library.image.pixmap().isNull(), (
+        page.status.text()
+    )
+
+
+def test_composite_edit_guard_and_device_unavailability_are_explicit(native):
+    app, db, window, paths = native
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.live.running = True
+    before = page.project.to_dict()
+    page.action(lambda: setattr(page.project, "width", 200))
+    assert page.project.to_dict() == before
+    assert "Stop composited playback" in page.status.text()
+    page.live.running = False
+    # No media means no successful playback is possible, with or without an
+    # actual audio device on this runner. Physical-device sync is not certified.
+    page.live.play()
+    assert not page.live.running
+    assert "unavailable" in page.live.status.text().lower()

@@ -245,6 +245,10 @@ for _motion, _name in _ANIMATIONS.items():
         ))
 
 
+from .original_styles import register_original_styles
+register_original_styles(_register, CaptionStyle, _caption_font())
+
+
 def get_style(key: str) -> CaptionStyle:
     return CAPTION_STYLES.get(key, CAPTION_STYLES["bold_viral"])
 

@@ -41,6 +41,7 @@ CORE = [
     "requests>=2.31",
     "huggingface-hub>=0.23",
     "faster-whisper>=1.0,<2",
+    "av>=14,<19",
     "onnxruntime>=1.16,<2",
     "scenedetect>=0.6.3",
 ]
