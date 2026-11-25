@@ -704,8 +704,8 @@ class ClipRenderer:
         music_idx = None
         if settings.background_music and Path(settings.background_music).exists():
             music_idx = 1
-            input_args += ["-stream_loop", "-1", "-t", f"{sum(ke-ks for ks,ke in keeps):.6f}", "-i", str(settings.background_music)]
-            from .audio_mix import music_mix_parts
+            from .audio_mix import music_input_args,music_mix_parts
+            input_args += music_input_args(settings.background_music,sum(ke-ks for ks,ke in keeps))
             music_parts, final_a = music_mix_parts(final_a, music_idx,
                 sum(ke-ks for ks,ke in keeps),settings.bgm_volume,
                 settings.bgm_ducking,has_audio)
@@ -973,9 +973,9 @@ class ClipRenderer:
             final_v = "[vout]"
 
         if settings.background_music and Path(settings.background_music).exists():
-            from .audio_mix import music_mix_parts
+            from .audio_mix import music_input_args,music_mix_parts
             music_idx = len(segments)
-            input_args += ["-stream_loop", "-1", "-t", f"{sum(seg.duration for seg in segments):.6f}", "-i", str(settings.background_music)]
+            input_args += music_input_args(settings.background_music,sum(seg.duration for seg in segments))
             music_parts, final_a = music_mix_parts(final_a,music_idx,
                 sum(seg.duration for seg in segments),settings.bgm_volume,
                 settings.bgm_ducking,has_audio)

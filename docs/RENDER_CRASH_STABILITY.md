@@ -87,3 +87,16 @@ looped music beyond source EOF and requested export duration, with/without
 ducking. Nothing is fixed by removing music. The bounded audit also forced
 QT_QPA_PLATFORM=minimal on macOS, which prevented native playback; it now uses
 the native GUI platform, just like release tests (not a playback-test skip).
+
+Further native evidence (issue135) corrects the initial demux hypothesis:
+FFmpeg finishes all frames/audio and the MP4 trailer, then its infinite-loop
+input cleanup hangs. Input/output `-t`, scalar mode, one filter worker and input
+queues did NOT fix it. Native comparison run45578337455/issue136 showed finite
+`-stream_loop 2` exits0; `-stream_loop -1` did not. Production now computes
+`max(0, ceil(edited_duration / music_duration)-1)` repeats, also bounds input
+length, and rejects unknown/non-audio duration explicitly. This preserves real
+repeated/ducked music without a giant PCM staging file or caption/effect removal.
+Range/timeline tests inspect finite input scope and measure real looped waveform
+past the original music length. The full native suite is rerun after this fix;
+not merely the smaller successful layout subset. Full local600/20 plus focused
+51passed1skipped (including seven added finite-loop edge-case checks).

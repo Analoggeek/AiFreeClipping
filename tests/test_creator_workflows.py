@@ -228,7 +228,7 @@ def test_music_is_mixed_into_actual_range_and_timeline_exports(video,tmp_path,ti
     original_run=FFmpegRunner.run
     def bounded_music_run(self,args,*a,**kw):
         loop=args.index('-stream_loop')
-        assert args[loop+1]=='-1'
+        assert args[loop+1]=='2'  # ceil(edited duration / 0.7)-1, never infinite
         # Bound the demuxed input itself, not only atrim downstream: FFmpeg6
         # otherwise keeps reading an infinite music source after filter EOF.
         assert args[loop+2]=='-t'
