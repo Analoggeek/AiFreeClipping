@@ -1,3 +1,31 @@
+# Ai clipping PRO 3.6.1 — Reference-aligned native workspace
+
+- Native Create Clips dashboard now follows the supplied layout: purple/blue hero,
+  connected four-step cards, local-file/link import target and six real edit recipes
+  on the left; local AI Director, actual recent projects and measured model availability
+  on the right. Narrow windows stack the two columns rather than squeezing controls.
+- Paste Video Link reads the system clipboard for review; it does not automatically
+  download or transmit clipboard content. Existing authorised-source checks remain.
+- Quick-style selection now stays synchronized when settings change or a project opens.
+- Editor (Pro) adds a Project Media panel listing real imported video/audio metadata;
+  activating a source selects its existing timeline item and seeks the decoded monitor.
+- Settings adds section navigation without replacing or resetting saved controls.
+- Existing caption/color-effect/cross-dissolve lanes, save formats, processing pipelines,
+  ten sidebar destinations and project data are preserved.
+
+## Verification boundaries
+
+Automated tests exercise actual widget actions, settings persistence, narrow-window
+layout, project-step guards, clipboard review and real media selection. Platform
+builds run the same regressions plus the real import/render/batch-export E2E suite.
+The UI is reference-aligned native Qt, not a pixel-identical web recreation: no fake
+stock project thumbnails, profile/account, cloud generation, notification counts,
+uninstalled-model readiness or realtime playback guarantee is introduced. Gemma live
+quality still requires explicitly installed actual weights and a recording; it is not
+verified by mocked/deterministic tests. macOS ad-hoc integrity is not notarization.
+
+---
+
 # Ai clipping PRO 3.6.0 — Real overlay lanes and a refreshed product website
 
 ## Native editor

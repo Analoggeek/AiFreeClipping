@@ -191,6 +191,10 @@ QFrame#DashboardHero {{
     background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #362064,stop:0.6 #322875,stop:1 #243975);
     border: 1px solid #6546a1; border-radius: 22px;
 }}
+QLabel#HeroSubtitle {{color:#e3dcfa;background:transparent;}}
+QLabel#UploadGlyph {{font-size:42px;color:{p.accent};background:transparent;}}
+QPushButton#WorkflowStep {{min-height:62px;border-radius:16px;text-align:left;padding:10px 14px;}}
+QPushButton#WorkflowStep:checked {{background:{p.bg_active};border:1px solid {p.accent};}}
 QLabel#HeroTitle {{font-size:30px;font-weight:750;color:#ffffff;}}
 QFrame#ImportDrop {{border:1px dashed #956be2;border-radius:20px;background:{p.bg_elevated};}}
 QPushButton#QuickStyle {{min-height:62px;border-radius:15px;font-weight:650;}}
