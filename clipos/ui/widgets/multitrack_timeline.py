@@ -82,14 +82,14 @@ class MultitrackTimeline(QWidget):
         minimum=1/self.project.fps
         if mode=='left':
             boundary=self._snap(item.at+delta,item.id,disabled)
-            change=max(-item.source_in/item.speed,min(boundary-item.at,item.duration-minimum))
+            change=max(-item.source_in/item.speed if lane.kind in ('video','audio') else -item.at,min(boundary-item.at,item.duration-minimum))
             change=max(-item.at,change)
-            return {'at':item.at+change,'source_in':item.source_in+change*item.speed,
+            return {'at':item.at+change,'source_in':item.source_in+change*item.speed if lane.kind in ('video','audio') else 0.,
                     'length':item.length-change*item.speed}
         if mode=='right':
-            media=next(m for m in self.project.media if m.id==item.media_id)
+            media=next((m for m in self.project.media if m.id==item.media_id),None)
             end=self._snap(item.at+item.duration+delta,item.id,disabled)
-            duration=max(minimum,min(end-item.at,(media.duration-item.source_in)/item.speed))
+            duration=max(minimum,min(end-item.at,(media.duration-item.source_in)/item.speed if media else 21600-item.at))
             return {'length':duration*item.speed}
         raise ValueError('Unknown timeline gesture')
 
@@ -142,7 +142,7 @@ class MultitrackTimeline(QWidget):
             for item in lane.items:
                 rect=self.item_rect(row,item)
                 if not rect.intersects(QRectF(clip)):continue
-                color=QColor('#4d63b2' if lane.kind=='video' else '#267c70')
+                color=QColor({'video':'#4d63b2','audio':'#267c70','caption':'#8550b9','effect':'#a16e35','transition':'#3d839f'}[lane.kind])
                 if not lane.enabled:color=QColor('#444752')
                 painter.setBrush(color)
                 painter.setPen(QPen(QColor('#f1d58b' if self.selection==(lane.id,item.id) else '#69758d'),2))

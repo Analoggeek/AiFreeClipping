@@ -1,3 +1,47 @@
+# Ai clipping PRO 3.6.0 — Real overlay lanes and a refreshed product website
+
+## Native editor
+
+- Dedicated **caption lanes**: add/edit real text, choose registered caption presets,
+  inherit validated Caption Studio export options, move/trim timing, undo/redo and
+  save/reopen. Actual ASS/libass caption rasterization is used in decoded preview
+  and caption burning is part of the real multilayer MP4 export graph.
+- Dedicated **color-effect lanes**: bounded timeline ranges apply brightness,
+  contrast and saturation to the composite below them. Presets initialize real
+  numeric controls; the Inspector updates actual render parameters.
+- Dedicated **cross-dissolve lanes**: the incoming overlapping video fades over the
+  outgoing layer using real alpha compositing. References, overlap and layer order
+  are validated transactionally. Invalid edits do not partially change a project.
+- Caption/effect/transition lanes are visible/selectable in the timeline and detailed
+  track table. They support enable/disable, locking, deletion and project history.
+- Existing video/audio edits and saved project files remain supported. Project/data
+  paths, bundle identity and installer filenames retain compatibility.
+
+## Website and documentation
+
+The accompanying website/README refresh uses **Ai clipping PRO** branding, current
+release downloads and actual compressed app captures. It includes responsive layouts,
+scroll/hover animations, accessible screenshot tabs, mobile navigation, platform
+filters, native FAQ disclosures, command copying and reduced-motion support. README
+content focuses on the current release, with collapsible setup/help sections rather
+than a history of previous versions. Website publication follows verified installer
+publication; no installer links are advertised as ready while assets are missing.
+
+## Boundaries
+
+Color effects are brightness/contrast/saturation treatments, not an arbitrary plugin
+library. Transitions currently support cross-dissolve between actually overlapping
+video items; audio fades remain independent. Decoded preview is best-effort, not a
+universal realtime A/V guarantee. Caption frames are rendered locally and can cost
+more CPU than ordinary video preview. Word animation still needs real word timestamps;
+manual caption text uses cue-level fallback rather than invented word synchronization.
+
+Actual Gemma weights were not available in the sandbox. Live trained-model quality is
+**not verified**; local runtime/model tests remain explicit user actions. This release
+does not claim unrestricted autonomous editing or universal physical-device acceptance.
+
+---
+
 # Ai clipping PRO 3.5.0 — Native workspace and caption customization
 
 CLIPOS is now displayed as **Ai clipping PRO**. This release keeps existing local

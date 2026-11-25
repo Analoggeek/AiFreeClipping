@@ -37,7 +37,7 @@ class HomePage(BasePage):
     def build(self) -> None:
         welcome=Card();welcome.setObjectName('DashboardHero')
         title=QLabel('Your next great edit starts here.');title.setObjectName('HeroTitle');title.setWordWrap(True);welcome.add(title)
-        welcome.add(QLabel('Ai clipping PRO 3.5 · Local intelligence. Real timelines. Your media stays yours.'))
+        welcome.add(QLabel('Ai clipping PRO 3.6 · Local intelligence. Real timelines. Your media stays yours.'))
         self.content_layout.addWidget(welcome)
         director=Card();director.add(SectionHeader('AI Director','Uses your selected local Gemma/Ollama weights and the active project. Review every proposed change.'))
         self.instruction=QLineEdit();self.instruction.setPlaceholderText('Create 10 gaming shorts; gameplay above and facecam below…');self.instruction.setMaxLength(2000);director.add(self.instruction)

@@ -1,7 +1,7 @@
 """Multi-source, overlapping video/audio project model, separate from legacy Timeline.
 
-This is an additive editing engine. It does not claim professional automation,
-transitions, caption lanes or real-time multitrack A/V playback.
+An additive editing engine with dedicated ASS caption, bounded color-effect and
+cross-dissolve lanes. Decoded playback remains best-effort, not a realtime guarantee.
 """
 from __future__ import annotations
 
@@ -51,6 +51,11 @@ class Item:
     opacity_keys: list = field(default_factory=list)
     gain_keys: list = field(default_factory=list)
     group_id: str = ""
+    text: str = ""
+    caption_style: str = "bold_viral"
+    caption_options: dict = field(default_factory=dict)
+    incoming_id: str = ""
+    outgoing_id: str = ""
 
     @property
     def duration(self):
@@ -61,7 +66,7 @@ class Item:
 class Lane:
     id: str
     name: str
-    kind: str  # video or audio
+    kind: str  # video, audio, caption, effect or transition
     items: list[Item] = field(default_factory=list)
     enabled: bool = True
     locked: bool = False
@@ -110,11 +115,17 @@ class MultitrackProject:
         groups={}
         for lane in self.lanes:
             identity(lane.id)
-            if lane.kind not in ('video','audio'):raise ValueError('Unsupported track kind')
+            if lane.kind not in ('video','audio','caption','effect','transition'):raise ValueError('Unsupported track kind')
             if not isinstance(lane.name,str) or not 1<=len(lane.name)<=128:raise ValueError('Invalid track name')
             if type(lane.enabled) is not bool or type(lane.locked) is not bool:raise ValueError('Invalid track state')
             for item in lane.items:
                 identity(item.id)
+                if lane.kind in ('caption','effect','transition'):
+                    from .overlay_tracks import validate_overlay
+                    validate_overlay(lane,item,number)
+                    continue
+                if item.text or item.caption_options or item.incoming_id or item.outgoing_id:
+                    raise ValueError('Overlay metadata requires a dedicated overlay lane')
                 if item.media_id not in sources:raise ValueError('Missing media reference')
                 if not isinstance(item.group_id,str) or len(item.group_id)>128:raise ValueError('Invalid link group')
                 if item.group_id:
@@ -148,6 +159,8 @@ class MultitrackProject:
                 for value in (item.x,item.y,item.opacity):number(value,0,1)
                 for value in (item.w,item.h):number(value,.01,1)
                 if item.x+item.w>1.000001 or item.y+item.h>1.000001:raise ValueError('Layer exceeds canvas')
+        from .overlay_tracks import validate_transitions
+        validate_transitions(self)
         return self
 
     @classmethod
@@ -236,6 +249,32 @@ class MultitrackProject:
         self.edit(operation)
         return media.id
 
+    def add_caption(self,text,at,length,style='bold_viral',options=None):
+        return self._add_overlay('caption',Item(uid(),'',at,0.,length,text=text,
+                                 caption_style=style,caption_options=dict(options or {})))
+
+    def add_effect(self,at,length,brightness=0.,contrast=1.,saturation=1.):
+        return self._add_overlay('effect',Item(uid(),'',at,0.,length,brightness=brightness,
+                                              contrast=contrast,saturation=saturation))
+
+    def _add_overlay(self,kind,item):
+        lane_id=uid()
+        def operation(project):
+            project.lanes.append(Lane(lane_id,{'caption':'Captions','effect':'Color effect','transition':'Cross dissolve'}[kind],kind,[item]))
+        self.edit(operation)
+        return lane_id,item.id
+
+    def add_dissolve(self,lane_id,item_id,duration):
+        incoming_lane,incoming=self.find(lane_id,item_id)
+        if incoming_lane.kind!='video':raise ValueError('Select the incoming video layer')
+        ordered=[item for lane in self.lanes if lane.enabled and lane.kind=='video' for item in lane.items]
+        if incoming not in ordered:raise ValueError('Enable the incoming video layer first')
+        candidates=[item for item in ordered[:ordered.index(incoming)]
+                    if item.at<incoming.at<item.at+item.duration]
+        if not candidates:raise ValueError('Arrange two overlapping video items first: incoming video starts later and is above the outgoing layer')
+        return self._add_overlay('transition',Item(uid(),'',incoming.at,0.,duration,
+                                incoming_id=incoming.id,outgoing_id=candidates[-1].id))
+
     def _linked_targets(self,lane_id,item_id):
         _,selected=self.find(lane_id,item_id)
         targets=[(lane,item) for lane in self.lanes for item in lane.items
@@ -244,7 +283,7 @@ class MultitrackProject:
         return targets
 
     def change_item(self,lane_id,item_id,*,linked=False,**values):
-        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation'}
+        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)
@@ -276,6 +315,7 @@ class MultitrackProject:
         def operation(project):
             lane,item=project.find(lane_id,item_id)
             if lane.locked:raise ValueError('Track is locked')
+            if lane.kind not in ('video','audio'):raise ValueError('Keyframes are available on video/audio layers; caption motion uses its preset')
             field='opacity_keys' if lane.kind=='video' else 'gain_keys'
             if isinstance(time,bool) or not isinstance(time,(int,float)) or not math.isfinite(time) or not 0<=time<=item.duration:
                 raise ValueError('Keyframe cursor must be inside selected item')
@@ -308,12 +348,13 @@ class MultitrackProject:
         def operation(project):
             lane,item=project.find(lane_id,item_id)
             if lane.locked:raise ValueError('Track is locked')
+            if lane.kind=='transition':raise ValueError('A dissolve is one transition; adjust its duration or remove it instead of splitting')
             if not item.at<time<item.at+item.duration:raise ValueError('Split must be inside item')
             elapsed=time-item.at
             if elapsed<item.fade_in or elapsed>item.duration-item.fade_out:
                 raise ValueError('Split inside fade is not supported; move cursor or remove fade first')
             used=elapsed*item.speed
-            right=Item(**{**asdict(item),'id':uid(),'at':time,'source_in':item.source_in+used,'length':item.length-used,'fade_in':0.,'group_id':''})
+            right=Item(**{**asdict(item),'id':uid(),'at':time,'source_in':item.source_in+used if lane.kind in ('video','audio') else 0.,'length':item.length-used,'fade_in':0.,'group_id':''})
             for field in ('opacity_keys','gain_keys'):
                 keys=getattr(item,field)
                 if keys:
