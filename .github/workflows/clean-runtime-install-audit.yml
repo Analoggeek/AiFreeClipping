@@ -1,0 +1,71 @@
+name: Clean clipping actual OS runtime installation
+on:
+  push:
+    branches: [arena/b6de10fc-aifreeclipping]
+    paths: ['.github/workflows/clean-runtime-install-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: clean-runtime-install-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  official-installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Execute actual official installer lifecycle on disposable runner
+        run: python scripts/test_ollama_installer.py
+      - name: Record exact installation and API evidence
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [ -f ollama-install-acceptance.json ]; then
+            gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body="$(cat ollama-install-acceptance.json)"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ollama-install-${{ matrix.os }}
+          path: ollama-install-acceptance.json
+  actual-whisper:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install faster-whisper psutil
+      - name: Official pinned-revision speech download, integrity, actual CPU inference and persistence
+        run: |
+          python - <<'PY' > whisper-acceptance.txt
+          import tempfile
+          from pathlib import Path
+          from clipos.ai.model_manager import ModelManager
+          from clipos.db.database import Database
+          with tempfile.TemporaryDirectory() as folder:
+              path=Path(folder)/'models.db';db=Database(path)
+              print(ModelManager(db).download_whisper('tiny',consent=True),flush=True)
+              before=ModelManager(db).registry();db.close();db=Database(path)
+              assert ModelManager(db).registry()==before
+              print('Registry persisted after database reopen:',list(before),flush=True)
+              db.close()
+          print('Actual silence inference only; intelligible speech accuracy not certified.',flush=True)
+          PY
+          cat whisper-acceptance.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-whisper-inference
+          path: whisper-acceptance.txt

@@ -204,12 +204,8 @@ class ModelManager:
     def download_whisper(self, size, *, consent=False, progress=None, cancelled=None):
         if not consent:
             raise PermissionError("Explicit model download consent required")
-        from huggingface_hub import HfApi
-        from .transcription import (
-            WHISPER_SIZES,
-            download_whisper_model,
-            local_model_path,
-        )
+        from huggingface_hub import HfApi, hf_hub_url, hf_hub_download
+        from .transcription import WHISPER_SIZES, local_model_path
         import hashlib
 
         if size not in WHISPER_SIZES:
@@ -221,37 +217,75 @@ class ModelManager:
             raise RuntimeError(
                 "Official speech repository did not supply an immutable revision"
             )
-        if not download_whisper_model(
-            size, progress_cb=progress, revision=metadata.sha, cancelled=cancelled
-        ):
-            raise RuntimeError("Speech download failed; see download status and retry")
-        root = local_model_path(size)
-        if root is None:
-            raise RuntimeError("Speech download lacks required files")
-        for name in ("model.bin", "config.json", "tokenizer.json"):
-            entry = next(
-                (file for file in metadata.siblings if file.rfilename == name), None
-            )
-            if entry is None:
-                raise RuntimeError("Official speech revision lacks " + name)
+        root = PATHS.models / "whisper" / repo.replace("/", "--")
+        root.mkdir(parents=True, exist_ok=True)
+        files = [
+            entry
+            for entry in metadata.siblings
+            if "/" not in entry.rfilename
+            and Path(entry.rfilename).suffix in (".bin", ".json", ".txt", ".model")
+        ]
+        required = {"model.bin", "config.json", "tokenizer.json"}
+        if not required.issubset({entry.rfilename for entry in files}):
+            raise RuntimeError("Official speech revision is missing mandatory files")
+        for index, entry in enumerate(files):
+            if cancelled and cancelled():
+                raise RuntimeError(
+                    "Speech download cancelled; retry resumes verified partials"
+                )
+            name = entry.rfilename
             file = root / name
-            if entry.size is not None and file.stat().st_size != entry.size:
-                raise RuntimeError("Speech file size mismatch: " + name)
             lfs = entry.lfs
-            expected = lfs.sha256 if lfs else entry.blob_id
-            if not expected:
-                raise RuntimeError("Missing upstream file integrity metadata: " + name)
+            expected = (
+                (lfs.get("sha256") if isinstance(lfs, dict) else lfs.sha256)
+                if lfs
+                else entry.blob_id
+            )
+            if not expected or not entry.size:
+                raise RuntimeError("Missing upstream integrity metadata for " + name)
             if lfs:
-                actual = sha256(file)
+
+                def report(pct, message):
+                    if progress:
+                        progress(pct, name + " · " + message)
+
+                download(
+                    hf_hub_url(repo, filename=name, revision=metadata.sha),
+                    file,
+                    expected,
+                    entry.size,
+                    progress=report,
+                    cancelled=cancelled,
+                    allowed_hosts=("huggingface.co",),
+                )
             else:
+                # Small Git-tracked configuration files are bound to the same
+                # immutable revision; verify their Git blob identity as well.
+                hf_hub_download(
+                    repo_id=repo,
+                    filename=name,
+                    revision=metadata.sha,
+                    local_dir=str(root),
+                )
                 digest = hashlib.sha1()
                 digest.update(f"blob {file.stat().st_size}\0".encode())
                 with file.open("rb") as stream:
                     for block in iter(lambda: stream.read(1024 * 1024), b""):
                         digest.update(block)
-                actual = digest.hexdigest()
-            if actual != expected:
-                raise RuntimeError("Speech checksum mismatch: " + name)
+                if file.stat().st_size != entry.size or digest.hexdigest() != expected:
+                    file.unlink(missing_ok=True)
+                    raise RuntimeError(
+                        "Speech configuration integrity mismatch: " + name
+                    )
+                if progress:
+                    progress(
+                        100,
+                        f"Verified configuration file {index + 1}/{len(files)}: {name}",
+                    )
+        if local_model_path(size) is None:
+            raise RuntimeError("Speech download lacks required files")
+        if progress:
+            progress(100, "Integrity verified; executing real CPU speech inference")
         return self.verify_whisper(size)
 
     def verify_whisper(self, size):

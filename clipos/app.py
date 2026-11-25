@@ -27,6 +27,15 @@ def _prepare_environment() -> None:
 
 def main() -> int:
     _prepare_environment()
+    if len(sys.argv)>1 and sys.argv[1]=='--verify-clipping-runtime':
+        import json
+        if len(sys.argv)!=3:return 2
+        try:
+            from clipos.core.frozen_runtime_check import verify
+            report=verify();code=0
+        except Exception as exc:report={'status':'error','error':str(exc)};code=1
+        Path(sys.argv[2]).write_text(json.dumps(report,indent=2),encoding='utf-8')
+        return code
     if len(sys.argv)>1 and sys.argv[1]=='--diarize-worker':
         from clipos.ai.diarization import worker_main
         return worker_main(sys.argv[2:])

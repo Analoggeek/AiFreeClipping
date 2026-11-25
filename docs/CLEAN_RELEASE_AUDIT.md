@@ -52,3 +52,27 @@ executed supervision 0.27.0 ByteTrack on a synthetic sequence and observed a sta
 track ID. ByteTrack's actual CPU association test also ran locally after its
 missing matplotlib dependency was installed. These are runtime/loading tests,
 not real-person accuracy or trained clipping-quality acceptance.
+
+### Additional native-runtime gates
+
+The actual Linux Ollama run at `df155e9` completed Qwen2.5:0.5b and
+`gemma:7b` pulls, GGUF inference returning READY, and database-reopen registry
+checks. These results do not certify Windows/macOS interactive installation.
+The upstream `gemma:7b` tag reported 9B/Q4_0 metadata; the application must not
+infer the downloaded architecture solely from the human-readable tag.
+
+Frozen-bundle verification now explicitly exercises ByteTrack synthetic
+association, the ONNX CPU provider, and (on CI) checksum-pinned official YOLOX
+weights through the actual packaged executable. This catches missing frozen
+imports that a source-only test cannot detect. Detector accuracy remains unclaimed.
+
+A separate disposable-runner workflow exercises official Windows/macOS installer
+lifecycles and actual tiny Whisper download/loading/inference. Windows unattended
+installer switches are restricted to that CI harness; application installation
+continues to require explicit consent and the normal OS dialog. Headless jobs
+cannot certify a human permission-dialog experience. Whisper inference uses
+silence and is a runtime check, not speech-accuracy certification.
+
+Speech downloads bind all files to one upstream immutable revision and verify
+LFS SHA256/size or Git blob identity before inference and registration; large
+weights use the resumable downloader with real byte progress and cancellation.

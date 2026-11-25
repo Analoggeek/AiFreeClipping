@@ -148,3 +148,35 @@ def test_ollama_pull_registers_only_after_inference_succeeds(tmp_path):
             manager.pull_ollama("gemma:7b")
     finally:
         db.close()
+
+
+def test_additional_manifest_host_requires_explicit_allowlist_and_exact_hostname(
+    tmp_path,
+):
+    payload = b"verified official speech model"
+    digest = hashlib.sha256(payload).hexdigest()
+    with patch("urllib.request.urlopen", return_value=Response(payload)) as request:
+        with pytest.raises(ValueError):
+            download(
+                "https://huggingface.co/repo/file",
+                tmp_path / "blocked",
+                digest,
+                len(payload),
+            )
+        with pytest.raises(ValueError):
+            download(
+                "https://huggingface.co.evil.invalid/repo/file",
+                tmp_path / "blocked",
+                digest,
+                len(payload),
+                allowed_hosts=("huggingface.co",),
+            )
+        request.assert_not_called()
+        download(
+            "https://huggingface.co/repo/file",
+            tmp_path / "verified",
+            digest,
+            len(payload),
+            allowed_hosts=("huggingface.co",),
+        )
+    assert (tmp_path / "verified").read_bytes() == payload

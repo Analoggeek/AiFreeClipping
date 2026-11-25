@@ -19,11 +19,28 @@ def sha256(path):
     return result.hexdigest()
 
 
-def download(url, destination, expected_sha256, size, *, progress=None, cancelled=None):
-    if not url.startswith("https://github.com/"):
-        raise ValueError(
-            "Only manifest-pinned official GitHub HTTPS assets are allowed"
-        )
+def download(
+    url,
+    destination,
+    expected_sha256,
+    size,
+    *,
+    progress=None,
+    cancelled=None,
+    allowed_hosts=("github.com",),
+):
+    from urllib.parse import urlsplit
+
+    parsed = urlsplit(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.hostname not in allowed_hosts
+        or parsed.username
+        or parsed.password
+    ):
+        raise ValueError("Only manifest-pinned official HTTPS assets are allowed")
+    if cancelled and cancelled():
+        raise DownloadCancelled("Download cancelled before connecting")
     if len(expected_sha256) != 64 or any(
         c not in "0123456789abcdef" for c in expected_sha256
     ):
