@@ -13,10 +13,10 @@ native crash backtrace are unavailable; no exact root-cause reproduction claimed
 
 ## Changes
 
-1. Intel macOS vendor artifact is now ffmpeg-static b6.1.1 with pinned gzip hash,
+1. Intel macOS vendor artifact is now ffmpeg-static b6.0 with pinned gzip hash,
    architecture validation, and pinned LICENSE/README retained with the binary.
    A binary without a matching validated provenance manifest is refreshed.
-   The release's native Intel gate requires >=6.1 and ASS/drawtext and rejects
+   The release's native Intel gate requires >=6.0 and ASS/drawtext and rejects
    --enable-nonfree. Other platform engine versions are not claimed upgraded.
 2. fontsdir no longer imports an entire system font directory. A single actual
    fallback font is staged in a content-addressed local cache, atomically. Basic
@@ -44,7 +44,7 @@ native crash backtrace are unavailable; no exact root-cause reproduction claimed
 
 ## Validation
 
-Local 599 passed/20 skipped and FFmpeg E2E35/35. Actual H264 and AV1 test inputs
+Local 600 passed/20 skipped and FFmpeg E2E35/35. Actual H264 and AV1 test inputs
 produce 1080x1920 H264/AAC with visible caption pixels after an injected initial
 native fault. Unit tests establish fatal-code classification, retry bounds,
 cancellation, session policy, command preservation, font isolation and artifact
@@ -56,3 +56,13 @@ The sandbox cannot download release-storage assets directly. It did not pretend
 to run the pinned Mac binary on Linux. The native release pipeline performs that
 download/check; missing/bad hashes fail the build, never fall back silently to
 the obsolete Intel npm binary. All seven platform release assets remain required.
+
+## Native candidate selection
+
+The first b6.1.1 candidate passed native captions but the Intel gate rejected it
+for missing drawtext. Do not remove that gate: hooks and timeline text require
+this filter. A native macos-15-intel audit (run45557497487, issue115) downloaded
+b6.0, recorded archive/LICENSE/README hashes, executed FFmpeg6.0-tessus, and
+confirmed ASS plus drawtext without --enable-nonfree. We pin this full-feature
+build instead. This is a deliberate compatibility choice, not a claim to bundle
+the newest FFmpeg. The complete Intel render/package gates must still pass.

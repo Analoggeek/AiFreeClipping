@@ -14,7 +14,7 @@ in the sandbox; the changes below address concrete risky paths and add recovery.
 
 ## Fixes and enhancements
 
-- Refresh the **Intel macOS** FFmpeg binary to upstream ffmpeg-static `b6.1.1`,
+- Refresh the **Intel macOS** FFmpeg binary to upstream ffmpeg-static `b6.0`,
   pinned by SHA-256 with architecture validation and retained upstream license/
   provenance files. An existing legacy binary without the new verified manifest
   is not silently reused. Other platform binaries are not advertised as upgraded.
@@ -40,7 +40,7 @@ in the sandbox; the changes below address concrete risky paths and add recovery.
 
 ## Verification and limits
 
-Local full suite: **599 passed, 20 skipped**; real import-to-export/batch E2E:
+Local full suite: **600 passed, 20 skipped**; real import-to-export/batch E2E:
 **35/35 passed**. Optional native/model checks account for skips; Intel runtime
 verification is mandatory in release CI, not asserted from Linux tests.
 
@@ -49,7 +49,7 @@ cancellation, session compatibility behaviour, font isolation, archive hash
 rejection, and real H264/AV1 inputs rendered to 1080x1920 H264/AAC with actual
 caption pixels preserved after an injected initial failure. Injected faults
 prove recovery contracts, not the original crash's root cause. Native Intel CI
-requires FFmpeg >=6.1 with ASS/drawtext and rejects `--enable-nonfree` builds.
+requires FFmpeg >=6.0 with ASS/drawtext and rejects `--enable-nonfree` builds.
 
 Platform installers are published only after native gates and all seven
 nonempty release assets succeed. This is not physical-device/driver or arbitrary

@@ -25,7 +25,7 @@ Gaming Studio 2.0 navigation have been removed; authorised URL import remains.
 
 ### Stability fix in 3.1.1
 
-- Replace the legacy Intel macOS FFmpeg binary with pinned/checksummed 6.1.1.
+- Replace the legacy Intel macOS FFmpeg binary with pinned/checksummed 6.0.
 - Stop importing the entire system font library into each caption render.
 - On a native FFmpeg fault, retry the exact edit once with conservative scalar,
   single-worker settings; retain compatibility mode for the remaining session.
