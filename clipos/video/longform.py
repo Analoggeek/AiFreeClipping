@@ -128,7 +128,7 @@ def export(plan_path,output,*,cancel_cb=None,progress_cb=None,width=1920,height=
                     elif choice.hw_accel=='amf':video+=['-quality','speed','-b:v','8M']
                     elif choice.hw_accel=='videotoolbox':video+=['-allow_sw','0','-b:v','8M']
                     else:video+=['-preset','veryfast','-crf','21']
-                    FFmpegRunner(total_duration=segment.duration,cancel_cb=cancel_cb,
+                    FFmpegRunner(total_duration=segment.duration,recover_native_crash=True,cancel_cb=cancel_cb,
                         progress_cb=lambda p,t,i=index:progress_cb((i+p/100)/len(timeline.segments)*95,'Encoding chronological keep segments') if progress_cb else None).run([
                         '-threads',budget,'-filter_threads',budget,'-ss',str(segment.start),'-t',str(segment.source_duration),'-i',str(source),*audio,
                         '-map','0:v:0','-map','0:a:0' if info.has_audio else '1:a:0',

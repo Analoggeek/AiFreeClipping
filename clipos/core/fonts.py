@@ -16,6 +16,8 @@ always pass an explicit ``fontfile=`` and a ``fontsdir=``.
 from __future__ import annotations
 
 import os
+import hashlib
+import tempfile
 from pathlib import Path
 
 from .logging_setup import get_logger
@@ -114,18 +116,37 @@ def find_font_file() -> Path | None:
 
 
 def font_dir() -> Path | None:
-    """Return a directory that holds fonts, for the ``ass`` filter."""
+    """An isolated font staging directory, NEVER the whole OS font library.
+
+    libass imports every file in fontsdir before using its platform provider.
+    On macOS that unnecessarily parsed supplemental collections (including the
+    NISC18030 metadata warning in the reported crash). Keep system discovery to
+    CoreText; explicitly import only our single fallback font.
+    """
     global _resolved_dir
-    if _resolved_dir is not None:
+    if _resolved_dir is not None and _resolved_dir.is_dir():
         return _resolved_dir
-    font = find_font_file()
-    if font is not None:
-        _resolved_dir = font.parent
-        return _resolved_dir
-    for base in _candidate_dirs():
-        _resolved_dir = base
-        return _resolved_dir
-    return None
+    font=find_font_file()
+    if font is None:return None
+    try:
+        if not 0<font.stat().st_size<=64*1024*1024:return None
+        content=font.read_bytes()
+        if content[:4] not in (b'\x00\x01\x00\x00',b'OTTO',b'ttcf',b'true'):return None
+        from .config import PATHS
+        directory=PATHS.cache/'ffmpeg-fonts'/hashlib.sha256(content).hexdigest()[:24]
+        directory.mkdir(parents=True,exist_ok=True)
+        target=directory/('fallback'+font.suffix.lower())
+        if not target.exists() or target.read_bytes()!=content:
+            fd,name=tempfile.mkstemp(prefix='.font-',dir=directory)
+            try:
+                with os.fdopen(fd,'wb') as stream:stream.write(content)
+                os.replace(name,target)
+            finally:Path(name).unlink(missing_ok=True)
+        _resolved_dir=directory
+        return directory
+    except OSError as exc:
+        log.warning('Isolated caption font unavailable; using OS provider only: %s',exc)
+        return None
 
 
 def drawtext_font_args() -> str:
@@ -137,7 +158,7 @@ def drawtext_font_args() -> str:
     font = find_font_file()
     if font is None:
         return ""
-    escaped = str(font).replace("\\", "/").replace(":", "\\:")
+    escaped = _escape_font_path(font)
     # The trailing colon separates this argument from the next one.
     return f"fontfile='{escaped}':"
 
@@ -147,6 +168,13 @@ def fontsdir_arg() -> str:
     base = font_dir()
     if base is None:
         return ""
-    escaped = str(base).replace("\\", "/").replace(":", "\\:")
+    escaped = _escape_font_path(base)
     # The trailing colon separates this argument from the next one.
     return f"fontsdir='{escaped}':"
+
+
+def _escape_font_path(path):
+    value=str(path).replace('\\','/')
+    for char in (':',"'",'[',']',','):
+        value=value.replace(char,'\\'+char)
+    return value

@@ -1,4 +1,4 @@
-# CLIPOS 3.1.0 — Offline-first Video Clip Editor
+# CLIPOS 3.1.1 — Offline-first Video Clip Editor
 
 **CLIPOS**, developed by **Analoggeek**, is a native desktop application for
 turning long recordings into edited short-form videos. Import a recording,
@@ -6,24 +6,33 @@ select moments and framing, apply editing presets and captions, review the
 rendered videos, and export the batch. Processing runs locally with **Python,
 PySide6, Faster-Whisper and FFmpeg**—no mandatory cloud account or subscription.
 
-**v3.1.0 release:** YouTube publishing/account connection and the separate
+**v3.1.1 release:** YouTube publishing/account connection and the separate
 Gaming Studio 2.0 navigation have been removed; authorised URL import remains.
 
-## Download v3.1.0
+## Download v3.1.1
 
 | Platform | Installer |
 | --- | --- |
-| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.0/CLIPOS-Setup.exe) |
-| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.0/CLIPOS-3.1.0-arm64.dmg) |
-| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.0/CLIPOS-3.1.0-intel.dmg) |
-| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.0/CLIPOS_3.1.0_amd64.deb) |
-| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.0/CLIPOS-3.1.0-linux-x86_64.zip) |
+| Windows 10 / 11, x64 | [CLIPOS-Setup.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS-Setup.exe) |
+| macOS, Apple Silicon | [Apple Silicon DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS-3.1.1-arm64.dmg) |
+| macOS, Intel x86_64 | [Intel DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS-3.1.1-intel.dmg) |
+| Debian / Ubuntu, amd64 | [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS_3.1.1_amd64.deb) |
+| Linux, x86_64 portable | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.1.1/CLIPOS-3.1.1-linux-x86_64.zip) |
 
-[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.1.0)
+[All seven release assets, including macOS app archives](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.1.1)
 · [Release notes](RELEASE_NOTES.md)
 · [Detailed workflow guide](docs/WORKFLOW_V25.md)
 
-### Performance update in 3.1.0
+### Stability fix in 3.1.1
+
+- Replace the legacy Intel macOS FFmpeg binary with pinned/checksummed 6.1.1.
+- Stop importing the entire system font library into each caption render.
+- On a native FFmpeg fault, retry the exact edit once with conservative scalar,
+  single-worker settings; retain compatibility mode for the remaining session.
+- Preserve existing successful exports and expose local crash diagnostics in
+  Settings. Ordinary CLI/media errors and cancellation are not infinite retries.
+
+### Included performance update from 3.1.0
 
 - Runtime-probed AMD AMF plus hybrid-system QSV/NVENC selection; CPU fallback.
 - Adaptive CPU budget up to 32 workers rather than an eight-thread ceiling,
@@ -111,7 +120,7 @@ warnings may appear; verify the source and follow your system's security policy.
 On Debian / Ubuntu:
 
 ```bash
-sudo apt install ./CLIPOS_3.1.0_amd64.deb
+sudo apt install ./CLIPOS_3.1.1_amd64.deb
 ```
 
 Alternatively, extract the Linux ZIP and launch the bundled executable on a

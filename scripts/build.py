@@ -30,7 +30,7 @@ BUILD = ROOT / "build"
 
 APP_NAME = "CLIPOS"
 BUNDLE_ID = "com.clipos.studio"
-VERSION = "3.1.0"
+VERSION = "3.1.1"
 
 
 def _write_summary(title: str, body: str) -> None:

@@ -66,11 +66,12 @@ class TestFontDiscovery(unittest.TestCase):
         self.assertTrue(args.endswith(":"), f"{args!r} does not end with a colon")
         self.assertIn("fontsdir=", args)
 
-    def test_the_filter_arguments_have_no_spaces(self):
+    def test_the_filter_paths_are_quoted(self):
         """A space would end the argument and start a new one."""
         for args in (drawtext_font_args(), fontsdir_arg()):
             if args:
-                self.assertNotIn(" ", args)
+                self.assertIn("='",args)
+                self.assertTrue(args.endswith("':"))
 
 
 class TestFilterArguments(unittest.TestCase):

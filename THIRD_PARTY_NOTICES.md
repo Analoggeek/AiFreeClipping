@@ -80,3 +80,16 @@ diarization. The distributed runtime's Apache license is retained at
 weights are included or implicitly downloaded. Model licenses, access conditions
 and authorized voice processing remain separate requirements for setup. No
 third-party account or access-token collection is added to editing.
+
+## Intel macOS FFmpeg stability refresh (3.1.1)
+
+Intel macOS uses the pinned `ffmpeg-darwin-x64.gz` artifact from
+https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1 . Compressed SHA-256:
+`929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106`.
+The upstream build's `darwin-x64.LICENSE` and `darwin-x64.README` are hash-checked
+and retained alongside the bundled binary, including build/source information.
+Upstream sources/build references: https://github.com/eugeneware/ffmpeg-static#sources-of-the-binaries
+and https://evermeet.cx/ffmpeg/ (Intel macOS distributor). FFmpeg/x264 GPL
+obligations remain applicable, separately from this application's own code.
+The native release gate rejects a build configured with `--enable-nonfree`.
+No imageio wheel with a known nonfree build configuration is substituted.

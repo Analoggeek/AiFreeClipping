@@ -359,13 +359,18 @@ class FFmpegRunner:
     output duration -- this is a genuine measurement of encoder progress, never a timer.
     """
 
+    _compatibility_binaries=set()
+
     def __init__(
         self,
         total_duration: float = 0.0,
         progress_cb=None,
         log_cb=None,
         cancel_cb=None,
+        recover_native_crash=False,
     ) -> None:
+        self.recover_native_crash=recover_native_crash
+        self.recovery_used=False
         self.total_duration = max(0.001, float(total_duration or 0.0))
         self.progress_cb = progress_cb
         self.log_cb = log_cb
@@ -386,6 +391,44 @@ class FFmpegRunner:
         return sign * (h * 3600 + mi * 60 + s)
 
     def run(self, args: Sequence[str], total_duration: float | None = None) -> str:
+        from .render_recovery import NATIVE_CRASH_CODES,compatibility_args,save_crash
+        self.recovery_used=False
+        if self.cancel_cb and self.cancel_cb():raise FFmpegCancelled()
+        binary=require_ffmpeg()
+        try:
+            identity=Path(binary).stat()
+            key=(binary,identity.st_mtime_ns,identity.st_size)
+        except OSError:key=(binary,)
+        compatible=self.recover_native_crash and key in self._compatibility_binaries
+        if compatible:
+            args=compatibility_args(args)
+            self.recovery_used=True
+        try:return self._run_once(args,total_duration)
+        except FFmpegError as error:
+            if not self.recover_native_crash or error.returncode not in NATIVE_CRASH_CODES:raise
+            if self.cancel_cb and self.cancel_cb():raise FFmpegCancelled()
+            if compatible:
+                save_crash(error,'session_compatibility_command_failed')
+                raise  # already conservative: no identical repeated retry
+            if len(self._compatibility_binaries)>=16:self._compatibility_binaries.clear()
+            self._compatibility_binaries.add(key)
+            self.recovery_used=True
+            diagnostic=save_crash(error,'compatibility_retry_started')
+            log.warning('Native FFmpeg fault %s; retrying identical edit with scalar/single-worker compatibility settings. Local diagnostic: %s',error.returncode,diagnostic)
+            try:result=self._run_once(compatibility_args(args),total_duration)
+            except FFmpegCancelled:
+                save_crash(error,'compatibility_retry_cancelled')
+                raise
+            except Exception as retry_error:
+                save_crash(error,'compatibility_retry_failed',recovery_error=retry_error)
+                raise
+            save_crash(error,'compatibility_command_succeeded_output_requires_verification')
+            return result
+
+    def _run_once(self, args: Sequence[str], total_duration: float | None = None) -> str:
+        self.stderr_lines=[]
+        self._last_pct=-1.0
+        self.cancelled=False
         exe = require_ffmpeg()
         cmd = [exe, "-hide_banner", "-nostdin", "-y", *args]
         log.debug("ffmpeg: %s", " ".join(cmd))
