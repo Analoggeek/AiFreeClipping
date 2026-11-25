@@ -37,3 +37,5 @@ jobs:
           tail -c 55000 native-tests.log > report.log
           gh issue create --title "Bounded Intel render tests" --body-file report.log
           exit "$result"
+
+# Compare finite demux loops against bounded audio-filter looping.

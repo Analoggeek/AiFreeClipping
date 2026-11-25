@@ -15,13 +15,14 @@ with tempfile.TemporaryDirectory() as directory:
     run_ffmpeg(['-f','lavfi','-i','sine=frequency=1000:sample_rate=48000:duration=0.7',str(music)])
     def audit(self,args,*a,**kw):
         args=list(args);print('COMMAND',json.dumps(args),flush=True)
-        variants={'baseline':args,'scalar':compatibility_args(args),'output-duration':args[:-1]+['-t','2',args[-1]],'filter-one':args.copy(),'queued-inputs':args.copy()}
-        variants['filter-one'][args.index('-filter_complex_threads')+1]='1'
-        queued=[]
-        for arg in args:
-            if arg=='-i':queued+=['-thread_queue_size','1024']
-            queued.append(arg)
-        variants['queued-inputs']=queued
+        variants={}
+        for name,count in [('finite-loop', '2'),('no-loop','0')]:
+            command=args.copy();command[command.index('-stream_loop')+1]=count
+            variants[name]=command
+        loop_filter=args.copy();i=loop_filter.index('-stream_loop');del loop_filter[i:i+2]
+        j=loop_filter.index('-filter_complex')+1
+        loop_filter[j]=loop_filter[j].replace('[1:a]aresample=48000,','[1:a]aresample=48000,aloop=loop=-1:size=33600,')
+        variants['audio-filter-loop']=loop_filter
         for name,command in variants.items():
             try:
                 result=subprocess.run([require_ffmpeg(),'-hide_banner','-nostdin','-y',*command],capture_output=True,text=True,timeout=20)
