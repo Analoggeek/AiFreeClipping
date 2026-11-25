@@ -404,12 +404,21 @@ def render_ass(
     background_override: bool | None = None,
     highlight_words: list[str] | None = None,
     font_file: str | Path | None = None,
+    primary_override: str = '',
+    highlight_override: str = '',
+    outline_override: str = '',
+    animation_override: str = '',
+    alignment_override: str = '',
+    timing_offset: float = 0.,
 ) -> str:
     """Render cues to an ASS subtitle document.
 
     ``highlight_words`` are emphasised (colour + scale) inside every cue.
     """
-    st = style
+    from .customization import customize_style, offset_cues
+    st = customize_style(style, primary_override, highlight_override, outline_override,
+                         animation_override, alignment_override)
+    cues = offset_cues(cues, timing_offset)
     font = font_override or st.font
     size = size_override or st.size
     position = position_override or _position_to_alignment(st, position_override)
@@ -430,6 +439,9 @@ def render_ass(
     if position_override == "split":
         align = 2
         margin_v = height // 3 + max(12, height // 60)
+
+    if alignment_override:
+        align = ((align - 1) // 3) * 3 + ('left', 'center', 'right').index(alignment_override) + 1
 
     header = f"""[Script Info]
 ScriptType: v4.00+

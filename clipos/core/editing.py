@@ -18,9 +18,13 @@ def render_settings(db, overrides=None):
     rs.caption_style = data.get('caption_style',rs.caption_style)
     rs.caption_size = int(data.get('caption_size',48))
     rs.caption_font = data.get('caption_font','')
+    for field in ('caption_primary', 'caption_highlight', 'caption_outline',
+                  'caption_animation', 'caption_alignment'):
+        setattr(rs, field, data.get(field, ''))
+    rs.caption_timing_offset = float(data.get('caption_timing_offset', 0.))
     rs.caption_position = 'split' if rs.editing_preset == 'gaming' else data.get('caption_position','bottom')
     rs.show_captions = enabled(data.get('auto_caption',True))
-    for field in ('caption_stroke','fps','bitrate_kbps'):
+    for field in ('caption_stroke','fps','bitrate_kbps','audio_bitrate_kbps'):
         if field in data: setattr(rs,field,int(data[field]))
     for field in ('caption_shadow','caption_background','remove_silence','normalize_audio','noise_reduction','gaming_enhance','bgm_ducking','body_reframe','shot_aware_reframe'):
         if field in data: setattr(rs,field,enabled(data[field]))

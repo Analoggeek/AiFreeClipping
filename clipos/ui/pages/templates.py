@@ -133,7 +133,7 @@ class TemplatesPage(BasePage):
             export_page.bitrate_spin.setValue(bitrate)
 
     def _preview_caption(self, key: str) -> None:
-        page = self.window.pages.get("captions")
+        self.window.navigate('captions')
+        page = self.window.pages.get('captions')
         if page is not None:
             page._select_style(key)
-        self.window.navigate("captions")

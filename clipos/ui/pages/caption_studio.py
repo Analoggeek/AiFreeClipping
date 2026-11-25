@@ -7,7 +7,7 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout,
+    QCheckBox, QColorDialog, QComboBox, QDoubleSpinBox, QFileDialog, QInputDialog, QLineEdit, QFormLayout, QGridLayout, QHBoxLayout,
     QLabel, QPushButton, QScrollArea, QSlider, QSpinBox, QVBoxLayout, QWidget,
 )
 
@@ -25,7 +25,8 @@ class CaptionRenderWorker(QThread):
     failed=Signal(str)
 
     def __init__(self,key,options,parent=None):
-        super().__init__(parent);self.key=key;self.options=options
+        super().__init__(parent);self.key=key;self.options=dict(options)
+        self.text=self.options.pop("sample_text", "HERE IS THE TRUTH ABOUT THE SKY")
 
     def run(self):
         import tempfile,subprocess
@@ -34,7 +35,7 @@ class CaptionRenderWorker(QThread):
         try:
             with tempfile.TemporaryDirectory(prefix='clipos-caption-') as folder:
                 ass=Path(folder)/'sample.ass'
-                write_ass(ass,[CaptionCue(0,3,'HERE IS THE TRUTH ABOUT THE SKY')],get_style(self.key),**self.options)
+                write_ass(ass,[CaptionCue(0,3,self.text)],get_style(self.key),**self.options)
                 # Use a relative subtitle path so drive-letter/FFmpeg filter quoting
                 # is identical across Windows and Unix.
                 result=subprocess.run([require_ffmpeg(),'-v','error','-f','lavfi','-i','color=c=0x111827:s=1080x1920:r=1:d=2','-vf','ass=sample.ass,scale=324:576','-ss','1','-frames:v','1','-threads','1','-f','image2pipe','-vcodec','png','-'],cwd=folder,capture_output=True,timeout=45)
@@ -214,6 +215,13 @@ class CaptionStudioPage(BasePage):
         self.rendered_frame=QLabel('Render a frame to verify actual ASS typography and motion at one second.');self.rendered_frame.setWordWrap(True);preview_card.add(self.rendered_frame)
         self.render_button=QPushButton('Render actual caption frame');self.render_button.clicked.connect(self._render_actual);preview_card.add(self.render_button)
         self._render_worker=None
+        self._render_generation=0
+        self._active_render_generation=0
+        self._render_timer=QTimer(self);self._render_timer.setSingleShot(True)
+        self._render_timer.setInterval(450);self._render_timer.timeout.connect(self._render_actual)
+        self.sample_text=QLineEdit(self.preview.text);self.sample_text.setMaxLength(240)
+        self.sample_text.setPlaceholderText('Your sample caption text');self.sample_text.textChanged.connect(self._sample_changed)
+        preview_card.add(self.sample_text)
         self.preview_text = QLabel("Preview text")
         self.preview_text.setObjectName("CardSubtitle")
         preview_card.add(self.preview_text)
@@ -222,6 +230,16 @@ class CaptionStudioPage(BasePage):
         # --- controls ---
         controls = Card()
         controls.add(SectionHeader("Style", f"{len(CAPTION_STYLES)} styles · 30 animated combinations"))
+        from ...captions.customization import CATEGORIES
+        self.category=QComboBox();self.category.addItems(CATEGORIES)
+        self.category.currentTextChanged.connect(self._filter_category);controls.add(self.category)
+        custom_row=QHBoxLayout()
+        self.custom_profiles=QComboBox();self.custom_profiles.setToolTip('Locally saved custom caption profiles')
+        self.custom_profiles.activated.connect(self._load_custom)
+        custom_row.addWidget(self.custom_profiles,1)
+        save_custom=QPushButton('Save custom…');save_custom.clicked.connect(self._save_custom);custom_row.addWidget(save_custom)
+        controls.add_layout(custom_row)
+        self._refresh_custom()
         self.style_grid = QGridLayout()
         self.style_grid.setSpacing(Metrics.sm)
         self.style_buttons: dict[str, QPushButton] = {}
@@ -273,6 +291,21 @@ class CaptionStudioPage(BasePage):
         self.bg_check.toggled.connect(self._on_bg)
         form.addRow("", self.bg_check)
 
+        self.color_buttons={}
+        self.colors={'primary':'','highlight':'','outline':''}
+        for key,label in [('primary','Text color'),('highlight','Highlight color'),('outline','Outline color')]:
+            button=QPushButton('Preset color');button.clicked.connect(lambda checked=False,k=key:self._choose_color(k))
+            self.color_buttons[key]=button;form.addRow(label,button)
+        self.animation_combo=QComboBox();self.animation_combo.addItem('Use preset','')
+        from ...captions.customization import ANIMATIONS
+        for motion in ANIMATIONS:self.animation_combo.addItem(motion.replace('_',' ').title(),motion)
+        self.animation_combo.currentIndexChanged.connect(self._queue_render);form.addRow('Animation',self.animation_combo)
+        self.alignment_combo=QComboBox();self.alignment_combo.addItem('Use preset','')
+        for alignment in ('left','center','right'):self.alignment_combo.addItem(alignment.title(),alignment)
+        self.alignment_combo.currentIndexChanged.connect(self._queue_render);form.addRow('Alignment',self.alignment_combo)
+        self.offset_spin=QDoubleSpinBox();self.offset_spin.setRange(-10,10);self.offset_spin.setDecimals(2);self.offset_spin.setSingleStep(.05);self.offset_spin.setSuffix(' s')
+        self.offset_spin.setToolTip('Shift real caption cues and their word timestamps; negative values show captions earlier.')
+        self.offset_spin.valueChanged.connect(self._queue_render);form.addRow('Timing offset',self.offset_spin)
         controls.add_layout(form)
 
         self.desc = QLabel("")
@@ -295,22 +328,57 @@ class CaptionStudioPage(BasePage):
         self._select_style("bold_viral")
 
     # -- handlers ------------------------------------------------------------------
+    def _queue_render(self,*_):
+        if not hasattr(self,'_render_timer'):return
+        self._render_generation+=1
+        self._render_timer.start()
+
+    def _sample_changed(self,text):
+        self.preview.text=text;self.preview.update();self._queue_render()
+
+    def _filter_category(self,category):
+        from ...captions.customization import categories_for
+        for key,button in self.style_buttons.items():
+            button.setVisible(category in categories_for(key))
+        self.custom_profiles.setToolTip('Select a saved profile below' if category=='Custom' else 'Locally saved custom caption profiles')
+
+    def _choose_color(self,key):
+        color=QColorDialog.getColor(QColor(self.colors[key] or '#FFFFFF'),self,'Caption '+key+' color')
+        if color.isValid():
+            self.colors[key]=color.name();self.color_buttons[key].setText(color.name());self._queue_render()
+
+    def _extra_options(self):
+        return dict(primary_override=self.colors['primary'],highlight_override=self.colors['highlight'],
+                    outline_override=self.colors['outline'],animation_override=self.animation_combo.currentData(),
+                    alignment_override=self.alignment_combo.currentData(),timing_offset=self.offset_spin.value())
+
     def _render_actual(self):
         if self._render_worker and self._render_worker.isRunning():return
         self.render_button.setEnabled(False);self.rendered_frame.setText('Rendering with local FFmpeg / libass…')
         options=dict(font_override=self.preview.font_family,size_override=self.preview.size,position_override=self.preview.position,stroke_override=self.preview.stroke,shadow_override=self.preview.shadow,background_override=self.preview.background)
+        options.update(self._extra_options());options['sample_text']=self.sample_text.text()
+        self._active_render_generation=self._render_generation
         self._render_worker=CaptionRenderWorker(self.preview.style_key,options,self)
         self._render_worker.ready.connect(self._show_render)
-        self._render_worker.failed.connect(lambda error:self.rendered_frame.setText('Render failed: '+error))
-        self._render_worker.finished.connect(lambda:self.render_button.setEnabled(True))
+        self._render_worker.failed.connect(self._render_failed)
+        self._render_worker.finished.connect(self._render_finished)
         self._render_worker.start()
 
+    def _render_failed(self,error):
+        if self._active_render_generation==self._render_generation:self.rendered_frame.setText('Render failed: '+error)
+
+    def _render_finished(self):
+        self.render_button.setEnabled(True)
+        if self._active_render_generation!=self._render_generation:self._render_timer.start()
+
     def _show_render(self,data):
+        if self._active_render_generation!=self._render_generation:return
         pixmap=QPixmap()
         if pixmap.loadFromData(data):self.rendered_frame.setPixmap(pixmap)
         else:self.rendered_frame.setText('Could not decode rendered frame')
 
     def shutdown(self):
+        self._render_timer.stop()
         self.preview.stop()
         if self._render_worker and self._render_worker.isRunning():self._render_worker.wait(50000)
 
@@ -330,44 +398,79 @@ class CaptionStudioPage(BasePage):
         self.size_slider.setValue(st.size)
         self.size_slider.blockSignals(False)
         self.preview.update()
+        self._queue_render()
 
     def _on_font(self, family: str) -> None:
         self.preview.font_family = family
         self.preview.update()
+        self._queue_render()
 
     def _on_size(self, value: int) -> None:
         self.preview.size = value
         self.preview.update()
+        self._queue_render()
 
     def _on_position(self, value: str) -> None:
         self.preview.position = value
         self.preview.update()
+        self._queue_render()
 
     def _on_stroke(self, value: int) -> None:
         self.preview.stroke = value
         self.preview.update()
+        self._queue_render()
 
     def _on_shadow(self, value: bool) -> None:
         self.preview.shadow = value
         self.preview.update()
+        self._queue_render()
 
     def _on_bg(self, value: bool) -> None:
         self.preview.background = value
         self.preview.update()
+        self._queue_render()
 
-    def _save_default(self) -> None:
-        key = self.preview.style_key
-        self.db.set_settings({
-            "caption_style": key,
-            "caption_font": self.preview.font_family,
-            "caption_size": self.preview.size,
-            "caption_position": self.preview.position,
-            "caption_stroke": self.preview.stroke,
-            "caption_shadow": int(self.preview.shadow),
-            "caption_background": int(self.preview.background),
-        })
+    def _current_settings(self):
+        return {
+            'caption_style':self.preview.style_key,'caption_font':self.preview.font_family,
+            'caption_size':self.preview.size,'caption_position':self.preview.position,
+            'caption_stroke':self.preview.stroke,'caption_shadow':int(self.preview.shadow),
+            'caption_background':int(self.preview.background),
+            'caption_primary':self.colors['primary'],'caption_highlight':self.colors['highlight'],
+            'caption_outline':self.colors['outline'],'caption_animation':self.animation_combo.currentData(),
+            'caption_alignment':self.alignment_combo.currentData(),'caption_timing_offset':self.offset_spin.value(),
+        }
+
+    def _save_default(self):
+        self.db.set_settings(self._current_settings())
         self.window.settings_changed.emit()
-        self.window.notify(f"'{get_style(key).name}' saved as the default caption style")
+        self.window.notify('Caption defaults saved for subsequent exports')
+
+    def _profiles(self):
+        try:
+            profiles=json.loads(self.db.get_setting('caption_custom_profiles','{}'))
+            return profiles if isinstance(profiles,dict) else {}
+        except (TypeError,ValueError):return {}
+
+    def _refresh_custom(self):
+        self.custom_profiles.clear();self.custom_profiles.addItem('Saved custom profiles…','')
+        for name in sorted(self._profiles()):self.custom_profiles.addItem(name,name)
+
+    def _save_custom(self):
+        name,ok=QInputDialog.getText(self,'Save custom caption','Profile name (up to 60 characters)')
+        name=name.strip()[:60]
+        if not ok or not name:return
+        profiles=self._profiles()
+        if name not in profiles and len(profiles)>=30:
+            self.window.notify('Maximum 30 custom profiles. Reuse an existing name to replace it.');return
+        profiles[name]=self._current_settings()
+        self.db.set_setting('caption_custom_profiles',json.dumps(profiles))
+        self._refresh_custom();self.window.notify('Custom caption profile saved locally')
+
+    def _load_custom(self,index):
+        name=self.custom_profiles.itemData(index)
+        profile=self._profiles().get(name)
+        if isinstance(profile,dict):self._restore_settings(profile)
 
     def _apply_all(self) -> None:
         with self.db.transaction():
@@ -380,7 +483,10 @@ class CaptionStudioPage(BasePage):
         self.window.notify(f"Caption style applied to {n} pending clips")
 
     def refresh(self) -> None:
-        settings = self.db.get_settings()
+        self._refresh_custom()
+        self._restore_settings(self.db.get_settings())
+
+    def _restore_settings(self,settings):
         key = settings.get("caption_style", "bold_viral")
         if key in self.style_buttons:
             self._select_style(key)
@@ -390,3 +496,11 @@ class CaptionStudioPage(BasePage):
         self.stroke_spin.setValue(int(settings.get('caption_stroke',4)))
         self.shadow_check.setChecked(bool(settings.get('caption_shadow',True)))
         self.bg_check.setChecked(bool(settings.get('caption_background',False)))
+
+        for key in self.colors:
+            self.colors[key]=settings.get('caption_'+key,'')
+            self.color_buttons[key].setText(self.colors[key] or 'Preset color')
+        for key,combo in [('caption_animation',self.animation_combo),('caption_alignment',self.alignment_combo)]:
+            combo.setCurrentIndex(max(0,combo.findData(settings.get(key,''))))
+        self.offset_spin.setValue(float(settings.get('caption_timing_offset',0.)))
+        self._queue_render()

@@ -38,7 +38,7 @@ def graph(project):
             x=round(item.x*project.width);y=round(item.y*project.height)
             parts.append(f'[{index}:v]setpts=(PTS-STARTPTS)/{item.speed:.8f},fps={project.fps},'
                 f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},'
-                f'setsar=1,format=rgba,' + video_opacity(item) +
+                f'setsar=1,' + video_effects(item) + 'format=rgba,' + video_opacity(item) +
                 video_fades(item) +
                 f'setpts=PTS+{item.at:.6f}/TB[layer{index}]')
             parts.append(f'{base}[layer{index}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:'
@@ -166,3 +166,13 @@ def video_opacity(item):
     if not item.opacity_keys:return f'colorchannelmixer=aa={item.opacity:.10f},'
     expression=curve_expression(item.opacity_keys,'T')
     return f"format=gbrap,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*({expression})',"
+
+
+def video_effects(item):
+    """Per-layer actual color and rotation filters, before alpha automation."""
+    filters=[]
+    if (item.brightness,item.contrast,item.saturation)!=(0.,1.,1.):
+        filters.append(f'eq=brightness={item.brightness:.8f}:contrast={item.contrast:.8f}:saturation={item.saturation:.8f}')
+    if item.rotation:
+        filters.append(f'rotate={item.rotation:.8f}*PI/180:ow=iw:oh=ih:c=black')
+    return ','.join(filters)+(',' if filters else '')

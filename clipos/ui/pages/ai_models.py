@@ -123,10 +123,12 @@ class AiModelsPage(BasePage):
         from importlib.metadata import version, PackageNotFoundError
         from ...core.resources import resource_file, resource_dir
         rows=[]
-        for label,package in [('Faster Whisper','faster-whisper'),('YOLO · optional weights required','ultralytics'),('ByteTrack · optional tracker library','supervision'),('OpenCV','opencv-python-headless'),('PySceneDetect','scenedetect')]:
+        for label,package in [('Faster Whisper','faster-whisper'),('YOLOX · optional local ONNX weights required','onnxruntime'),('ByteTrack · optional tracker library','supervision'),('OpenCV','opencv-python-headless'),('PySceneDetect','scenedetect')]:
             try:state='Installed '+version(package)
             except PackageNotFoundError:state='Not installed'
             rows.append(f'{label}: {state} · on-demand, not continuously running')
+        model=Path(self.db.get_setting('person_model_path','') or '__missing__')
+        rows.append('YOLOX selected weights: '+(f'{model.name} · {format_size(model.stat().st_size)} · untested until loaded' if model.is_file() else 'Not selected / missing'))
         rows.append('YuNet weights: '+('Present' if resource_file('models','face_detection_yunet_2023mar.onnx').is_file() else 'Missing'))
         rows.append('Haar cascades: '+('Present' if list(resource_dir('cascades').glob('*.xml')) else 'Missing'))
         self.dependency_status.setText('\n'.join(rows))

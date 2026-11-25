@@ -11,7 +11,7 @@ import time
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
-    QCheckBox,QDoubleSpinBox,QFileDialog,QHBoxLayout,QLabel,QPushButton,
+    QCheckBox,QComboBox,QDoubleSpinBox,QFileDialog,QFormLayout,QHBoxLayout,QLabel,QPushButton,QSplitter,QWidget,QVBoxLayout,
     QProgressBar,QTableWidget,QTableWidgetItem,QScrollArea,
 )
 
@@ -22,6 +22,8 @@ from ...video.multitrack_preview import FrameCompositor
 from ...video.multitrack_render import export_project
 from .base import BasePage
 from ..widgets.multitrack_timeline import MultitrackTimeline
+from ..widgets.flow_layout import FlowLayout
+from ..widgets.common import Card, SectionHeader
 
 
 class FrameWorker(QThread):
@@ -106,7 +108,7 @@ class MultitrackPage(BasePage):
         self.frames=FrameWorker(self)
         self.frames.ready.connect(self._frame_ready)
         self.frames.failed.connect(self._error)
-        row=QHBoxLayout()
+        row=FlowLayout()
         clip_editor=QPushButton('Clip editor / AI Director');clip_editor.clicked.connect(lambda:self.window.navigate('editor'));row.addWidget(clip_editor)
         for text,handler in [('New',self._new),('Import media…',self._import),('Open project…',self._open),
                              ('Save project…',self._save),('Recover workspace',self._recover),
@@ -115,8 +117,33 @@ class MultitrackPage(BasePage):
         self.content_layout.addLayout(row)
         self.preview=QLabel('Import local media to preview. No example video is loaded.')
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter);self.preview.setMinimumHeight(250)
-        self.content_layout.addWidget(self.preview)
-        transport=QHBoxLayout()
+        stage=QSplitter(Qt.Orientation.Horizontal)
+        viewer=Card();viewer.add(SectionHeader('Program monitor','Decoded draft preview · final export uses FFmpeg'))
+        viewer.add(self.preview);stage.addWidget(viewer)
+        inspector=Card();inspector.add(SectionHeader('Inspector','Selected video / audio layer'))
+        form=QFormLayout();self.inspector_controls={}
+        for key,label,low,high in [
+            ('x','Position X',0,1),('y','Position Y',0,1),('w','Width',.01,1),('h','Height',.01,1),
+            ('opacity','Opacity',0,1),('rotation','Rotation °',-180,180),
+            ('brightness','Brightness',-1,1),('contrast','Contrast',0,3),('saturation','Saturation',0,3),
+            ('gain','Audio gain',0,4),('fade_in','Fade in (s)',0,21600),('fade_out','Fade out (s)',0,21600)]:
+            spin=QDoubleSpinBox();spin.setRange(low,high);spin.setDecimals(3);spin.setSingleStep(.05)
+            spin.setEnabled(False);spin.editingFinished.connect(lambda k=key:self._inspect_edit(k))
+            self.inspector_controls[key]=spin;form.addRow(label,spin)
+        inspector.add_layout(form)
+        layouts=FlowLayout()
+        for label,geometry in [('Gameplay above',(0.,0.,1.,2/3)),('Facecam below',(0.,2/3,1.,1/3)),('Fill frame',(0.,0.,1.,1.))]:
+            button=QPushButton(label);button.clicked.connect(lambda checked=False,g=geometry:self._layout_selected(g));layouts.addWidget(button)
+        inspector.add_layout(layouts);stage.addWidget(inspector)
+        stage.setStretchFactor(0,3);stage.setStretchFactor(1,1);stage.setSizes([700,300])
+        self.content_layout.addWidget(stage)
+        canvas=FlowLayout();canvas.addWidget(QLabel('Canvas / export:'))
+        self.canvas_combo=QComboBox()
+        for label,dimensions in [('Vertical · 1080 × 1920',(1080,1920)),('Landscape · 1920 × 1080',(1920,1080)),('Square · 1080 × 1080',(1080,1080))]:self.canvas_combo.addItem(label,dimensions)
+        self.canvas_combo.activated.connect(self._canvas_changed);canvas.addWidget(self.canvas_combo)
+        self.fps_combo=QComboBox();self.fps_combo.addItems(['30 fps','60 fps']);self.fps_combo.activated.connect(self._canvas_changed);canvas.addWidget(self.fps_combo)
+        self.content_layout.addLayout(canvas)
+        transport=FlowLayout()
         self.play=QPushButton('Play silent preview');self.play.clicked.connect(self._toggle_play)
         transport.addWidget(self.play)
         self.play_audio=QPushButton('Play with audio')
@@ -129,9 +156,11 @@ class MultitrackPage(BasePage):
             transport.addWidget(button)
         transport.addWidget(self.cursor)
         self.preview_status=QLabel('Silent decoded preview — no audio clock; not final effects playback')
+        self.preview_status.setWordWrap(True)
+        self.preview_status.setMaximumWidth(390)
         transport.addWidget(self.preview_status,1)
         self.content_layout.addLayout(transport)
-        timeline_controls=QHBoxLayout()
+        timeline_controls=FlowLayout()
         snap=QCheckBox('Snap to edges / playhead / frames');snap.setChecked(True)
         snap.toggled.connect(lambda enabled:setattr(self.timeline,'snap',enabled))
         timeline_controls.addWidget(snap)
@@ -156,14 +185,14 @@ class MultitrackPage(BasePage):
         self.table.itemChanged.connect(self._cell_changed)
         self.table.itemSelectionChanged.connect(self._table_selection_changed)
         self.content_layout.addWidget(self.table)
-        edits=QHBoxLayout()
+        edits=FlowLayout()
         self.ripple=QCheckBox('Ripple delete on affected tracks');edits.addWidget(self.ripple)
         self.linked=QCheckBox('Linked A/V timing edits');self.linked.setChecked(True);edits.addWidget(self.linked)
         for text,handler in [('Split at cursor',self._split),('Relink source…',self._relink),('Delete item',self._delete),('Layer earlier',lambda:self._move(-1)),
                              ('Layer later',lambda:self._move(1)),('Undo',self._undo),('Redo',self._redo)]:
             button=QPushButton(text);button.clicked.connect(handler);edits.addWidget(button)
         self.content_layout.addLayout(edits)
-        automation=QHBoxLayout()
+        automation=FlowLayout()
         automation.addWidget(QLabel('Opacity (video) / gain (audio):'))
         self.key_value=QDoubleSpinBox();self.key_value.setRange(0,4);self.key_value.setDecimals(3);self.key_value.setValue(1.)
         automation.addWidget(self.key_value)
@@ -185,6 +214,37 @@ class MultitrackPage(BasePage):
             shortcut=QShortcut(QKeySequence(key),self)
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.activated.connect(handler);self.shortcuts.append(shortcut)
+
+    def _canvas_changed(self,*_):
+        try:
+            width,height=self.canvas_combo.currentData();fps=30 if self.fps_combo.currentIndex()==0 else 60
+            def change(project):project.width=width;project.height=height;project.fps=fps
+            self.project.edit(change);self._changed()
+        except Exception as exc:self._error(str(exc))
+
+    def _layout_selected(self,geometry):
+        try:
+            lane,item=self._selected()
+            if self.project.find(lane,item)[0].kind!='video':raise ValueError('Select a video layer first')
+            self.project.change_item(lane,item,**dict(zip(('x','y','w','h'),geometry)));self._changed()
+        except Exception as exc:self._error(str(exc))
+
+    def _inspect_edit(self,key):
+        if self._building:return
+        try:
+            lane,item=self._selected();value=self.inspector_controls[key].value()
+            if abs(getattr(self.project.find(lane,item)[1],key)-value)<1e-8:return
+            self.project.change_item(lane,item,**{key:value});self._changed()
+        except Exception as exc:self._error(str(exc));self._refresh_inspector()
+
+    def _refresh_inspector(self):
+        try:lane,item=self.project.find(*self._selected())
+        except (ValueError,IndexError):
+            for spin in self.inspector_controls.values():spin.setEnabled(False)
+            return
+        for key,spin in self.inspector_controls.items():
+            spin.blockSignals(True);spin.setValue(getattr(item,key));spin.blockSignals(False)
+            spin.setEnabled(not lane.locked and (key=='gain' if lane.kind=='audio' else key!='gain'))
 
     def _step_frame(self,delta):
         self._stop()
@@ -266,6 +326,8 @@ class MultitrackPage(BasePage):
         if selected in self._rows:self.table.setCurrentCell(self._rows.index(selected),column)
         else:self.table.setCurrentCell(-1,-1)
         self._building=False
+        self.canvas_combo.setCurrentIndex(max(0,self.canvas_combo.findData((self.project.width,self.project.height))))
+        self.fps_combo.setCurrentIndex(1 if self.project.fps==60 else 0)
         self.timeline.set_project(self.project)
         self._refresh_keys()
         self.cursor.setMaximum(self.project.duration)
@@ -309,6 +371,7 @@ class MultitrackPage(BasePage):
         self._refresh_keys()
 
     def _refresh_keys(self):
+        self._refresh_inspector()
         if not hasattr(self,'key_status'):return
         try:
             lane,item=self.project.find(*self._selected())

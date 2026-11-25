@@ -227,6 +227,10 @@ class ExportCenterPage(BasePage):
         self.bitrate_spin.setSuffix(" kbps")
         form.addRow("Bitrate", self.bitrate_spin)
 
+        self.audio_bitrate_combo=QComboBox()
+        for bitrate in (96,128,160,192,256,320):self.audio_bitrate_combo.addItem(f'AAC · {bitrate} kbps',bitrate)
+        form.addRow('Audio quality',self.audio_bitrate_combo)
+
         self.captions_check = QCheckBox("Burn in captions")
         self.captions_check.setChecked(True)
         form.addRow("", self.captions_check)
@@ -318,6 +322,12 @@ class ExportCenterPage(BasePage):
         if idx >= 0:
             self.aspect_combo.setCurrentIndex(idx)
 
+        for combo,key,default in [(self.recipe_combo,'editing_preset','clean'),(self.codec_combo,'codec','h264'),
+                                   (self.fps_combo,'fps',30),(self.gpu_combo,'encoder','auto'),
+                                   (self.audio_bitrate_combo,'audio_bitrate_kbps',160)]:
+            combo.setCurrentIndex(max(0,combo.findData(settings.get(key,default))))
+        self.bitrate_spin.setValue(int(settings.get('bitrate_kbps',8000)))
+        self.captions_check.setChecked(str(settings.get('auto_caption',True)).lower() not in ('false','0','off'))
         self._on_project_changed()
         self._load_history()
 
@@ -359,6 +369,7 @@ class ExportCenterPage(BasePage):
             "bitrate_kbps": self.bitrate_spin.value(),
             "auto_caption": self.captions_check.isChecked(),
             "encoder": self.gpu_combo.currentData(),
+            "audio_bitrate_kbps": self.audio_bitrate_combo.currentData(),
         }
         rs = render_settings(self.db, overrides)
         x,y,w,h = [spin.value()/100 for spin in self.facecam_controls]

@@ -63,6 +63,7 @@ class RenderSettings:
     fps: int = 30
     codec: str = "h264"           # h264 | h265
     bitrate_kbps: int = 8000
+    audio_bitrate_kbps: int = 160
     crf: int = 21
     caption_style: str = "bold_viral"
     caption_font: str = ""
@@ -71,6 +72,12 @@ class RenderSettings:
     caption_stroke: int = 4
     caption_shadow: bool = True
     caption_background: bool = False
+    caption_primary: str = ''
+    caption_highlight: str = ''
+    caption_outline: str = ''
+    caption_animation: str = ''
+    caption_alignment: str = ''
+    caption_timing_offset: float = 0.
     show_captions: bool = True
     smart_reframe: bool = True
     shot_aware_reframe: bool = True
@@ -644,6 +651,12 @@ class ClipRenderer:
                 shadow_override=settings.caption_shadow,
                 background_override=settings.caption_background,
                 highlight_words=highlights,
+                primary_override=settings.caption_primary,
+                highlight_override=settings.caption_highlight,
+                outline_override=settings.caption_outline,
+                animation_override=settings.caption_animation,
+                alignment_override=settings.caption_alignment,
+                timing_offset=settings.caption_timing_offset,
             )
             result.steps.append(f"Captions: {style.name} ({len(cues)} cues)")
 
@@ -755,7 +768,7 @@ class ClipRenderer:
                     "-b:v", f"{settings.bitrate_kbps}k", "-maxrate", f"{int(settings.bitrate_kbps * 1.3)}k",
                     "-bufsize", f"{settings.bitrate_kbps * 2}k"]
 
-        cmd += ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
+        cmd += ["-c:a", "aac", "-b:a", f"{settings.audio_bitrate_kbps}k", "-ar", "48000", "-ac", "2"]
         cmd += ["-movflags", "+faststart", "-pix_fmt", "yuv420p"]
         cmd += ["-threads", str(threads), str(output)]
 
@@ -786,7 +799,7 @@ class ClipRenderer:
             result.encoder = enc.description
             simple = ["ffmpeg", *cmd[:cmd.index("-c:v")],
                 "-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
-                "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", f"{settings.audio_bitrate_kbps}k", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart", "-threads", str(threads), str(output)]
             runner2 = FFmpegRunner(total_duration=clip_dur,recover_native_crash=True,
                                    progress_cb=lambda p, t: progress_cb(
@@ -911,6 +924,12 @@ class ClipRenderer:
                 shadow_override=settings.caption_shadow,
                 background_override=settings.caption_background,
                 highlight_words=highlights,
+                primary_override=settings.caption_primary,
+                highlight_override=settings.caption_highlight,
+                outline_override=settings.caption_outline,
+                animation_override=settings.caption_animation,
+                alignment_override=settings.caption_alignment,
+                timing_offset=settings.caption_timing_offset,
             )
             result.steps.append(f"Captions: {style.name} ({len(cues)} cues)")
 
@@ -1002,7 +1021,7 @@ class ClipRenderer:
             cmd += ["-c:v", enc.video_encoder, "-preset", settings.cpu_preset,
                     "-crf", str(settings.crf), "-maxrate", f"{settings.bitrate_kbps}k",
                     "-bufsize", f"{settings.bitrate_kbps * 2}k"]
-        cmd += ["-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2"]
+        cmd += ["-c:a", "aac", "-b:a", f"{settings.audio_bitrate_kbps}k", "-ar", "48000", "-ac", "2"]
         cmd += ["-movflags", "+faststart", "-pix_fmt", "yuv420p", "-threads", str(threads), str(output)]
 
         total = sum(s.duration for s in segments)
@@ -1033,7 +1052,7 @@ class ClipRenderer:
                 *_filter_args(filter_complex, self.work_dir, output.stem),
                 "-map", final_v, "-map", final_a,
                 "-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
-                "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", f"{settings.audio_bitrate_kbps}k", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart", "-threads",str(threads), str(output)]
             try:
                 FFmpegRunner(total_duration=total,recover_native_crash=True, cancel_cb=cancel_cb).run(cmd[1:],total_duration=total)
@@ -1076,7 +1095,7 @@ class ClipRenderer:
         else:
             cmd += ["-vf", vf]
         cmd += ["-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
-                "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", f"{settings.audio_bitrate_kbps}k", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart", str(output)]
         return cmd
 
