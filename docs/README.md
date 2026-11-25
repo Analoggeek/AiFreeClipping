@@ -1,34 +1,57 @@
-# CLIPOS website — Analoggeek
+# Ai clipping PRO website
 
-Responsive static product website and download centre. No npm build step,
-tracking, external font service or mandatory JavaScript dependency.
+Responsive, dependency-free product website for the published **v3.6.0** native
+application. GitHub Pages serves `main:/docs` at
+**https://analoggeek.github.io/AiFreeClipping/**.
 
-## Files
-- `index.html`: product page, four platform download cards, all seven release
-  assets, installation guidance and FAQ.
-- `style.css`: responsive dark/mint design and reduced-motion support.
-- `site.js`: optional latest-stable-release discovery from GitHub.
-- `logo.svg`: original CLIPOS brand mark.
+## What is included
+
+- Product branding, real compressed app captures, responsive feature cards and downloads.
+- Floating brand mark, decorative waveform, hover states and scroll reveals.
+- Keyboard-operable screenshot tabs, download filters, mobile navigation, native
+  FAQ disclosures, Linux command copy and persisted reduced-motion preference.
+- OS reduced-motion support; visible keyboard focus, skip link and semantic landmarks.
+- All seven direct v3.6.0 release assets work without JavaScript, with no API request,
+  analytics, cookies, external fonts or external runtime dependencies.
+- No browser-based video processing demo or fake project/model/download statistics.
+
+README interactions are GitHub-compatible links and collapsible details, not scripts.
 
 ## Preview
+
 ```sh
 python -m http.server 3000 --bind 0.0.0.0 --directory docs
 ```
 
-## Publish with GitHub Pages
-After merging these files, open repository **Settings → Pages → Deploy from a
-branch → main → /docs → Save**. The expected URL after successful publication is
-`https://analoggeek.github.io/AiFreeClipping/`. A custom domain can be configured
-in the same settings. Files can also be hosted by any static host.
+## Test
 
-## Download behaviour
-All seven fallback URLs were verified against the published **v1.1.0** release:
-Windows EXE, Apple Silicon DMG, Intel DMG, Linux DEB, both macOS app archives and
-Linux portable ZIP. They work without JavaScript and remain available when the
-GitHub API is rate-limited or offline (the download itself requires internet).
-The optional API check has an eight-second timeout and switches links only when
-a complete newer stable release has compatible assets. It does not infer Mac
-architecture from a browser or redirect users to an arbitrary installer.
+Static contracts run with `python -m pytest tests/test_website.py -q`.
+For the browser suite install Playwright and a browser in a development environment:
 
-The studio illustration is labelled as illustrative, not a real processing demo.
-The website does not guarantee views or claim physical-device certification.
+```sh
+pip install playwright
+playwright install chromium
+python scripts/test_website.py
+```
+
+Set `CHROMIUM_EXECUTABLE` to use an existing Chromium binary. The browser suite
+starts its own temporary HTTP server; no external network is needed. It checks
+mobile/desktop layout, real controls, keyboard tabs, reduced motion, no-JavaScript
+fallback, and the absence of unexpected browser errors or third-party requests.
+
+## Publication
+
+Merging the static files into `main` triggers the repository's existing GitHub Pages
+branch deployment. The Pages build/deployment result must be checked before claiming
+the public site is updated. No desktop installer rebuild or version change is required
+for a website/README-only update. Native v3.6.0 installer assets are not replaced.
+
+## Updating the current release
+
+Update the page, README, static tests and sizes together only after a complete
+release is published. Do not mix platforms from different releases or point the
+feature page at an unknown future release. The visible product name is Ai clipping
+PRO; legacy `CLIPOS` asset/executable names intentionally preserve compatibility.
+
+Feature claims must match the shipped application. In particular, no unrestricted effect library, universal realtime playback or live Gemma
+quality acceptance is claimed on the current page. See the actual release notes for boundaries.
