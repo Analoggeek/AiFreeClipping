@@ -59,7 +59,7 @@ def local_order(rows,direction,host,model):
     return order
 
 
-def select(candidates,duration,count,policy,*,host='http://127.0.0.1:11434',model='llama3.1:8b',
+def select(candidates,duration,count,policy,*,host='http://127.0.0.1:11434',model='gemma:7b',
            cancel_cb=None,ranker=None,preferences=None,evidence_reviewer=None):
     policy.validate()
     if type(count) is not int or not 1<=count<=30:raise ValueError('Target count must be 1–30')

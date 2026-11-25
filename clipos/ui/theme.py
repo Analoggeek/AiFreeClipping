@@ -39,28 +39,28 @@ class Palette:
 
 DARK = Palette(
     name="dark",
-    bg="#0e121a",
-    bg_elevated="#181d26",
-    bg_panel="#1b2432",
-    bg_sidebar="#111925",
-    bg_input="#131821",
-    bg_hover="#29313e",
-    bg_active="#243a42",
+    bg="#0b0d1c",
+    bg_elevated="#15182d",
+    bg_panel="#1c1e38",
+    bg_sidebar="#101426",
+    bg_input="#101326",
+    bg_hover="#2c2f4e",
+    bg_active="#3e2976",
     text="#f2f2f5",
     text_dim="#b3bfd1",
     text_faint="#8993a5",
-    border="#29313e",
+    border="#2c2f4e",
     border_strong="#3c495b",
-    accent="#6ee7ce",
-    accent_hover="#83e6d1",
-    accent_text="#102820",
+    accent="#9755f7",
+    accent_hover="#ad79ff",
+    accent_text="#ffffff",
     success="#32d74b",
     warning="#ff9f0a",
     danger="#ff453a",
     info="#5e5ce6",
     shadow="rgba(0, 0, 0, 160)",
-    gradient_a="#101319",
-    gradient_b="#0c1016",
+    gradient_a="#101329",
+    gradient_b="#0a0c1b",
 )
 
 LIGHT = Palette(
@@ -187,6 +187,14 @@ QToolTip {{
 #SidebarBrandAccent {{
     color: {p.accent};
 }}
+QFrame#DashboardHero {{
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 #362064,stop:0.6 #322875,stop:1 #243975);
+    border: 1px solid #6546a1; border-radius: 22px;
+}}
+QLabel#HeroTitle {{font-size:30px;font-weight:750;color:#ffffff;}}
+QFrame#ImportDrop {{border:1px dashed #956be2;border-radius:20px;background:{p.bg_elevated};}}
+QPushButton#QuickStyle {{min-height:62px;border-radius:15px;font-weight:650;}}
+QPushButton#QuickStyle:checked {{border:2px solid {p.accent};background:{p.bg_active};}}
 #SidebarSection {{
     font-size: 10px;
     font-weight: 700;
@@ -208,7 +216,7 @@ QPushButton#NavButton:hover {{
     color: {p.text};
 }}
 QPushButton#NavButton:checked {{
-    background-color: {p.accent};
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {p.accent},stop:1 {p.info});
     color: {p.accent_text};
     font-weight: 600;
 }}
@@ -271,7 +279,7 @@ QPushButton:hover {{ background-color: {p.bg_hover}; }}
 QPushButton:pressed {{ background-color: {p.bg_active}; }}
 QPushButton:disabled {{ color: {p.text_faint}; border-color: {p.border}; }}
 QPushButton#Primary {{
-    background-color: {p.accent};
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {p.accent},stop:1 {p.info});
     border: 1px solid {p.accent};
     color: {p.accent_text};
     font-weight: 620;
@@ -343,7 +351,7 @@ QCheckBox::indicator {{
     background: {p.bg_input};
 }}
 QCheckBox::indicator:checked {{
-    background-color: {p.accent};
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {p.accent},stop:1 {p.info});
     border-color: {p.accent};
     image: none;
 }}
@@ -361,7 +369,7 @@ QListWidget::item, QTreeWidget::item {{
 }}
 QListWidget::item:hover, QTreeWidget::item:hover {{ background-color: {p.bg_hover}; }}
 QListWidget::item:selected, QTreeWidget::item:selected {{
-    background-color: {p.accent}; color: {p.accent_text};
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {p.accent},stop:1 {p.info}); color: {p.accent_text};
 }}
 QHeaderView::section {{
     background-color: {p.bg_panel};
@@ -447,7 +455,7 @@ QScrollArea {{ background: transparent; border: none; }}
 QScrollArea > QWidget > QWidget {{ background: transparent; }}
 #Divider {{ background: {p.border}; max-height: 1px; min-height: 1px; border: none; }}
 #Badge {{
-    background-color: {p.accent};
+    background: qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {p.accent},stop:1 {p.info});
     color: {p.accent_text};
     border-radius: 8px;
     padding: 1px 7px;

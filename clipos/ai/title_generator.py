@@ -282,7 +282,7 @@ def generate_metadata(
     keywords: list[str],
     title_hint: str = "",
     use_llm: bool = True,
-    llm_model: str = "llama3.1:8b",
+    llm_model: str = "gemma:7b",
     ollama_host: str = "http://127.0.0.1:11434",
     timeout: float = 120.0,
 ) -> ClipMetadata:

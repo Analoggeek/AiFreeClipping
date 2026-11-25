@@ -58,7 +58,8 @@ def test_startup_is_lazy_and_workspace_is_removed_without_deleting_projects(tmp_
         assert set(window.pages)=={'workflow'}
         assert 'multitrack' not in window.nav_buttons and 'multitrack' not in window._page_classes
         window.navigate('templates')
-        assert 'templates' in window.pages
+        assert 'templates' not in window.pages  # retired at user request
+        assert not {'templates','captions','longform'} & window._page_classes.keys()
         window.navigate('settings')
         assert window.pages['settings']._hardware_worker is not None
     finally:

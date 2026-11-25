@@ -276,7 +276,7 @@ class ClipOSPipeline:
                 try:
                     parsed=compile_intent(policy.direction,analysis.duration,
                         self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
-                        self.db.get_setting('llm_model','llama3.1:8b'))
+                        self.db.get_setting('llm_model','gemma:7b'))
                     self._check_cancel()
                     candidate_policy=replace(policy,include=tuple(dict.fromkeys([*policy.include,*parsed['prefer']])),
                         exclude=tuple(dict.fromkeys([*policy.exclude,*parsed['exclude']]))).validate()
@@ -303,7 +303,7 @@ class ClipOSPipeline:
             evidence_reviewer=evidence_reviewer,
             selection_policy=policy,selection_report=selection_report,selection_preferences=preferences,
             selection_host=self.db.get_setting('ollama_host','http://127.0.0.1:11434'),
-            selection_model=self.db.get_setting('llm_model','llama3.1:8b'),cancel_cb=self._cancel_requested,
+            selection_model=self.db.get_setting('llm_model','gemma:7b'),cancel_cb=self._cancel_requested,
             duration=analysis.duration,
             selected_ranges=selected_ranges,
             audio=analysis.audio or audio_analysis.AudioAnalysis(),
@@ -359,7 +359,7 @@ class ClipOSPipeline:
                 keywords=c.keywords,
                 title_hint=c.title,
                 use_llm=str(self.db.get_setting("use_llm", "0")).lower() in ('1','true','on'),
-                llm_model=self.db.get_setting("llm_model", "llama3.1:8b"),
+                llm_model=self.db.get_setting("llm_model", "gemma:7b"),
                 ollama_host=self.db.get_setting("ollama_host", "http://127.0.0.1:11434"),
             )
             clip_id = self.db.create_clip(

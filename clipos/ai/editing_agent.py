@@ -81,7 +81,7 @@ def validate_plan(raw,duration):
     return EditPlan(dict(values),ranges,reason)
 
 
-def propose_plan(instruction,duration,transcript='',evidence=None,host='http://127.0.0.1:11434',model='qwen2.5:3b'):
+def propose_plan(instruction,duration,transcript='',evidence=None,host='http://127.0.0.1:11434',model='gemma:7b',profile=None):
     if not isinstance(instruction,str) or not 3<=len(instruction.strip())<=2000:raise InvalidEditPlan('Use an instruction of 3–2000 characters')
     schema={'version':1,'settings':{key:sorted(options) for key,options in ENUMS.items()},
             'numeric_limits':{k:[v[0],v[1],v[2].__name__] for k,v in NUMBERS.items()},
@@ -95,10 +95,22 @@ def propose_plan(instruction,duration,transcript='',evidence=None,host='http://1
             'Absent evidence is unknown. Do not promise virality. Preserve unspecified settings. '
             'Schema and allowed settings (numeric_limits/boolean_settings describe keys inside settings):\n'
             +json.dumps(schema,allow_nan=False)+'\nData:\n'+json.dumps(context,allow_nan=False,ensure_ascii=False))
-    response=LocalOllama(host).generate(prompt,model,json_output=True)
-    try:raw=json.loads(response)
-    except (json.JSONDecodeError,TypeError) as exc:raise InvalidEditPlan('Local model did not return a JSON edit plan') from exc
-    return validate_plan(raw,duration)
+    client=LocalOllama(host)
+    for attempt in range(2):
+        kwargs={'json_output':True}
+        if profile is not None:
+            from .gemma_runtime import PROFILES
+            if profile not in PROFILES:raise InvalidEditPlan('Unknown local inference profile')
+            kwargs['options']=PROFILES[profile]
+        response=client.generate(prompt,model,**kwargs)
+        try:
+            raw=json.loads(response)
+            return validate_plan(raw,duration)
+        except (json.JSONDecodeError,TypeError,InvalidEditPlan) as exc:
+            if attempt:raise InvalidEditPlan('Local model returned an invalid plan twice; no changes applied') from exc
+            # Recompile from original evidence/schema, never execute or promote
+            # the malformed response into privileged instructions.
+            prompt+='\nPrevious attempt failed schema validation. Return only a valid supported JSON plan.'
 
 
 def apply_plan(db,project_id,plan):
@@ -114,9 +126,41 @@ def apply_plan(db,project_id,plan):
     if 'default_aspect' in settings:settings['aspect_ratio']=settings['default_aspect']
     updates={**settings,key:json.dumps(state,allow_nan=False),
              f'agent_plan:{project_id}':json.dumps(checked.to_dict(),allow_nan=False)}
-    # One transaction: invalid/failed plans cannot partially change project state.
+    # Settings/ranges plus durable reviewed-plan history commit together.
     with db._write_lock:
         with db.conn:
+            history_key=f'agent_history:{project_id}'
+            row=db.conn.execute('SELECT value FROM settings WHERE key=?',(history_key,)).fetchone()
+            history=json.loads(row[0]) if row else {'entries':[],'cursor':0}
+            before={}
+            for name in updates:
+                row=db.conn.execute('SELECT value FROM settings WHERE key=?',(name,)).fetchone()
+                before[name]=row[0] if row else None
+            after={key:str(value) for key,value in updates.items()}
+            entries=history['entries'][:history['cursor']]+[{'before':before,'after':after}]
+            history={'entries':entries[-20:],'cursor':min(20,len(entries))}
             db.conn.executemany('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',
-                                [(k,str(v)) for k,v in updates.items()])
+                                list(after.items())+[(history_key,json.dumps(history,allow_nan=False))])
     return checked
+
+
+def step_history(db,project_id,*,redo=False):
+    """Undo/redo only untouched reviewed settings. Never overwrite later edits."""
+    history_key=f'agent_history:{project_id}'
+    with db._write_lock:
+        with db.conn:
+            row=db.conn.execute('SELECT value FROM settings WHERE key=?',(history_key,)).fetchone()
+            if row is None:raise InvalidEditPlan('No reviewed director changes in this project')
+            history=json.loads(row[0]);cursor=history['cursor'];entries=history['entries']
+            if (redo and cursor>=len(entries)) or (not redo and cursor<=0):raise InvalidEditPlan('No director changes to '+('redo' if redo else 'undo'))
+            entry=entries[cursor if redo else cursor-1]
+            expected=entry['before' if redo else 'after'];target=entry['after' if redo else 'before']
+            for name,value in expected.items():
+                row=db.conn.execute('SELECT value FROM settings WHERE key=?',(name,)).fetchone()
+                if (row[0] if row else None)!=value:raise InvalidEditPlan('Settings changed since this director action; refusing to overwrite newer edits')
+            for name,value in target.items():
+                if value is None:db.conn.execute('DELETE FROM settings WHERE key=?',(name,))
+                else:db.conn.execute('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',(name,value))
+            history['cursor']=cursor+(1 if redo else -1)
+            db.conn.execute('UPDATE settings SET value=? WHERE key=?',(json.dumps(history),history_key))
+    return True

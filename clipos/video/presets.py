@@ -3,6 +3,10 @@ PRESETS = {
     "clean": ("Clean Studio", "Restrained colour, readable captions, original framing"),
     "podcast": ("Podcast Focus", "Active-speaker framing and clean lower-third captions"),
     "gaming": ("Gameplay + Facecam", "Gameplay above; selected facecam region below. No middle cutout."),
+    "talking_head": ("Talking Head", "Subject-aware framing with restrained readable captions"),
+    "educational": ("Educational", "Clean framing and documentary captions without aggressive colour"),
+    "reaction": ("Reaction", "Punchy contrast and bold captions; no invented sound effects"),
+    "cinematic": ("Cinematic", "Restrained saturation and contrast, original framing, minimal captions"),
     "story": ("Story Highlight", "High-contrast captions and a concise opening hook"),
 }
 
@@ -11,11 +15,11 @@ def apply_preset(settings, key):
     settings.editing_preset = key if key in PRESETS else "clean"
     settings.sound_effects = False  # Avoid an unrelated whoosh on every short.
     settings.caption_style = {"podcast": "modern_podcast", "gaming": "clean_professional",
-                              "story": "bold_viral"}.get(key, "minimal_white")
-    settings.smart_reframe = key == "podcast"
+                              "story": "bold_viral", "reaction":"bold_viral", "educational":"clean_professional"}.get(key, "minimal_white")
+    settings.smart_reframe = key in ("podcast","talking_head")
     settings.auto_zoom = False
-    settings.contrast = 1.03 if key == "story" else 1.0
-    settings.saturation = 1.04 if key == "gaming" else 1.0
+    settings.contrast = 1.06 if key == "reaction" else (1.03 if key in ("story","cinematic") else 1.0)
+    settings.saturation = .92 if key == "cinematic" else (1.04 if key in ("gaming","reaction") else 1.0)
     return settings
 
 
