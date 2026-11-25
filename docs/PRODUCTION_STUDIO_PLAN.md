@@ -26,11 +26,28 @@ The studio consumes generated output references rather than modifying sources.
   numeric trims/moves, linked split/remove, undo/redo and JSON save/open.
 - Existing project validation/backup recovery and no-overwrite-media protection.
 
-## Phase 1 not complete — do not advertise a complete professional editor
+## Phase 1 follow-up implemented
 
-Queue thumbnails/resolution, groups, rename/duplicate/reorder, graphical
-multiselection, track-lock controls, waveforms, proxy/composited audio-clocked
-preview, full timeline toolbar and frame-timecode UI remain to be integrated.
+- Persistent queue order and custom groups; multi-selected up/down movement.
+- Rename and non-destructive duplicate library records. Remove asks confirmation
+  and keeps media plus existing timeline references; it does not delete sources.
+- Available stored thumbnails and export dimensions shown, with explicit
+  unavailable metadata rather than invented resolution/thumbnail data.
+- Per-track lock and visibility controls, plus timeline zoom controls.
+- Canvas width/height/fps configuration uses validated undoable transactions.
+- Background source-amplitude waveform decoding with cancellation and bounded
+  caching (current engine supports sources up to 30 minutes).
+- Rendered timeline snapshot preview with mixed audio, using the actual export
+  graph and canvas, background progress, cancellation and CPU encoding. It is
+  explicitly a rendered snapshot, not a real-time/proxy playback claim.
+- Track/item selection survives transactions so repeated lock/show operations
+  continue to act on the selected track.
+
+## Phase 1 remaining — do not advertise a complete professional editor
+
+Graphical multiselection, real-time/proxy composited audio-clocked preview,
+queue metadata generation for legacy outputs without metadata, full timeline
+toolbar, and frame-timecode UI remain to be integrated.
 The current timeline stores seconds with frame-grid snapping; this is not yet
 a complete rational-timebase editor. Queue state is not a fabricated render,
 caption or editing-completion indicator.
@@ -42,9 +59,11 @@ No buttons for these unimplemented features are shown.
 
 ## Validation
 
-`tests/test_clean_clipping_ui.py`, `tests/test_multitrack.py`, and
-`tests/test_graphical_multitrack.py`: 31 passed, 1 skipped in the headless native
-test environment. The added queue integration test creates 20 database entries
+Full current regression: **652 passed, 15 skipped** in 51.77 seconds.
+Focused queue/native timeline/render suite: **33 passed, 1 skipped**.
+Queue restart tests cover groups/order/rename/duplicates and original file
+preservation. Native integration renders and probes the actual timeline preview
+with audio and builds a real decoded waveform. These are headless checks. The added queue integration test creates 20 database entries
 referencing a real generated FFmpeg fixture, imports them in a worker, splits
 linked media and saves/reopens the assembly. It is NOT evidence of generating
 20 distinct AI clips. Physical permission dialogs and GPU acceptance remain

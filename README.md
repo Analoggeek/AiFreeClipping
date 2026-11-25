@@ -266,7 +266,10 @@ their own LGPL/GPL terms.
 An additive **Clip Queue & Editor** foundation is under development in the same
 native app. Generated clips feed the queue, which supports multiselection and
 background import into the existing non-destructive multitrack assembly engine.
-Graphical trim/move, linked A/V split/remove, undo/redo and assembly save/open are
-available in this increment. Source playback is not composited timeline preview.
+Graphical trim/move, linked A/V split/remove, undo/redo, assembly save/open,
+persistent queue groups/order, track locking/visibility, source waveforms and
+background-rendered timeline snapshots with mixed audio are available. Source
+playback and rendered snapshots are explicitly distinct; real-time composited
+playback is not yet implemented.
 This is **not yet the complete professional editor** or a new published release.
 See [phase status and limitations](docs/PRODUCTION_STUDIO_PLAN.md).

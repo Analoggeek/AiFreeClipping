@@ -218,3 +218,49 @@ def test_studio_twenty_queue_entries_real_media_import_split_and_reopen(
     page.project.save(saved)
     assert MultitrackProject.load(saved).to_dict() == page.project.to_dict()
     assert video.is_file()
+
+
+def test_studio_track_controls_waveforms_and_actual_timeline_preview(native, tmp_path):
+    from clipos.core.ffmpeg import probe
+    from clipos.video.multitrack import MultitrackProject
+
+    app, db, window, paths = native
+    video = source(tmp_path, 320, 180)
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video)
+    page.draw_timeline()
+    node = page.timeline.topLevelItem(0)
+    page.timeline.setCurrentItem(node)
+    page.toggle_track("locked")
+    assert page.project.lanes[0].locked
+    page.toggle_track("locked")
+    page.toggle_track("enabled")
+    assert not page.project.lanes[0].enabled
+    page.toggle_track("enabled")
+    captured = []
+    with patch(
+        "PySide6.QtGui.QDesktopServices.openUrl",
+        side_effect=lambda url: captured.append(url.toLocalFile()),
+    ):
+        page.render_preview()
+        deadline = time.monotonic() + 20
+        while page.worker.isRunning() and time.monotonic() < deadline:
+            app.processEvents()
+            QTest.qWait(5)
+        app.processEvents()
+    assert not page.worker.isRunning()
+    assert "Rendered timeline snapshot" in page.status.text(), page.status.text()
+    # Headless runner uses system-player fallback; on multimedia-capable hosts
+    # inspect the source actually loaded by QMediaPlayer instead.
+    output = page.player.source().toLocalFile() if page.player else captured[-1]
+    info = probe(output)
+    assert (info.video.width, info.video.height) == (160, 90)
+    assert info.has_audio
+    from clipos.video.waveform import build_waveform
+
+    waveform = build_waveform(output, tmp_path / "waveforms")
+    assert waveform["duration"] > 0
+    assert len(waveform["peaks"]) > 0
+    Path(output).unlink(missing_ok=True)
