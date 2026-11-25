@@ -59,6 +59,16 @@ class FrameCompositor:
             resized=cv2.resize(frame,(max(w,math.ceil(frame.shape[1]*ratio)),max(h,math.ceil(frame.shape[0]*ratio))))
             left=(resized.shape[1]-w)//2;top=(resized.shape[0]-h)//2
             layer=resized[top:top+h,left:left+w]
+            if (item.brightness,item.contrast)!=(0.,1.):
+                layer=np.clip((layer.astype(np.float32)-127.5)*item.contrast+127.5+255*item.brightness,0,255).astype(np.uint8)
+            if item.saturation!=1.:
+                yuv=cv2.cvtColor(layer,cv2.COLOR_BGR2YUV).astype(np.float32)
+                yuv[:,:,1:]=(yuv[:,:,1:]-128)*item.saturation+128
+                layer=cv2.cvtColor(np.clip(yuv,0,255).astype(np.uint8),cv2.COLOR_YUV2BGR)
+            if item.rotation:
+                # FFmpeg's positive angle rotates clockwise in image coordinates.
+                matrix=cv2.getRotationMatrix2D(((w-1)/2,(h-1)/2),-item.rotation,1.)
+                layer=cv2.warpAffine(layer,matrix,(w,h))
             opacity=curve_value(item.opacity_keys,time-item.at,item.opacity)*fade_gain(item,time-item.at)
             output[y:y+h,x:x+w]=np.round(layer.astype(np.float32)*opacity+
                 output[y:y+h,x:x+w].astype(np.float32)*(1-opacity)).astype(np.uint8)

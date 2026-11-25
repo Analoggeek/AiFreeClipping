@@ -1,6 +1,6 @@
-# CLIPOS 3.1.1 — Offline-first Video Clip Editor
+# Ai clipping PRO 3.5 — Offline-first Video Clip Editor
 
-**CLIPOS**, developed by **Analoggeek**, is a native desktop application for
+**Ai clipping PRO** (formerly CLIPOS), developed by **Analoggeek**, is a native desktop application for
 turning long recordings into edited short-form videos. Import a recording,
 select moments and framing, apply editing presets and captions, review the
 rendered videos, and export the batch. Processing runs locally with **Python,
@@ -9,7 +9,14 @@ PySide6, Faster-Whisper and FFmpeg**—no mandatory cloud account or subscriptio
 **v3.1.1 release:** YouTube publishing/account connection and the separate
 Gaming Studio 2.0 navigation have been removed; authorised URL import remains.
 
-## Download v3.1.1
+## Downloads
+
+[3.5 implementation and boundaries](docs/PRO_V35_IMPLEMENTATION.md) · [Release notes](RELEASE_NOTES.md)
+
+The table below remains the last published stable v3.1.1 until the v3.5 native
+release workflow has completed successfully. Source version alone is not a release.
+
+### Previous stable v3.1.1
 
 | Platform | Installer |
 | --- | --- |

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
-    QGridLayout, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
+    QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from ...core.hardware import detect_hardware, memory_pressure
@@ -27,6 +27,7 @@ class HomePage(BasePage):
     page_subtitle = "Turn long videos into ready-to-post shorts — entirely on your device."
 
     def __init__(self, window) -> None:
+        self._sys_stop=threading.Event()
         self._sys_thread: threading.Thread | None = None
         self._sys_data: dict = {}
         self._recent_container: QVBoxLayout | None = None
@@ -34,6 +35,14 @@ class HomePage(BasePage):
 
     # -- layout ------------------------------------------------------------------
     def build(self) -> None:
+        welcome=Card();welcome.setObjectName('DashboardHero')
+        title=QLabel('Your next great edit starts here.');title.setObjectName('HeroTitle');title.setWordWrap(True);welcome.add(title)
+        welcome.add(QLabel('Ai clipping PRO 3.5 · Local intelligence. Real timelines. Your media stays yours.'))
+        self.content_layout.addWidget(welcome)
+        director=Card();director.add(SectionHeader('AI Director','Uses your selected local Gemma/Ollama weights and the active project. Review every proposed change.'))
+        self.instruction=QLineEdit();self.instruction.setPlaceholderText('Create 10 gaming shorts; gameplay above and facecam below…');self.instruction.setMaxLength(2000);director.add(self.instruction)
+        propose=QPushButton('Open director & propose edits');propose.setObjectName('Primary');propose.clicked.connect(self._director);director.add(propose)
+        self.content_layout.addWidget(director)
         # --- quick actions -------------------------------------------------------
         actions = Card()
         row = QHBoxLayout()
@@ -69,7 +78,7 @@ class HomePage(BasePage):
             self.tiles[key] = tile
             stats_row.addWidget(tile)
 
-        add_tile("projects", "◧", "Videos Processed", "#0a84ff")
+        add_tile("projects", "◧", "Local Projects", "#0a84ff")
         add_tile("clips", "✂", "Shorts Generated", "#5e5ce6")
         add_tile("exports", "↓", "Exported Clips", "#32d74b")
         add_tile("storage", "▤", "Storage Used", "#ff9f0a")
@@ -78,6 +87,7 @@ class HomePage(BasePage):
         # --- recent projects + system status --------------------------------------
         grid = QGridLayout()
         grid.setSpacing(Metrics.md)
+        grid.setColumnStretch(0,2);grid.setColumnStretch(1,2);grid.setColumnStretch(2,2)
 
         recent = Card()
         recent_header = SectionHeader("Recent Projects", "Pick up where you left off")
@@ -128,6 +138,12 @@ class HomePage(BasePage):
         self._start_system_monitor()
 
     # -- data --------------------------------------------------------------------
+    def _director(self):
+        workflow=self.window._ensure_page('workflow')
+        workflow.agent_instruction.setText(self.instruction.text())
+        self.window.navigate('workflow');workflow.go(0)
+        workflow._propose_agent_plan()
+
     def refresh(self) -> None:
         stats = self.db.stats()
         self.tiles["projects"].set_value(str(stats["projects"]))
@@ -193,7 +209,8 @@ class HomePage(BasePage):
         for size, (repo, approx) in WHISPER_SIZES.items():
             installed = model_installed(size)
             rows.append((f"Whisper {size}", approx, installed))
-        rows.append(("YuNet face detector", "230 KB", True))
+        from ...core.resources import resource_file
+        rows.append(("YuNet face detector", "bundled weights", resource_file('models','face_detection_yunet_2023mar.onnx').is_file()))
 
         for name, size, ok in rows:
             row = QWidget()
@@ -247,7 +264,7 @@ class HomePage(BasePage):
     # -- system monitor ----------------------------------------------------------
     def _start_system_monitor(self) -> None:
         def worker() -> None:
-            while True:
+            while not self._sys_stop.is_set():
                 try:
                     prof = detect_hardware()
                     self._sys_data = {
@@ -262,7 +279,7 @@ class HomePage(BasePage):
                     }
                 except Exception:
                     pass
-                time.sleep(3.0)
+                self._sys_stop.wait(3.0)
 
         self._sys_thread = threading.Thread(target=worker, daemon=True)
         self._sys_thread.start()
@@ -315,3 +332,9 @@ class HomePage(BasePage):
             elif "qsv" in e:
                 accel.append("QuickSync")
         row("◈", "Acceleration", ", ".join(accel) if accel else "CPU only", "#32d74b")
+
+
+    def shutdown(self):
+        self._sys_stop.set()
+        if hasattr(self,'_status_timer'):self._status_timer.stop()
+        if self._sys_thread:self._sys_thread.join(timeout=3.)

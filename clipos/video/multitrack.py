@@ -42,6 +42,10 @@ class Item:
     w: float = 1.
     h: float = 1.
     opacity: float = 1.
+    brightness: float = 0.
+    contrast: float = 1.
+    saturation: float = 1.
+    rotation: float = 0.
     fade_in: float = 0.  # output/timeline seconds
     fade_out: float = 0.
     opacity_keys: list = field(default_factory=list)
@@ -121,6 +125,10 @@ class MultitrackProject:
                 if not (media.has_video if lane.kind=='video' else media.has_audio):raise ValueError('Media has no required stream')
                 number(item.at,0,1e7);number(item.source_in,0,media.duration)
                 number(item.length,.001,media.duration);number(item.speed,.25,4);number(item.gain,0,4)
+                number(item.brightness,-1,1);number(item.contrast,0,3)
+                number(item.saturation,0,3);number(item.rotation,-180,180)
+                if lane.kind=='audio' and (item.brightness,item.contrast,item.saturation,item.rotation)!=(0.,1.,1.,0.):
+                    raise ValueError('Color and rotation controls require a video track')
                 number(item.fade_in,0,item.duration);number(item.fade_out,0,item.duration)
                 if item.fade_in+item.fade_out>item.duration+1e-6:raise ValueError('Fades exceed item duration')
                 for name,limit,kind in [('opacity_keys',1,'video'),('gain_keys',4,'audio')]:
@@ -236,7 +244,7 @@ class MultitrackProject:
         return targets
 
     def change_item(self,lane_id,item_id,*,linked=False,**values):
-        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out'}
+        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)

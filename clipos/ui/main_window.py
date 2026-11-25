@@ -6,7 +6,7 @@ import webbrowser
 from pathlib import Path
 
 from PySide6.QtCore import QPropertyAnimation, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QIcon, QAction, QKeySequence, QShortcut
+from PySide6.QtGui import QGuiApplication, QIcon, QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
     QPushButton, QStyle, QSizePolicy, QStackedWidget, QStatusBar, QVBoxLayout, QWidget,
@@ -80,7 +80,7 @@ class TitleBar(QFrame):
 
         lay.addStretch(1)
 
-        self.title = QLabel("CLIPOS")
+        self.title = QLabel("Ai clipping PRO")
         self.title.setObjectName("TitleBarTitle")
         lay.addWidget(self.title)
 
@@ -103,7 +103,7 @@ class TitleBar(QFrame):
         b.setCursor(Qt.CursorShape.PointingHandCursor)
         b.setToolTip("")
         b.setStyleSheet(
-            f"QPushButton {{ background-color: {color}; border: none; border-radius: 6px; }}"
+            f"QPushButton {{ background-color: {color}; border: none; border-radius: 6px; min-width: 12px; max-width: 12px; min-height: 12px; max-height: 12px; padding: 0px; }}"
             f"QPushButton:hover {{ background-color: {color}; }}"
         )
         return b
@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
         self.current_key = "home"
         self._busy = False
 
-        self.setWindowTitle("CLIPOS 3.1.1 — Video Clip Editor")
+        self.setWindowTitle("Ai clipping PRO 3.5 — Local AI Video Editor")
         self.setMinimumSize(1180, 760)
         self.resize(1440, 900)
 
@@ -188,6 +188,8 @@ class MainWindow(QMainWindow):
         bar = QFrame()
         bar.setObjectName("Sidebar")
         bar.setFixedWidth(Metrics.sidebar_width)
+        self.sidebar=bar
+        self.sidebar_collapsed=False
 
         lay = QVBoxLayout(bar)
         lay.setContentsMargins(10, 12, 10, 12)
@@ -196,22 +198,28 @@ class MainWindow(QMainWindow):
         from ..core.resources import resource_file
         self.setWindowIcon(QIcon(str(resource_file('icons','clipos-mark.svg'))))
         brand_row=QHBoxLayout()
-        mark=QLabel();mark.setPixmap(self.windowIcon().pixmap(48,48));brand_row.addWidget(mark)
-        brand = QLabel("CLIPOS")
+        self.brand_mark=mark=QLabel();mark.setPixmap(self.windowIcon().pixmap(48,48));brand_row.addWidget(mark)
+        self.brand = brand = QLabel("Ai clipping PRO")
         brand.setObjectName("SidebarBrand")
         brand_row.addWidget(brand);brand_row.addStretch();lay.addLayout(brand_row)
 
-        tag = QLabel("AI Clipping Studio")
+        self.brand_tag = tag = QLabel("3.5  ·  Local AI Video Editor")
         tag.setObjectName("CardSubtitle")
         lay.addWidget(tag)
         lay.addSpacing(12)
 
+        self.collapse_button=QPushButton('‹  Collapse sidebar');self.collapse_button.setToolTip('Collapse / expand navigation')
+        self.collapse_button.clicked.connect(self._toggle_sidebar);lay.addWidget(self.collapse_button)
         nav_defs = [
+            ("home", "", "Home"),
             ("workflow", "", "Create clips"),
             ("projects", "", "Projects"),
             ("library", "", "Clip library"),
-            ("editor", "", "Advanced editor"),
+            ("editor", "", "Editor (Pro)"),
+            ("captions", "", "Caption Studio"),
+            ("templates", "", "Templates"),
             ("models", "", "AI models"),
+            ("export", "", "Export Center"),
             ("settings", "", "Settings"),
         ]
         self._nav_group = QButtonGroup(self)
@@ -237,7 +245,22 @@ class MainWindow(QMainWindow):
 
         return bar
 
+    def _toggle_sidebar(self):
+        self.sidebar_collapsed=not self.sidebar_collapsed
+        self.sidebar.setFixedWidth(68 if self.sidebar_collapsed else Metrics.sidebar_width)
+        self.brand_mark.setVisible(not self.sidebar_collapsed)
+        self.brand.setVisible(not self.sidebar_collapsed);self.brand_tag.setVisible(not self.sidebar_collapsed)
+        self.privacy.setVisible(not self.sidebar_collapsed);self.storage_label.setVisible(not self.sidebar_collapsed)
+        self.collapse_button.setText('›' if self.sidebar_collapsed else '‹  Collapse sidebar')
+        for button in self.nav_buttons.values():
+            button.setText('' if self.sidebar_collapsed else button.toolTip())
+        self.db.set_setting('sidebar_collapsed',int(self.sidebar_collapsed))
+
     def _register_pages(self) -> None:
+        from .pages.home import HomePage
+        from .pages.caption_studio import CaptionStudioPage
+        from .pages.templates import TemplatesPage
+        from .pages.multitrack import MultitrackPage
         from .pages.ai_models import AiModelsPage
         from .pages.clip_library import ClipLibraryPage
         from .pages.editor import EditorPage
@@ -247,6 +270,8 @@ class MainWindow(QMainWindow):
         from .pages.settings_page import SettingsPage
 
         page_classes = [
+            ("home",HomePage), ("captions",CaptionStudioPage),
+            ("templates",TemplatesPage), ("multitrack",MultitrackPage),
             ("workflow", WorkflowPage),
             ("projects", MyProjectsPage),
             ("library", ClipLibraryPage),
@@ -292,6 +317,11 @@ class MainWindow(QMainWindow):
         theme = settings.get("theme", "dark")
         apply_theme(self, theme)
         self._update_storage_label()
+        if bool(settings.get('sidebar_collapsed',False))!=self.sidebar_collapsed:self._toggle_sidebar()
+        QGuiApplication.styleHints().colorSchemeChanged.connect(self._system_theme_changed)
+
+    def _system_theme_changed(self,*_):
+        if self.db.get_setting('theme','dark')=='system':apply_theme(self,'system')
 
     def _update_storage_label(self) -> None:
         from .widgets.common import format_size
@@ -302,7 +332,7 @@ class MainWindow(QMainWindow):
     # -- navigation --------------------------------------------------------------
     def navigate(self, key: str) -> None:
         requested = key
-        key = {"gaming":"workflow", "home":"workflow", "new":"workflow", "studio":"workflow", "export":"workflow"}.get(key,key)
+        key = {"gaming":"workflow", "new":"workflow", "studio":"workflow"}.get(key,key)
         if self._ensure_page(key) is None:
             return
         self.current_key = key
@@ -310,7 +340,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(page)
         if key == 'editor' and getattr(self,'active_project',None) and page.project_id != self.active_project:
             page.load_project(self.active_project)
-        btn = self.nav_buttons.get(key)
+        btn = self.nav_buttons.get("editor" if key=="multitrack" else key)
         if btn:
             btn.setChecked(True)
         self.titlebar.subtitle.setText(getattr(page, "subtitle_text", ""))
@@ -369,7 +399,7 @@ class MainWindow(QMainWindow):
 
     def open_in_editor(self, project_id: int, clip_id: int | None = None) -> None:
         """Open a project (and optionally a clip) in the Preview Editor."""
-        page = self.pages.get("editor")
+        page = self._ensure_page("editor")
         if page is None:
             return
         self.set_active_project(project_id)

@@ -83,17 +83,21 @@ class AiModelsPage(BasePage):
         self.progress_label.setVisible(False)
         self.content_layout.addWidget(self.progress_label)
 
+        dependencies=Card();dependencies.add(SectionHeader('Vision & analysis components','Libraries are not downloadable model weights. Installed does not mean running.'))
+        self.dependency_status=QLabel();self.dependency_status.setWordWrap(True);dependencies.add(self.dependency_status)
+        inspect=QPushButton('Refresh installed versions');inspect.clicked.connect(self._inspect_dependencies);dependencies.add(inspect);self.content_layout.addWidget(dependencies)
+        self._inspect_dependencies()
         other = Card()
         other.add(SectionHeader("Bundled Models", "Ship with the application"))
         yunet = QLabel(
-            "●  YuNet face detector  ·  230 KB  ·  Installed\n"
+            "YuNet face detector · see verified file status above\n"
             "    Used for speaker tracking and automatic reframing."
         )
         yunet.setWordWrap(True)
         other.add(yunet)
 
         cascade = QLabel(
-            "●  Haar cascades  ·  3.2 MB  ·  Installed\n"
+            "Haar cascades · see verified file status above\n"
             "    Fallback face detector when the DNN model is unavailable."
         )
         cascade.setWordWrap(True)
@@ -115,6 +119,20 @@ class AiModelsPage(BasePage):
         storage.add(clean)
         self.content_layout.addWidget(storage)
 
+    def _inspect_dependencies(self):
+        from importlib.metadata import version, PackageNotFoundError
+        from ...core.resources import resource_file, resource_dir
+        rows=[]
+        for label,package in [('Faster Whisper','faster-whisper'),('YOLOX · optional local ONNX weights required','onnxruntime'),('ByteTrack · optional tracker library','supervision'),('OpenCV','opencv-python-headless'),('PySceneDetect','scenedetect')]:
+            try:state='Installed '+version(package)
+            except PackageNotFoundError:state='Not installed'
+            rows.append(f'{label}: {state} · on-demand, not continuously running')
+        model=Path(self.db.get_setting('person_model_path','') or '__missing__')
+        rows.append('YOLOX selected weights: '+(f'{model.name} · {format_size(model.stat().st_size)} · untested until loaded' if model.is_file() else 'Not selected / missing'))
+        rows.append('YuNet weights: '+('Present' if resource_file('models','face_detection_yunet_2023mar.onnx').is_file() else 'Missing'))
+        rows.append('Haar cascades: '+('Present' if list(resource_dir('cascades').glob('*.xml')) else 'Missing'))
+        self.dependency_status.setText('\n'.join(rows))
+
     def refresh(self) -> None:
         while self._layout.count():
             item = self._layout.takeAt(0)
@@ -122,6 +140,7 @@ class AiModelsPage(BasePage):
             if w:
                 w.deleteLater()
 
+        self._inspect_dependencies()
         settings = self.db.get_settings()
         default_model = settings.get("stt_model", "base")
         self._rows = {}

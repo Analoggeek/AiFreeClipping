@@ -202,8 +202,7 @@ class SectionHeader(QWidget):
         self.subtitle.setObjectName("CardSubtitle")
         self.subtitle.setVisible(bool(subtitle))
         left.addWidget(self.subtitle)
-        lay.addLayout(left)
-        lay.addStretch(1)
+        lay.addLayout(left, 1)
 
         self.actions = QHBoxLayout()
         self.actions.setSpacing(Metrics.sm)

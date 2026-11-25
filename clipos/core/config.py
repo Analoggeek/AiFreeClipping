@@ -60,6 +60,14 @@ PATHS = AppPaths()
 
 DEFAULT_SETTINGS: dict = {
     "theme": "dark",
+    "sidebar_collapsed": False,
+    "caption_primary": "",
+    "caption_highlight": "",
+    "caption_outline": "",
+    "caption_animation": "",
+    "caption_alignment": "",
+    "caption_timing_offset": 0.0,
+    "audio_bitrate_kbps": 160,
     "editing_preset": "gaming",
     "gaming_enhance": False,
     "language": "en",
