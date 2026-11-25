@@ -66,3 +66,12 @@ b6.0, recorded archive/LICENSE/README hashes, executed FFmpeg6.0-tessus, and
 confirmed ASS plus drawtext without --enable-nonfree. We pin this full-feature
 build instead. This is a deliberate compatibility choice, not a claim to bundle
 the newest FFmpeg. The complete Intel render/package gates must still pass.
+
+Native Intel follow-up run45569570614 (issue122): **51/51 passed** for every
+layout, multi-part caption timelines, H264/AV1 recovery pixels and engine gate.
+The Apple-Silicon-hosted Rosetta Intel test process hung in the release's full
+suite and hit the job timeout; it is not substituted for native validation.
+Official release jobs now build/test macos-15 arm64 and macos-15-intel x86_64
+separately, each with its own frozen bundle checks, arch-labelled DMG/archive and
+all-platform publication gate. Verbose test identity/120s stack diagnostics
+make future stalls actionable instead of waiting without test identification.

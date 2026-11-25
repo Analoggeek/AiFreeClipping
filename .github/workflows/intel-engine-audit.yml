@@ -8,26 +8,33 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+  actions: read
   issues: write
 jobs:
   audit:
     runs-on: macos-15-intel
     timeout-minutes: 15
     steps:
-      - name: Inspect upstream Intel 6.0 compatibility candidate
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Install test dependencies
+        run: |
+          python scripts/install_deps.py
+          python -m pip install pytest-timeout
+      - name: Fetch verified engines
+        run: python scripts/vendor_ffmpeg.py
+      - name: Bounded native render tests
         env:
+          QT_QPA_PLATFORM: minimal
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          set -euo pipefail
-          exec > >(tee audit.log) 2>&1
-          trap 'gh issue create --title "Intel candidate audit results" --body-file audit.log' EXIT
-          base=https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0
-          for name in ffmpeg-darwin-x64.gz darwin-x64.LICENSE darwin-x64.README; do
-            curl -fL --retry 3 "$base/$name" -o "$name"
-            shasum -a 256 "$name"
-          done
-          gunzip ffmpeg-darwin-x64.gz
-          chmod +x ffmpeg-darwin-x64
-          ./ffmpeg-darwin-x64 -version
-          ./ffmpeg-darwin-x64 -filters | grep -E ' ass | drawtext '
+          set +e
+          python -m pytest tests/test_imported_layouts.py tests/test_native_render_stability.py -vv --timeout=120 -o faulthandler_timeout=90 > native-tests.log 2>&1
+          result=$?
+          tail -c 55000 native-tests.log > report.log
+          gh issue create --title "Bounded Intel render tests" --body-file report.log
+          exit "$result"
