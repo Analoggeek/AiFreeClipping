@@ -35,7 +35,7 @@ class CaptionRaster:
         filters=(f'format=rgba,setpts=PTS+{moment:.8f}/TB,{subtitle_filter}:alpha=1,'
                  f'scale={width}:{height},format=rgba')
         result=subprocess.run([require_ffmpeg(),'-v','error','-f','lavfi','-i',
-            f'color=c=black@0:s={project.width}x{project.height}:r={project.fps}:d=0.1',
+            f'color=c=black@0:s={project.width}x{project.height}:r={project.fps}:d=0.1,format=rgba',
             '-vf',filters,'-frames:v','1','-threads','1','-f','image2pipe','-vcodec','png','-'],
             cwd=folder,capture_output=True,timeout=15,creationflags=_CREATE_NO_WINDOW)
         if result.returncode or not result.stdout:

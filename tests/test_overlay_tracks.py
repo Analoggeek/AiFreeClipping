@@ -134,3 +134,13 @@ def test_native_add_edit_overlay_buttons_and_inspector(media,tmp_path,monkeypatc
         project,_,_,_=dissolve_project(media);page.project=project;page._rebuild()
         assert any(row[0]==project.lanes[-1].id for row in page._rows)
     finally:window.close();app.processEvents();db.close()
+
+
+
+def test_caption_preview_preserves_video_below_its_transparent_pixels(media):
+    project=MultitrackProject(width=320,height=180,fps=10);project.import_media(media[0])
+    project.add_caption('TEXT OVER VIDEO',0.,1.)
+    image=frame(project,.5)
+    assert image[10:30,10:30,2].mean()>200
+    assert image[10:30,10:30,0].mean()<20
+    assert np.count_nonzero(np.min(image,axis=2)>150)>30
