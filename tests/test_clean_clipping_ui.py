@@ -346,3 +346,34 @@ def test_native_caption_correction_keeps_word_timing_and_is_undoable(native):
     assert item.caption_words[0]["w"] == "namaste"
     assert page.project.undo()
     assert page.project.find(lane_id, item_id)[1].text == "hello world"
+
+
+def test_native_batch_dashboard_renders_actual_queue_item(native, tmp_path):
+    from clipos.video.multitrack import MultitrackProject
+    from clipos.core.ffmpeg import probe
+
+    app, db, window, paths = native
+    video = source(tmp_path, 160, 90)
+    pid = db.create_project(name="Batch", source_path=str(video), duration=2)
+    cid = db.create_clip(
+        project_id=pid, title="Clip", output_path=str(video), duration=2
+    )
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video, queue_clip_id=cid)
+    page.draw_timeline()
+    panel = page.batch
+    panel.folder.setText(str(tmp_path))
+    panel.encoder.setCurrentIndex(panel.encoder.findData("cpu"))
+    panel.start(True)
+    deadline = time.monotonic() + 20
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert panel.jobs[0].status == "completed", page.status.text()
+    assert panel.table.item(0, 1).text() == "completed"
+    assert "Completed 1" in panel.summary.text()
+    assert probe(panel.jobs[0].output).has_audio
+    assert panel.manifest.is_file()

@@ -209,6 +209,10 @@ class StudioPage(BasePage):
 
         self.captions = CaptionPanel(self)
         self.content_layout.addWidget(self.captions)
+        from ..widgets.batch_panel import BatchPanel
+
+        self.batch = BatchPanel(self)
+        self.content_layout.addWidget(self.batch)
         self.window.data_changed.connect(self.refresh)
         self.refresh()
 
@@ -500,7 +504,7 @@ class StudioPage(BasePage):
             self.worker.cancelled.set()
             self.status.setText("Cancellation requested…")
 
-    def _background(self, fn, done, label):
+    def _background(self, fn, done, label, on_progress=None):
         if self.worker and self.worker.isRunning():
             self.status.setText("Background work is already running.")
             return
@@ -510,7 +514,8 @@ class StudioPage(BasePage):
             lambda message: self.status.setText("Failed: " + message)
         )
         self.worker.progress.connect(
-            lambda pct, message: self.status.setText(f"{pct:.0f}% · {message}")
+            on_progress
+            or (lambda pct, message: self.status.setText(f"{pct:.0f}% · {message}"))
         )
         self.worker.finished.connect(lambda: self.window.set_busy(False))
         self.window.set_busy(True, label)

@@ -11,13 +11,14 @@ from ..core.hardware import choose_encoder
 from .renderer import RenderResult, tempo_filter, _filter_args
 
 
-def graph(project,work_dir=None):
+def graph(project,work_dir=None,window=None):
     """Return inputs/filter graph for enabled video layers and independent audio lanes."""
     project.validate()
     duration=project.duration
     if not 0<duration<=21600:raise ValueError('Export duration must be within 0–6 hours')
     media={source.id:source for source in project.media}
-    active=[(lane,item) for lane in project.lanes if lane.enabled for item in lane.items]
+    active=[(lane,item) for lane in project.lanes if lane.enabled for item in lane.items
+            if window is None or (item.at < window[0]+window[1] and item.at+item.duration > window[0])]
     if len(active)>64:raise ValueError('Current export supports at most 64 active items')
     for source_id in {item.media_id for lane,item in active if lane.kind in ('video','audio')}:
         source=media[source_id]
@@ -70,13 +71,25 @@ def graph(project,work_dir=None):
     return inputs,';'.join(parts),base,'[aout]'
 
 
-def export_project(project,output,work_dir,*,encoder='auto',progress_cb=None,cancel_cb=None):
+def export_project(project,output,work_dir,*,encoder='auto',progress_cb=None,cancel_cb=None,window=None):
     output=Path(output)
     if output.suffix.lower()!='.mp4':raise ValueError('Multitrack export requires an .mp4 path')
     if output.resolve() in {Path(media.path).resolve() for media in project.media}:
         raise ValueError('Export cannot overwrite source media')
     work_dir=Path(work_dir);work_dir.mkdir(parents=True,exist_ok=True)
-    inputs,filters,video,audio=graph(project,work_dir)
+    import math
+    if window is not None:
+        if (not isinstance(window,(tuple,list)) or len(window)!=2 or
+            any(type(v) not in (int,float) or not math.isfinite(v) for v in window) or
+            window[0]<0 or window[1]<=0 or window[0]+window[1]>project.duration+1e-6):
+            raise ValueError('Invalid timeline export window')
+    duration=window[1] if window is not None else project.duration
+    inputs,filters,video,audio=graph(project,work_dir,window=window)
+    if window is not None:
+        start,end=window[0],window[0]+window[1]
+        filters+=f';{video}trim=start={start:.8f}:end={end:.8f},setpts=PTS-STARTPTS[windowvideo]'
+        filters+=f';{audio}atrim=start={start:.8f}:end={end:.8f},asetpts=PTS-STARTPTS[windowaudio]'
+        video,audio='[windowvideo]','[windowaudio]'
     output.parent.mkdir(parents=True,exist_ok=True)
     work_dir=Path(work_dir);work_dir.mkdir(parents=True,exist_ok=True)
     fd,temp=tempfile.mkstemp(prefix='.multitrack-',suffix='.mp4',dir=output.parent)
@@ -91,20 +104,22 @@ def export_project(project,output,work_dir,*,encoder='auto',progress_cb=None,can
             if choice.hw_accel=='videotoolbox':codec+=['-allow_sw','0']
         return ['-hide_banner','-nostdin','-y','-filter_complex_threads','2',*inputs,
             *_filter_args(filters,work_dir,Path(temp).stem),'-map',video,'-map',audio,*codec,
-            '-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-t',f'{project.duration:.6f}',
+            '-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-t',f'{duration:.6f}',
             '-movflags','+faststart','-threads','2',temp]
     try:
         choice=choose_encoder(encoder)
         try:
-            FFmpegRunner(total_duration=project.duration,progress_cb=progress_cb,cancel_cb=cancel_cb).run(command(choice))
+            FFmpegRunner(total_duration=duration,progress_cb=progress_cb,cancel_cb=cancel_cb).run(command(choice))
         except Exception as exc:
             from ..core.ffmpeg import FFmpegCancelled
             if isinstance(exc,FFmpegCancelled) or not choice.is_hardware:raise
             result.warnings.append(f'Hardware encoding failed; CPU retry: {exc}')
             choice=choose_encoder('cpu')
-            FFmpegRunner(total_duration=project.duration,progress_cb=progress_cb,cancel_cb=cancel_cb).run(command(choice))
+            FFmpegRunner(total_duration=duration,progress_cb=progress_cb,cancel_cb=cancel_cb).run(command(choice))
         info=probe(temp)
         if not info.has_video or not info.has_audio or info.duration<=0:raise ValueError('Invalid multitrack export')
+        if (info.video.width,info.video.height)!=(project.width,project.height) or abs(info.duration-duration)>max(.25,2/project.fps):
+            raise ValueError('Encoded dimensions/duration differ from timeline export configuration')
         os.replace(temp,output)
         result.encoder=choice.description;result.duration=info.duration;result.size_bytes=output.stat().st_size
         result.elapsed=time.monotonic()-started

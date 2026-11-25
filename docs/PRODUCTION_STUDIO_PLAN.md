@@ -138,3 +138,31 @@ Still not complete: 50 original style thumbnails, full split/merge workflow,
 speaker detection, multilingual quality acceptance, automatic style previews,
 real-time playback, complete transition/template/effect libraries and batch
 export dashboard. Do not advertise a complete professional studio release.
+
+## Batch export dashboard increment
+
+- Selected/all queue entries already imported on the timeline can now render
+  through the native batch dashboard. Each enabled video item becomes a separate
+  MP4/H.264/AAC output (split items are separate outputs).
+- Exports use the same compositing, caption and mixed-audio graph as timeline
+  rendering, trimmed at each item's actual timeline window. Non-contributing
+  missing media is not opened. Other overlapping layers/audio intentionally
+  remain part of the composition.
+- Actual per-job pending/processing/completed/failed/cancelled states, progress,
+  counts, errors, encoder and measured-rate ETA are shown. Estimates remain
+  labelled. Cancellation and in-session failed/cancelled retry use the same
+  immutable project snapshot; completed files are not rerendered.
+- Encoded dimensions/duration and audio/video are validated before publishing.
+  Same-filesystem atomic no-clobber publication prevents replacing source or
+  existing outputs, including a concurrent file-creation race. Filesystems without
+  hard-link support fail explicitly instead of silently overwriting files.
+- A JSON status manifest is written beside the outputs. Resuming a batch across
+  application restarts is not implemented; the manifest is evidence, not a claim
+  of restart recovery. Full MOV/HEVC/bitrate/export-profile controls remain absent.
+
+Local native dashboard and batch tests render actual windows, inspect decoded red
+and blue source pixels, probe dimensions/audio/duration, isolate missing-source
+failures, retry only failed output, and test cancellation/no-clobber publishing.
+The newest integrated live-speech CI failed; detailed stderr/evidence publishing
+has been added so the cause can be read without unavailable runner log hosts.
+Do not count that new live pipeline acceptance as passed.
