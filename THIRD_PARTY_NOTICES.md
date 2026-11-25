@@ -84,8 +84,8 @@ third-party account or access-token collection is added to editing.
 ## Intel macOS FFmpeg stability refresh (3.1.1)
 
 Intel macOS uses the pinned `ffmpeg-darwin-x64.gz` artifact from
-https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.1.1 . Compressed SHA-256:
-`929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106`.
+https://github.com/eugeneware/ffmpeg-static/releases/tag/b6.0 . Compressed SHA-256:
+`a12354fce7eb62361473bbe10d53a1893695babd35869ec8e92e5dfea8d0440b`.
 The upstream build's `darwin-x64.LICENSE` and `darwin-x64.README` are hash-checked
 and retained alongside the bundled binary, including build/source information.
 Upstream sources/build references: https://github.com/eugeneware/ffmpeg-static#sources-of-the-binaries

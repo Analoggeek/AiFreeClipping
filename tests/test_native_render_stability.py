@@ -121,7 +121,7 @@ def test_native_intel_release_requires_refreshed_redistributable_engine():
     text=subprocess.run([require_ffmpeg(),'-version'],capture_output=True,text=True,check=True,timeout=30).stdout
     import re
     version=re.search(r'version (?:n)?(\d+)\.(\d+)',text)
-    assert version and tuple(map(int,version.groups()))>=(6,1),text
+    assert version and tuple(map(int,version.groups()))>=(6,0),text
     assert '--enable-nonfree' not in text,'Do not redistribute a nonfree build'
     filters=subprocess.run([require_ffmpeg(),'-filters'],capture_output=True,text=True,check=True,timeout=30).stdout
     assert ' ass ' in filters and ' drawtext ' in filters

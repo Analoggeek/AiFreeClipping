@@ -65,10 +65,10 @@ FFPROBE_PKGS = {
 # the reported CoreText/first-frame SIGSEGV. Refresh this release target with
 # a pinned, architecture-checked upstream artifact; never silently reuse it.
 INTEL_FFMPEG = {
-    'release':'b6.1.1',
-    'license_sha256':'2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af',
-    'readme_sha256':'e88a0325f8e5b75210355e37341824f074d3cd82def2125be54c914b62848a36',
-    'archive_sha256':'929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106',
+    'release':'b6.0',
+    'license_sha256':'cb48bf09a11f5fb576cddb0431c8f5ed0a60157a9ec942adffc13907cbe083f2',
+    'readme_sha256':'ff37cc192ed96c54fe9a80182e11b24fc2378bd37a4ef99e2b80aa8cb48c120a',
+    'archive_sha256':'a12354fce7eb62361473bbe10d53a1893695babd35869ec8e92e5dfea8d0440b',
 }
 
 
@@ -77,7 +77,8 @@ def fetch_intel_ffmpeg():
     manifest=target.parent/'ffmpeg-provenance.json'
     if target.exists() and manifest.exists():
         data=json.loads(manifest.read_text())
-        if data.get('archive_sha256')==INTEL_FFMPEG['archive_sha256'] and data.get('binary_sha256')==hashlib.sha256(target.read_bytes()).hexdigest():
+        metadata_ok=all((target.parent/name).is_file() and hashlib.sha256((target.parent/name).read_bytes()).hexdigest()==INTEL_FFMPEG[key] for name,key in (('darwin-x64.LICENSE','license_sha256'),('darwin-x64.README','readme_sha256')))
+        if metadata_ok and data.get('archive_sha256')==INTEL_FFMPEG['archive_sha256'] and data.get('binary_sha256')==hashlib.sha256(target.read_bytes()).hexdigest():
             check_arch(target,'darwin-x64')
             print('  [skip] verified pinned Intel FFmpeg '+INTEL_FFMPEG['release'])
             return
