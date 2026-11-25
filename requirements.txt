@@ -18,6 +18,10 @@ psutil>=6,<8
 
 # ---- AI / inference ----
 numpy>=1.24
+onnxruntime>=1.16,<2
+supervision==0.27.0
+matplotlib>=3.7,<4
+scipy>=1.10,<2
 # OpenCV 5.x removed cv2.CascadeClassifier which CLIPOS uses for face detection.
 #
 # scenedetect depends on "opencv-python", the *GUI* build, which needs libGL

@@ -135,6 +135,8 @@ def track_video(video_path, model_path, *, cancel_cb=None, progress_cb=None, emi
     if cv2 is None:
         raise TrackingUnavailable('OpenCV is required for tracking')
     try:
+        import os
+        os.environ.setdefault("MPLBACKEND","Agg")
         import supervision as sv
     except ImportError as exc:
         raise TrackingUnavailable('Install supervision==0.27.0 using tracking setup; no automatic installation') from exc

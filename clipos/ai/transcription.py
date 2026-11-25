@@ -183,6 +183,7 @@ class _DownloadProgressBar:
 def download_whisper_model(
     size: str = "base",
     progress_cb: Callable[[float, str], None] | None = None,
+    *, revision: str | None = None, cancelled=None,
 ) -> bool:
     """Download a whisper model into the local CLIPOS model store."""
     repo, approx = WHISPER_SIZES.get(size, WHISPER_SIZES["base"])
@@ -200,9 +201,13 @@ def download_whisper_model(
         try:
             if progress_cb:
                 progress_cb(0.0, f"Connecting to {repo}...")
-            _DownloadProgressBar._callback_box = [progress_cb] if progress_cb else []
+            def report(pct,message):
+                if cancelled and cancelled():raise RuntimeError('Speech download cancelled; resumable partials retained')
+                if progress_cb:progress_cb(pct,message)
+            _DownloadProgressBar._callback_box = [report]
             snapshot_download(
                 repo_id=repo,
+                revision=revision,
                 local_dir=str(local_dir),
                 allow_patterns=[
                     "*.json", "*.txt", "*.bin", "*.model", "*.pt", "*.safetensors",
@@ -210,6 +215,7 @@ def download_whisper_model(
                 ignore_patterns=["*.h5", "*.msgpack", "*.onnx", "*.tflite"],
                 tqdm_class=_DownloadProgressBar,
             )
+            if cancelled and cancelled():raise RuntimeError("Speech download cancelled")
             if not model_installed(size):
                 raise RuntimeError("Download finished without complete speech model files")
             if progress_cb:

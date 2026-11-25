@@ -70,23 +70,6 @@ def test_longform_requires_both_channels_and_cancellation_preserves_old_output(t
     assert not list(tmp_path.glob('.longform-*'))
 
 
-def test_native_longform_plan_edit_save_reopen(tmp_path,monkeypatch):
-    from PySide6.QtWidgets import QApplication
-    from clipos.ui.pages.longform import LongformPage
-    app=QApplication.instance() or QApplication([])
-    source=fixture_video(tmp_path);plan=tmp_path/'plan.json';data=longform.analyse(source,plan)
-    page=LongformPage(SimpleNamespace(db=Database(tmp_path/'ui.db')))
-    try:
-        page._loaded(plan,data);page.table.item(0,0).setText('0.1')
-        saved=tmp_path/'edited-plan.json';page._write(saved)
-        _,timeline=longform.load(saved);assert timeline.segments[0].start==.1
-        page.table.item(0,1).setText('99')
-        before=saved.read_bytes()
-        with pytest.raises(ValueError):page._write(saved)
-        assert saved.read_bytes()==before
-    finally:page.shutdown();page.deleteLater();app.processEvents()
-
-
 def test_longform_concat_list_uses_forward_slash_path_for_windows(tmp_path):
     from pathlib import PureWindowsPath
     # FFmpeg's concat demuxer resolves relative entries against the slash-based

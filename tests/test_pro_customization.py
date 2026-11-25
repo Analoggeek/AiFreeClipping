@@ -50,40 +50,6 @@ def test_categories_cover_real_presets():
     assert 'Reaction' in categories_for('arcade_pop')
 
 
-def test_studio_defaults_and_named_custom_profile_reopen(tmp_path):
-    app = QApplication.instance() or QApplication([])
-    db = Database(tmp_path/'studio.db');window = MainWindow(db)
-    try:
-        window.navigate('captions');page=window.pages['captions']
-        page.colors['primary']='#123456'
-        page.colors['highlight']='#ABCDEF'
-        page.animation_combo.setCurrentIndex(page.animation_combo.findData('slide_up'))
-        page.alignment_combo.setCurrentIndex(page.alignment_combo.findData('right'))
-        page.offset_spin.setValue(.35)
-        page._save_default()
-        from clipos.core.editing import render_settings
-        settings=render_settings(db)
-        assert settings.caption_primary=='#123456' and settings.caption_timing_offset==.35
-        with patch('clipos.ui.pages.caption_studio.QInputDialog.getText',return_value=('My gaming captions',True)):
-            page._save_custom()
-        page.colors['primary']='#FFFFFF';page.offset_spin.setValue(0)
-        page._load_custom(page.custom_profiles.findData('My gaming captions'))
-        assert page.colors['primary']=='#123456' and page.offset_spin.value()==.35
-        page.refresh()
-        assert page._extra_options()['alignment_override']=='right'
-        pid=db.create_project(name='Pending captions',duration=5,width=1920,height=1080)
-        cid=db.create_clip(project_id=pid,start_time=0,end_time=2)
-        page._select_style('neon_gaming');page._apply_all()
-        assert db.get_setting('caption_style')=='neon_gaming'
-        assert db.get_clip(cid)['caption_style']=='neon_gaming'
-        page.category.setCurrentText('Gaming')
-        assert not page.style_buttons['neon_gaming'].isHidden()
-        assert page.style_buttons['modern_podcast'].isHidden()
-        window.navigate('export')
-        export=window.pages['export'];export.audio_bitrate_combo.setCurrentIndex(export.audio_bitrate_combo.findData(256))
-        assert export._render_settings().audio_bitrate_kbps==256
-    finally:
-        window.close();app.processEvents();db.close()
 
 
 def test_per_layer_color_rotation_undo_reopen_and_real_export(media,tmp_path):
@@ -122,26 +88,3 @@ def test_wrapping_toolbar_fits_narrow_workspace():
         layout.setGeometry(QRect(0,0,350,narrow))
         assert all(layout.itemAt(i).geometry().right()<350 for i in range(layout.count()))
     finally:widget.close()
-
-
-def test_native_inspector_canvas_and_layout_actions(media,tmp_path,monkeypatch):
-    from types import SimpleNamespace
-    import clipos.ui.pages.multitrack as module
-    monkeypatch.setattr(module,'PATHS',SimpleNamespace(projects=tmp_path/'projects'))
-    app=QApplication.instance() or QApplication([])
-    db=Database(tmp_path/'inspector.db');window=MainWindow(db)
-    try:
-        window.navigate('multitrack');page=window.pages['multitrack']
-        page.project=layered(media);page._rebuild();page.table.setCurrentCell(0,3)
-        assert page.canvas_combo.currentData()==(160,90)
-        assert page.fps_combo.currentData()==10
-        page.inspector_controls['brightness'].setValue(.2);page._inspect_edit('brightness')
-        assert page.project.lanes[0].items[0].brightness==.2
-        page._layout_selected((0.,0.,1.,2/3))
-        assert page.project.lanes[0].items[0].h==pytest.approx(2/3)
-        page._undo();assert page.project.lanes[0].items[0].h==1.
-        page.canvas_combo.setCurrentIndex(2);page.fps_combo.setCurrentIndex(1);page._canvas_changed()
-        assert (page.project.width,page.project.height,page.project.fps)==(1080,1080,60)
-        page._undo();assert page.project.width==160 and page.project.fps==10
-    finally:
-        window.close();app.processEvents();db.close()

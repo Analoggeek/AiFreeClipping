@@ -30,7 +30,7 @@ BUILD = ROOT / "build"
 
 APP_NAME = "CLIPOS"
 BUNDLE_ID = "com.clipos.studio"
-VERSION = "3.6.1"
+VERSION = "4.0.0"
 
 
 def _write_summary(title: str, body: str) -> None:
@@ -354,9 +354,12 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
         args += ["--add-data", f"{ROOT / src}{sep}{dest}"]
     args += [
         "--collect-all", "yt_dlp", "--hidden-import", "clipos",
-        "--collect-submodules", "clipos",
         "--collect-all", "faster_whisper",
         "--collect-all", "cv2",
+        "--collect-all", "supervision",
+        "--copy-metadata", "supervision",
+        "--copy-metadata", "onnxruntime",
+        "--hidden-import", "matplotlib.backends.backend_agg",
         # onnxruntime ships its own DLLs and a large set of data files.
         # Collecting everything is not only slow, it also pulls in the
         # training tools, which are not needed at runtime and which some
@@ -366,7 +369,6 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
         "--exclude-module", "onnxruntime.tools",
         "--exclude-module", "onnxruntime.transformers",
         "--exclude-module", "tkinter",
-        "--exclude-module", "matplotlib",
         "--exclude-module", "pytest",
         "--exclude-module", "IPython",
     ]

@@ -45,11 +45,14 @@ class LocalOllama:
         self.timeout=max(.1,min(float(timeout),180))
         self.opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),_NoRedirect())
 
-    def request(self,path,payload=None):
-        if path not in ('/api/tags','/api/show','/api/generate','/api/ps'):
+    def request(self,path,payload=None,*,method=None):
+        if path not in ('/api/tags','/api/show','/api/generate','/api/ps','/api/version','/api/delete'):
             raise LocalAIError('Unsupported local inference operation')
+        if path=='/api/delete' and method!='DELETE':raise LocalAIError('Model deletion requires an explicit DELETE request')
+        if method=='DELETE' and path!='/api/delete':raise LocalAIError('DELETE is only allowed for explicit model deletion')
+        if method not in (None,'DELETE'):raise LocalAIError('Unsupported HTTP operation')
         data=json.dumps(payload,allow_nan=False).encode() if payload is not None else None
-        req=urllib.request.Request(self.host+path,data=data,headers={'Content-Type':'application/json','User-Agent':'CLIPOS-local-AI'})
+        req=urllib.request.Request(self.host+path,data=data,method=method,headers={'Content-Type':'application/json','User-Agent':'CLIPOS-local-AI'})
         try:
             with self.opener.open(req,timeout=self.timeout) as response:
                 raw=response.read(2_000_001)

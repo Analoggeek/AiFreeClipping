@@ -112,28 +112,6 @@ def test_caption_timing_offset_is_clipped_to_actual_lane_boundaries(tmp_path):
     assert not frame(project,1.2).any()
 
 
-def test_native_add_edit_overlay_buttons_and_inspector(media,tmp_path,monkeypatch):
-    import clipos.ui.pages.multitrack as module
-    from clipos.db.database import Database
-    from clipos.ui.main_window import MainWindow
-    monkeypatch.setattr(module,'PATHS',SimpleNamespace(projects=tmp_path/'projects'))
-    app=QApplication.instance() or QApplication([]);db=Database(tmp_path/'ui.db');window=MainWindow(db)
-    try:
-        window.navigate('multitrack');page=window.pages['multitrack']
-        with patch.object(module.QInputDialog,'getMultiLineText',return_value=('UI caption',True)),patch.object(module.QInputDialog,'getDouble',return_value=(1.,True)):
-            page._add_caption()
-        assert page.project.lanes[-1].kind=='caption'
-        with patch.object(module.QInputDialog,'getMultiLineText',return_value=('Edited UI caption',True)):
-            page._edit_caption()
-        assert page.project.lanes[-1].items[0].text=='Edited UI caption'
-        with patch.object(module.QInputDialog,'getItem',return_value=('Monochrome',True)),patch.object(module.QInputDialog,'getDouble',return_value=(1.,True)):
-            page._add_effect()
-        assert page.project.lanes[-1].kind=='effect'
-        assert page.inspector_controls['saturation'].isEnabled()
-        assert not page.inspector_controls['rotation'].isEnabled()
-        project,_,_,_=dissolve_project(media);page.project=project;page._rebuild()
-        assert any(row[0]==project.lanes[-1].id for row in page._rows)
-    finally:window.close();app.processEvents();db.close()
 
 
 

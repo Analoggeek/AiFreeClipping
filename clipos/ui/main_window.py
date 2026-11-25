@@ -132,17 +132,20 @@ class MainWindow(QMainWindow):
         self.db = db or get_db()
         self.pages: dict[str, QWidget] = {}
         self.nav_buttons: dict[str, NavButton] = {}
-        self.current_key = "home"
+        self.current_key = "clipper"
         self._busy = False
 
-        self.setWindowTitle("Ai clipping PRO 3.6.1 — Local AI Video Editor")
-        self.setMinimumSize(1180, 760)
+        from .. import __version__
+        self.setWindowTitle(f"Ai clipping PRO {__version__} — Automatic Video Clipper")
+        self.setMinimumSize(1000, 720)
         self.resize(1440, 900)
 
+        model_storage=self.db.get_setting('model_storage','')
+        if model_storage:PATHS.models=Path(model_storage).expanduser()
         self._build_ui()
         self._build_shortcuts()
         self._apply_settings()
-        self.navigate("workflow")
+        self.navigate("clipper")
 
         self.status = QStatusBar()
         self.setStatusBar(self.status)
@@ -203,7 +206,8 @@ class MainWindow(QMainWindow):
         brand.setObjectName("SidebarBrand")
         brand_row.addWidget(brand);brand_row.addStretch();lay.addLayout(brand_row)
 
-        self.brand_tag = tag = QLabel("3.6.1  ·  Local AI Video Editor")
+        from .. import __version__
+        self.brand_tag = tag = QLabel(f"{__version__}  ·  Automatic Video Clipper")
         tag.setObjectName("CardSubtitle")
         lay.addWidget(tag)
         lay.addSpacing(12)
@@ -211,16 +215,10 @@ class MainWindow(QMainWindow):
         self.collapse_button=QPushButton('‹  Collapse sidebar');self.collapse_button.setToolTip('Collapse / expand navigation')
         self.collapse_button.clicked.connect(self._toggle_sidebar);lay.addWidget(self.collapse_button)
         nav_defs = [
-            ("home", "", "Home"),
-            ("workflow", "", "Create clips"),
-            ("projects", "", "Projects"),
-            ("library", "", "Clip library"),
-            ("editor", "", "Editor (Pro)"),
-            ("captions", "", "Caption Studio"),
-            ("templates", "", "Templates"),
-            ("models", "", "AI models"),
-            ("export", "", "Export Center"),
-            ("settings", "", "Settings"),
+            ('clipper','','Video Clipper'),
+            ('library','','Clip Library'),
+            ('models','','AI Models'),
+            ('settings','','Settings'),
         ]
         self._nav_group = QButtonGroup(self)
         self._nav_group.setExclusive(True)
@@ -257,33 +255,13 @@ class MainWindow(QMainWindow):
         self.db.set_setting('sidebar_collapsed',int(self.sidebar_collapsed))
 
     def _register_pages(self) -> None:
-        from .pages.home import HomePage
-        from .pages.caption_studio import CaptionStudioPage
-        from .pages.templates import TemplatesPage
-        from .pages.multitrack import MultitrackPage
-        from .pages.ai_models import AiModelsPage
+        from .pages.video_clipper import VideoClipperPage
+        from .pages.models import ModelsPage
+        from .pages.essential_settings import EssentialSettingsPage
         from .pages.clip_library import ClipLibraryPage
-        from .pages.editor import EditorPage
-        from .pages.export_center import ExportCenterPage
-        from .pages.workflow import WorkflowPage
-        from .pages.my_projects import MyProjectsPage
-        from .pages.settings_page import SettingsPage
-
-        page_classes = [
-            ("home",HomePage), ("captions",CaptionStudioPage),
-            ("templates",TemplatesPage), ("multitrack",MultitrackPage),
-            ("workflow", WorkflowPage),
-            ("projects", MyProjectsPage),
-            ("library", ClipLibraryPage),
-            ("editor", EditorPage),
-            ("export", ExportCenterPage),
-            ("models", AiModelsPage),
-            ("settings", SettingsPage),
-        ]
-        self._page_classes = dict(page_classes)
-        # Build the main workflow only. Inactive editors/settings previously
-        # probed devices, allocated previews and opened databases at startup.
-        self._ensure_page('workflow')
+        self._page_classes={'clipper':VideoClipperPage,'library':ClipLibraryPage,
+                            'models':ModelsPage,'settings':EssentialSettingsPage}
+        self._ensure_page('clipper')
 
     def _ensure_page(self,key):
         if key not in self.pages and key in self._page_classes:
@@ -296,16 +274,13 @@ class MainWindow(QMainWindow):
 
     def _build_shortcuts(self) -> None:
         shortcuts = [
-            ("Ctrl+N", lambda: self.navigate("new")),
-            ("Ctrl+O", lambda: self.navigate("new")),
-            ("Ctrl+1", lambda: self.navigate("home")),
-            ("Ctrl+2", lambda: self.navigate("studio")),
-            ("Ctrl+3", lambda: self.navigate("projects")),
-            ("Ctrl+4", lambda: self.navigate("library")),
-            ("Ctrl+E", lambda: self.navigate("export")),
-            ("Ctrl+,", lambda: self.navigate("settings")),
-            ("Ctrl+W", self.close),
-            ("Ctrl+Q", self.close),
+            ('Ctrl+O',lambda:self.navigate('clipper')),
+            ('Ctrl+1',lambda:self.navigate('clipper')),
+            ('Ctrl+2',lambda:self.navigate('library')),
+            ('Ctrl+3',lambda:self.navigate('models')),
+            ('Ctrl+4',lambda:self.navigate('settings')),
+            ('Ctrl+,',lambda:self.navigate('settings')),
+            ('Ctrl+W',self.close),('Ctrl+Q',self.close),
         ]
         for seq, fn in shortcuts:
             sc = QShortcut(QKeySequence(seq), self)
@@ -331,21 +306,15 @@ class MainWindow(QMainWindow):
 
     # -- navigation --------------------------------------------------------------
     def navigate(self, key: str) -> None:
-        requested = key
-        key = {"gaming":"workflow", "new":"workflow", "studio":"workflow"}.get(key,key)
         if self._ensure_page(key) is None:
             return
         self.current_key = key
         page = self.pages[key]
         self.stack.setCurrentWidget(page)
-        if key == 'editor' and getattr(self,'active_project',None) and page.project_id != self.active_project:
-            page.load_project(self.active_project)
-        btn = self.nav_buttons.get("editor" if key=="multitrack" else key)
+        btn = self.nav_buttons.get(key)
         if btn:
             btn.setChecked(True)
         self.titlebar.subtitle.setText(getattr(page, "subtitle_text", ""))
-        if key == "workflow" and requested in ("home", "new", "studio", "export"):
-            page.go({"home":0,"new":0,"studio":2,"export":3}[requested])
         if hasattr(page, "refresh"):
             try:
                 page.refresh()
@@ -378,11 +347,10 @@ class MainWindow(QMainWindow):
 
     def open_project(self, project_id: int) -> None:
         """Open a project in the Auto Clip Studio page."""
-        page = self.pages.get("workflow")
+        page = self.pages.get("clipper")
         if page is not None:
             page.load_project(project_id)
-            self.navigate("workflow")
-            page.go(1)
+            self.navigate("clipper")
 
     def set_active_project(self, project_id):
         if getattr(self, 'active_project', None) == project_id:
@@ -393,20 +361,9 @@ class MainWindow(QMainWindow):
 
     def _refresh_visible(self):
         page = self.pages.get(self.current_key)
-        if page and self.current_key != 'workflow':
+        if page and self.current_key != 'clipper':
             page.refresh()
         self._update_storage_label()
-
-    def open_in_editor(self, project_id: int, clip_id: int | None = None) -> None:
-        """Open a project (and optionally a clip) in the Preview Editor."""
-        page = self._ensure_page("editor")
-        if page is None:
-            return
-        self.set_active_project(project_id)
-        page.load_project(project_id)
-        if clip_id is not None:
-            page.load_clip(clip_id)
-        self.navigate("editor")
 
     def refresh_all(self) -> None:
         for page in self.pages.values():

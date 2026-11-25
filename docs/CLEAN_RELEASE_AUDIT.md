@@ -22,3 +22,33 @@ The requested clean product exposes four destinations only: Video Clipper, Clip 
 - Actual weight downloads/inference and OS installer execution are separate acceptance gates. Mocked HTTP, dependency tests and compilation do not count as those gates.
 - Sandbox outbound networking is restricted to GitHub and package registries. Ollama model-registry and Hugging Face downloads cannot be established here; report this explicitly rather than mark live model acceptance passed.
 - Do not publish an unverified clean stable release or update the public website to claim unavailable installers/models. Native Windows/macOS builds and model acceptance must be distinguished.
+
+## Additional confirmed root causes
+
+- The frozen build explicitly excluded `matplotlib`, but supervision's package
+  initializer imports it even when only ByteTrack is used. The new build includes
+  supervision, its distribution metadata and the noninteractive Agg backend;
+  `onnxruntime` metadata is also retained for dependency verification. Tracking
+  dependencies are installed by the standard dependency setup, not by pip inside
+  the end-user executable.
+- The old model page equated cached speech files / imported libraries with an
+  installed integration. The new registry is updated only after an actual runtime
+  operation; integrity failures, missing dependencies and failed inference are
+  errors, not installed success.
+- Clean generation does not read stale Director, captions, facecam recipes or
+  experimental model-review settings from upgraded databases. It uses an explicit
+  per-operation settings view without deleting the user's stored data.
+- Existing `save_clips` replaced prior generated database records. Clean generation
+  appends a new batch instead, preserving earlier playable outputs and library
+  entries when the selected crop changes.
+
+## Actual model evidence so far
+
+GitHub Actions `45669932654` downloaded the official YOLOX nano ONNX release
+(3,659,407 bytes), computed SHA256
+`c789161ed43c8269fcd4e67c67eeeb4e80c622da2eb296a20bc6007bd18a0b7d`, loaded
+those real weights in CPU ONNX Runtime and executed inference. The same run
+executed supervision 0.27.0 ByteTrack on a synthetic sequence and observed a stable
+track ID. ByteTrack's actual CPU association test also ran locally after its
+missing matplotlib dependency was installed. These are runtime/loading tests,
+not real-person accuracy or trained clipping-quality acceptance.

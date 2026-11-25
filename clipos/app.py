@@ -92,16 +92,6 @@ def main() -> int:
     window = MainWindow(db)
     window.show()
 
-    # Reopen the last project when the user asked for it
-    if settings.get("restore_on_launch", "1") == "1":
-        projects = db.list_projects()
-        if projects:
-            try:
-                window.open_project(projects[0]["id"])
-                window.navigate("studio")
-            except Exception as exc:
-                log.warning("could not restore the last project: %s", exc)
-
     log.info("CLIPOS ready — logs at %s", log_file)
     return app.exec()
 

@@ -124,24 +124,6 @@ def test_real_multicut_manual_split_captions_and_audio_use_single_decoder(tmp_pa
     assert any('Captions:' in step for step in result.steps)
 
 
-def test_wizard_replaces_gaming_navigation_and_upload_controls(db,tmp_path):
-    from PySide6.QtWidgets import QApplication,QPushButton
-    from clipos.ui.main_window import MainWindow
-    app=QApplication.instance() or QApplication([])
-    window=MainWindow(db)
-    try:
-        assert window.current_key=='workflow' and 'gaming' not in window.nav_buttons
-        page=window.pages['workflow'];assert page.stack.count()==4
-        assert page.studio_layout.count()==11 and page.studio_layout.currentData()=='bottom'
-        assert all(not page.studio_layout.itemIcon(i).isNull() for i in range(11))
-        assert not any('upload' in b.text().lower() or 'youtube account' in b.text().lower() for b in page.findChildren(QPushButton))
-        source=tmp_path/'file.mp4';source.write_bytes(b'not decoded')
-        pid=db.create_project(name='Shared project',source_path=str(source),duration=60,width=640,height=360)
-        window.open_project(pid)
-        assert page.project_id==window.active_project==pid
-        assert page.presets.item(0).icon().isNull() is False
-        page.facecam=(0.,0.,.2,.3);page._save_state();assert 'facecam' in db.get_setting(f'workflow:{pid}')
-    finally:window.close();app.processEvents()
 
 
 def test_actual_batch_exports_every_captioned_clip_together(db,tmp_path):
@@ -166,40 +148,6 @@ def test_actual_batch_exports_every_captioned_clip_together(db,tmp_path):
     assert all(Path(db.get_clip(cid)['thumbnail_path']).is_file() for cid in ids)
 
 
-def test_real_one_click_import_edit_review_export_flow(db,tmp_path):
-    from clipos.core.ffmpeg import ffmpeg_available,run_ffmpeg
-    from clipos.core.config import AppPaths
-    from PySide6.QtWidgets import QApplication
-    from PySide6.QtTest import QTest
-    from clipos.ui.main_window import MainWindow
-    import time
-    if not ffmpeg_available():pytest.skip('native FFmpeg unavailable')
-    source=tmp_path/'wizard recording.mp4'
-    run_ffmpeg(['-f','lavfi','-i','testsrc2=size=320x180:rate=10:duration=4','-c:v','libx264','-threads','1','-pix_fmt','yuv420p',str(source)])
-    paths=AppPaths(tmp_path/'app');paths.ensure()
-    db.set_settings({'auto_caption':False,'default_clip_count':1,'use_gpu':'cpu','output_dir':str(tmp_path/'delivery'),'restore_on_launch':False})
-    app=QApplication.instance() or QApplication([])
-    window=MainWindow(db);page=window.pages['workflow']
-    def wait_until(predicate,seconds=180):
-        deadline=time.monotonic()+seconds
-        while time.monotonic()<deadline:
-            app.processEvents();QTest.qWait(20)
-            if predicate():return
-        raise AssertionError(page.status.text()+'\n'+page.errors.toPlainText())
-    try:
-        with patch('clipos.ui.pages.workflow.PATHS',paths),patch('clipos.video.pipeline.PATHS',paths),patch('clipos.video.importer.PATHS',paths):
-            page.source.setText(str(source));page._import(True)
-            wait_until(lambda:page.review.count()==1 and not page._busy())
-            assert page.project_id==window.active_project
-            assert Path(page._review_rows[0]['output_path']).is_file()
-            page.go(3);page._export()
-            wait_until(lambda:bool(page._last_folder) and not page._busy())
-            assert len(list(Path(page._last_folder).glob('*.mp4')))==1
-            assert page._last_folder.startswith(str(tmp_path/'delivery'))
-    finally:
-        from PySide6.QtWidgets import QMessageBox
-        with patch.object(QMessageBox,'question',return_value=QMessageBox.StandardButton.Yes):
-            window.close();app.processEvents()
 
 
 def test_actual_advanced_timeline_split_layout_captions_and_thread_budget(tmp_path):

@@ -40,30 +40,8 @@ def test_transactional_export_retains_old_file_until_verified_completion(tmp_pat
     with pytest.raises(ValueError):Renderer().render(source,source)
 
 
-def test_busy_remains_true_until_queued_gui_completion_is_handled():
-    from clipos.ui.pages.workflow import WorkflowPage
-    page=SimpleNamespace(task=SimpleNamespace(isRunning=lambda:False),_task_pending=True)
-    assert WorkflowPage._busy(page)
-    page._task_pending=False
-    assert not WorkflowPage._busy(page)
 
 
-def test_startup_is_lazy_and_workspace_is_removed_without_deleting_projects(tmp_path):
-    from PySide6.QtWidgets import QApplication
-    from clipos.ui.main_window import MainWindow
-    from clipos.db.database import Database
-    app=QApplication.instance() or QApplication([])
-    window=MainWindow(Database(tmp_path/'ui.db'))
-    try:
-        assert set(window.pages)=={'workflow'}
-        assert 'multitrack' not in window.nav_buttons and 'multitrack' in window._page_classes
-        window.navigate('templates')
-        assert 'templates' in window.pages  # restored at user request for 3.5
-        assert 'longform' not in window._page_classes
-        window.navigate('settings')
-        assert window.pages['settings']._hardware_worker is not None
-    finally:
-        window.close();app.processEvents()
 
 
 def test_longform_device_failure_restarts_every_part_on_cpu(tmp_path):

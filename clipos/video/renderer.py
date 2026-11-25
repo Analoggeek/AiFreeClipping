@@ -524,8 +524,8 @@ class ClipRenderer:
         from ..core.ffmpeg import probe
 
         info = probe(source)
-        src_w = info.video.width if info.video else settings.width
-        src_h = info.video.height if info.video else settings.height
+        from .crop_config import display_dimensions
+        src_w,src_h = display_dimensions(info.video)
         selected_crop = None
         if settings.crop_config is not None:
             from .crop_config import CropConfig
@@ -867,11 +867,13 @@ class ClipRenderer:
         output = Path(output)
         segments = list(timeline.segments)
         source_info = probe(source)
+        from .crop_config import display_dimensions
+        display_w,display_h=display_dimensions(source_info.video)
         selected_crop=None
         if settings.crop_config is not None:
             from .crop_config import CropConfig
             selected_crop=CropConfig.from_dict(settings.crop_config)
-            selected_crop.filter(source_info.video.width,source_info.video.height)
+            selected_crop.filter(display_w,display_h)
             settings=replace(settings,width=selected_crop.output_width,height=selected_crop.output_height,aspect=selected_crop.aspect_ratio)
         has_audio = source_info.has_audio
         if not segments:
@@ -885,7 +887,7 @@ class ClipRenderer:
         for seg in segments:
             parts: list[str] = []
             if selected_crop is not None:
-                parts.append(selected_crop.filter(source_info.video.width,source_info.video.height))
+                parts.append(selected_crop.filter(display_w,display_h))
             elif settings.editing_preset == "gaming":
                 from .presets import gaming_filter
                 facecam,gameplay=settings.facecam_rect,settings.gameplay_rect

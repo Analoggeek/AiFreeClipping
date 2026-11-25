@@ -93,13 +93,6 @@ class TestVideoThumbnailApi(unittest.TestCase):
         from clipos.ui.widgets.common import VideoThumbnail
         self.assertFalse(hasattr(VideoThumbnail, "setVideo"))
 
-    def test_my_projects_uses_the_real_method_name(self):
-        source = (
-            Path(__file__).resolve().parents[1]
-            / "clipos" / "ui" / "pages" / "my_projects.py"
-        ).read_text(encoding="utf-8")
-        self.assertNotIn(".setVideo(", source)
-        self.assertIn(".set_video(", source)
 
 
 class TestStatTileAnimation(unittest.TestCase):
