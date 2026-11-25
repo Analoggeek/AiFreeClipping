@@ -282,3 +282,11 @@ with cue/word timing correction, font/color/position/animation overrides and
 captioned FFmpeg export. Real-time composited playback and the full professional
 caption/template libraries remain unfinished; see the phase-status document
 rather than treating this as a complete editor release.
+
+The development batch dashboard renders selected/all imported queue entries as
+MP4/H.264/AAC timeline-window outputs, including composited captions and mixed
+audio. It reports real per-job states/progress/errors, supports cancellation and
+in-session failed-job retry, and refuses existing output files. Full export
+profiles, real-time composited playback and the complete original creative
+libraries remain unfinished. Linear opacity/gain keyframes and track controls are
+available; this is not a claim of a fully completed professional editor.

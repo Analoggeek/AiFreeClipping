@@ -9,6 +9,7 @@ from PySide6.QtCore import Qt, QUrl
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QDoubleSpinBox,
     QFileDialog,
     QHBoxLayout,
@@ -199,6 +200,40 @@ class StudioPage(BasePage):
                     "Timeline zoom out",
                     lambda: self.graph.set_scale(self.graph.scale / 1.25),
                 ),
+            ]
+        )
+        self.snap_enabled = QCheckBox(
+            "Timeline snapping (frame grid / item boundaries)"
+        )
+        self.snap_enabled.setChecked(True)
+        self.snap_enabled.toggled.connect(
+            lambda enabled: setattr(self.graph, "snap", enabled)
+        )
+        self.content_layout.addWidget(self.snap_enabled)
+        self.key_value = QDoubleSpinBox()
+        self.key_value.setRange(0, 4)
+        self.key_value.setDecimals(4)
+        self.key_value.setValue(1)
+        self.key_value.setPrefix("Linear opacity (0–1) / gain (0–4): ")
+        self.content_layout.addWidget(self.key_value)
+        self.key_summary = QLabel(
+            "Keyframe time uses the timeline split cursor relative to the selected item."
+        )
+        self.key_summary.setWordWrap(True)
+        self.content_layout.addWidget(self.key_summary)
+        self._buttons(
+            [
+                ("Set linear keyframe at cursor", lambda: self.edit_curve("set")),
+                ("Remove keyframe at cursor", lambda: self.edit_curve("remove")),
+                ("Clear selected automation", lambda: self.edit_curve("clear")),
+            ]
+        )
+        self._buttons(
+            [
+                ("Ripple remove linked item (own tracks)", self.ripple_remove),
+                ("Move track up", lambda: self.move_track(-1)),
+                ("Move track down", lambda: self.move_track(1)),
+                ("Rename track", self.rename_track),
             ]
         )
         from ..widgets.editing_panel import EditingPanel
@@ -601,3 +636,53 @@ class StudioPage(BasePage):
                 setattr(draft, key, value)
 
         self.action(lambda: self.project.edit(operation))
+
+    def selected_lane_id(self):
+        node = self.timeline.currentItem()
+        if not node:
+            raise ValueError("Select a timeline track or item")
+        target = self.target()
+        return target[0] if target else node.data(0, Qt.ItemDataRole.UserRole + 1)
+
+    def move_track(self, delta):
+        self.action(lambda: self.project.move_lane(self.selected_lane_id(), delta))
+
+    def rename_track(self):
+        try:
+            lane_id = self.selected_lane_id()
+            lane = next(lane for lane in self.project.lanes if lane.id == lane_id)
+            name, ok = QInputDialog.getText(
+                self, "Rename track", "Name", text=lane.name
+            )
+            if ok:
+                self.action(lambda: self.project.lane_state(lane_id, name=name))
+        except Exception as exc:
+            self.status.setText(str(exc))
+
+    def ripple_remove(self):
+        target = self.target()
+        if target:
+            self.action(lambda: self.project.remove(*target, ripple=True, linked=True))
+
+    def edit_curve(self, mode):
+        target = self.target()
+        if not target:
+            self.status.setText("Select a video or audio item first.")
+            return
+
+        def edit():
+            lane, item = self.project.find(*target)
+            relative = self.split_time.value() - item.at
+            self.project.keyframe(
+                *target,
+                relative,
+                self.key_value.value() if mode == "set" else None,
+                clear=mode == "clear",
+            )
+            item = self.project.find(*target)[1]
+            self.key_summary.setText(
+                "Linear item-local output-second keyframes: "
+                + str(item.opacity_keys if lane.kind == "video" else item.gain_keys)
+            )
+
+        self.action(edit)

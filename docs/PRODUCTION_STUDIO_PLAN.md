@@ -166,3 +166,21 @@ failures, retry only failed output, and test cancellation/no-clobber publishing.
 The newest integrated live-speech CI failed; detailed stderr/evidence publishing
 has been added so the cause can be read without unavailable runner log hosts.
 Do not count that new live pipeline acceptance as passed.
+
+
+### Advanced timeline controls and regression follow-up
+
+The native timeline now exposes snap on/off, track reorder/rename, linked
+ripple-removal on each linked item's own track, and existing linear video-opacity
+or audio-gain keyframes at the cursor. Keyframe set/remove/clear is validated and
+undoable. This does not claim arbitrary property keyframes, easing, graphical
+multi-selection, global ripple editing or complete professional timeline controls.
+
+Full local regression: **667 passed, 15 skipped** in 50.32 seconds. This includes
+native dashboard output, persisted manifests, actual output probing, linear
+keyframe controls and track-order interactions.
+
+The live speech diagnostic at `97bbf6f` confirms standalone known-English speech
+WER **0.0**. Integrated export stopped because that minimal CI job lacked FFmpeg,
+not because a captioned output passed. The job now explicitly installs/verifies
+FFmpeg and FFprobe before integrated speech acceptance. That retry remains pending.

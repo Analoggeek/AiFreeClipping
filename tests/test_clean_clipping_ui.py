@@ -377,3 +377,28 @@ def test_native_batch_dashboard_renders_actual_queue_item(native, tmp_path):
     assert "Completed 1" in panel.summary.text()
     assert probe(panel.jobs[0].output).has_audio
     assert panel.manifest.is_file()
+
+
+def test_native_automation_and_track_order_controls(native, tmp_path):
+    from clipos.video.multitrack import MultitrackProject
+
+    app, db, window, paths = native
+    video = source(tmp_path, 160, 90)
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video)
+    page.project.import_media(video, at=2)
+    page.draw_timeline()
+    page.timeline.setCurrentItem(page.timeline.topLevelItem(0).child(0))
+    lane_id, item_id = page.target()
+    page.split_time.setValue(0.5)
+    page.key_value.setValue(0.4)
+    page.edit_curve("set")
+    assert page.project.find(lane_id, item_id)[1].opacity_keys == [[0.5, 0.4]]
+    page.edit_curve("remove")
+    assert page.project.find(lane_id, item_id)[1].opacity_keys == []
+    page.move_track(1)
+    assert page.project.lanes[1].id == lane_id
+    page.snap_enabled.setChecked(False)
+    assert not page.graph.snap
