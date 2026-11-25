@@ -100,3 +100,8 @@ Range/timeline tests inspect finite input scope and measure real looped waveform
 past the original music length. The full native suite is rerun after this fix;
 not merely the smaller successful layout subset. Full local600/20 plus focused
 51passed1skipped (including seven added finite-loop edge-case checks).
+
+Final native full-suite audit45579158883 / issue137: **477passed9skipped** in
+137.79s, including mandatory native playback and actual music-loop/caption
+exports. Final local suite **607passed20skipped**, E2E **35/35**. Frozen native
+installer gates remain separate and mandatory before public release.
