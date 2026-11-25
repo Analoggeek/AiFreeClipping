@@ -762,7 +762,7 @@ class ClipRenderer:
         if progress_cb:
             progress_cb(5.0, "Rendering clip")
 
-        runner = FFmpegRunner(total_duration=clip_dur,
+        runner = FFmpegRunner(total_duration=clip_dur,recover_native_crash=True,
                               progress_cb=lambda p, t: progress_cb(
                                   5.0 + p * 0.9, f"Rendering… {p:.0f}%"
                               ) if progress_cb else None,
@@ -788,7 +788,7 @@ class ClipRenderer:
                 "-c:v", enc.video_encoder, "-preset", settings.cpu_preset, "-crf", str(settings.crf),
                 "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart", "-threads", str(threads), str(output)]
-            runner2 = FFmpegRunner(total_duration=clip_dur,
+            runner2 = FFmpegRunner(total_duration=clip_dur,recover_native_crash=True,
                                    progress_cb=lambda p, t: progress_cb(
                                        5.0 + p * 0.9, f"Rendering… {p:.0f}%"
                                    ) if progress_cb else None,
@@ -798,6 +798,8 @@ class ClipRenderer:
                 result.cancelled=True
                 return result
 
+        if getattr(runner,'recovery_used',False):
+            result.warnings.append('Compatibility mode active after a native FFmpeg fault (single-worker/scalar); edit unchanged. See local crash diagnostic.')
         # ---- verify the output ----------------------------------------------------
         out_info = probe(output)
         result.duration = out_info.duration
@@ -1007,7 +1009,7 @@ class ClipRenderer:
         if progress_cb:
             progress_cb(5.0, f"Rendering {len(segments)} segment(s)")
 
-        runner = FFmpegRunner(total_duration=total,
+        runner = FFmpegRunner(total_duration=total,recover_native_crash=True,
                               progress_cb=lambda p, t: progress_cb(
                                   5.0 + p * 0.9, f"Rendering… {p:.0f}%"
                               ) if progress_cb else None,
@@ -1034,11 +1036,13 @@ class ClipRenderer:
                 "-c:a", "aac", "-b:a", "160k", "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart", "-threads",str(threads), str(output)]
             try:
-                FFmpegRunner(total_duration=total, cancel_cb=cancel_cb).run(cmd[1:],total_duration=total)
+                FFmpegRunner(total_duration=total,recover_native_crash=True, cancel_cb=cancel_cb).run(cmd[1:],total_duration=total)
             except FFmpegCancelled:
                 result.cancelled=True
                 return result
 
+        if getattr(runner,'recovery_used',False):
+            result.warnings.append('Compatibility mode active after native FFmpeg fault; timeline/captions unchanged. See local crash diagnostic.')
         out_info = probe(output)
         result.duration = out_info.duration
         result.width = out_info.video.width if out_info.video else 0

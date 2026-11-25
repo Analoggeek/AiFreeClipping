@@ -1,70 +1,59 @@
-# CLIPOS 3.1.0 — Faster local editing and safer exports
+# CLIPOS 3.1.1 — Native render crash stability update
 
-Developed by **Analoggeek**. Performance and responsiveness update to v3.0.0.
+Developed by **Analoggeek**. Targets the reported Intel Mac exports terminating
+with `ffmpeg failed (exit -11)` before the first output frame.
 
-## Performance and acceleration
+## What the report establishes
 
-- Detect and runtime-test AMD AMF encoders, in addition to NVENC, Quick Sync and
-  Apple VideoToolbox. Hybrid GPU systems no longer depend only on the primary
-  display adapter's vendor. No unsupported GPU is assumed usable.
-- Raise the automatic high-core CPU budget from an eight-thread ceiling to up to
-  32 threads, retaining OS/UI headroom and low-memory pressure safeguards.
-  Explicit CPU-only/manual thread preferences remain available.
-- Use faster CPU `veryfast`, NVENC `p4` and QSV `fast` presets. CPU filters and
-  supported hardware encoding can work together; not every effect/inference
-  stage can run on every GPU. No claim of universal full-GPU processing.
-- Long-form export now uses detected hardware and adaptive threads instead of
-  hardcoded two-thread CPU assembly. Hardware failure restarts all parts on CPU
-  rather than mixing inconsistent encoder configurations.
-- Scene detection operates on reduced-resolution samples at approximately 8 fps,
-  rather than full-resolution content differences on every source frame. This
-  trades sub-frame scene-boundary precision for faster analysis; review cuts.
-- GPU speech initialization failure retries local CPU inference. This is not a
-  promise that every possible model or mid-inference device failure is repaired.
+`-11` is a native SIGSEGV, not a normal FFmpeg command-line error. The report
+shows an old FFmpeg/x264 build, 14 encoder workers, CoreText/libass importing
+supplemental fonts (including an NISC18030 metadata warning), and AV1-branded
+source metadata. The final scaler alignment warning alone does not establish
+why the process crashed. The exact user's machine/source fault is not reproduced
+in the sandbox; the changes below address concrete risky paths and add recovery.
 
-## Responsiveness and interface
+## Fixes and enhancements
 
-- Construct inactive pages only when opened; no startup initialization of all
-  editors/previews. Hardware diagnostics run off the GUI thread.
-- Keep task busy state until queued GUI completion is handled, fixing a race
-  where a worker had finished but its export result was not displayed yet.
-- Remove the separate **Multitrack workspace** navigation/page registration as
-  requested. Existing multitrack saved/recovery files are not deleted or migrated;
-  the underlying modules remain to preserve data compatibility.
-- Refine dark palette and improve text contrast in both themes; retain lightweight
-  native widgets rather than adding expensive blur or animation effects.
+- Refresh the **Intel macOS** FFmpeg binary to upstream ffmpeg-static `b6.1.1`,
+  pinned by SHA-256 with architecture validation and retained upstream license/
+  provenance files. An existing legacy binary without the new verified manifest
+  is not silently reused. Other platform binaries are not advertised as upgraded.
+- Pass libass an isolated directory containing one real fallback font, rather
+  than the entire OS font directory. CoreText/system font discovery remains
+  available; captions are not silently removed or replaced with fake text.
+- If a render process has a recognized native fault, retry the same timing,
+  filters, captions, mappings and output with single-worker/scalar compatibility
+  settings. x264's separate assembly dispatch is disabled for this retry.
+- Subsequent render commands using the same binary identity remain in
+  compatibility mode for the session, avoiding a fresh crash for every clip.
+  Relaunch/binary replacement resets this policy. Compatibility mode is slower
+  by design; normal successful renders retain accelerated/default performance.
+- Never treat cancellation, out-of-memory killing, ordinary bad media/arguments
+  or a second conservative failure as a successful export. Retries are bounded;
+  pre-existing successful output remains protected by atomic replacement.
+- Save a bounded **local-only** native-fault diagnostic under the application
+  logs directory. Settings now offers **Open local logs / render crash
+  diagnostics** and displays the actual selected engine version. Nothing is
+  uploaded automatically; reports can contain local file paths/media names.
+- Retain v3.1 performance improvements, removed Multitrack workspace UI, existing
+  saved data, native editing, offline-first behaviour and platform encoder checks.
 
-## Export reliability
+## Verification and limits
 
-- Clip and timeline renders use temporary sibling files and verify output before
-  atomic replacement. A failed/cancelled render cannot destroy an earlier good
-  output. Source overwrite is explicitly rejected.
-- Hardware encoding failures retain the complete edit/filter graph on CPU retry.
-  A failed CPU render is not pointlessly run again with the same graph. Cancelling
-  a CPU fallback remains cancellation, not a successful export or another retry.
-- Native Windows path and Intel macOS playback fixes from v3.0.0 are retained.
-- Per-clip batch results and existing error reporting remain available. Without
-  a user's failing media/log, their particular historical error cannot be claimed
-  reproduced or eliminated. Disk space, permissions, corrupt media and device
-  failures can still prevent export; no blanket error-free guarantee is made.
+Local full suite: **599 passed, 20 skipped**; real import-to-export/batch E2E:
+**35/35 passed**. Optional native/model checks account for skips; Intel runtime
+verification is mandatory in release CI, not asserted from Linux tests.
 
-## Validation and measured scope
+Regression coverage includes injected fatal return codes, bounded failed retries,
+cancellation, session compatibility behaviour, font isolation, archive hash
+rejection, and real H264/AV1 inputs rendered to 1080x1920 H264/AAC with actual
+caption pixels preserved after an injected initial failure. Injected faults
+prove recovery contracts, not the original crash's root cause. Native Intel CI
+requires FFmpeg >=6.1 with ASS/drawtext and rejects `--enable-nonfree` builds.
 
-Local full suite: **581 passed, 19 skipped**; real import-to-export/batch E2E:
-**35/35 passed**. Optional runtimes/devices absent in this sandbox account for
-skips; native CI separately exercises the packaged platform dependencies.
-
-A local CPU-only FFmpeg microbenchmark used a four-second 1280x720/30fps testsrc2
-clip scaled to 1080x1920, libx264 CRF 21, two threads: `fast` took **3.509s** and
-`veryfast` **1.764s** on this sandbox (one run each). This is a synthetic workload,
-not a whole-app or Windows/Mac performance guarantee; encoder preset tradeoffs
-can change compression/visual quality. No physical GPU throughput benchmark was
-available in the sandbox. Native installers remain gated by platform CI and
-all seven nonempty release assets before publication.
-
-Offline/local-data and model limitations from v3.0.0 remain: optional TalkNet/AST
-runtimes/checkpoints are not bundled by default, their trained quality is not
-certified, and physical A/V sync/native hardware/driver acceptance is not implied.
-macOS ad-hoc signing is not Apple notarization. No cloud upload/publishing or
-mandatory account/subscription is added. Upgrade without deleting user data;
-back up important projects before replacing the application.
+Platform installers are published only after native gates and all seven
+nonempty release assets succeed. This is not physical-device/driver or arbitrary
+source-media certification; disk errors, invalid media and incompatible devices
+can still fail explicitly. Model/physical A/V acceptance limitations from the
+prior release remain unchanged. macOS signing integrity is not notarization.
+Back up important projects before upgrading; user projects/data are not deleted.

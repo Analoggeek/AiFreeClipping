@@ -47,6 +47,9 @@ class SettingsPage(BasePage):
         self.update_button = QPushButton("Check for updates")
         self.update_button.clicked.connect(self._check_update)
         updates.add(self.update_button)
+        logs=QPushButton('Open local logs / render crash diagnostics')
+        logs.clicked.connect(self._open_render_logs)
+        updates.add(logs)
         updates.add(QLabel("Downloads the matching installer. Quit CLIPOS before installation. Your project library stays separate."))
         self.content_layout.addWidget(updates)
 
@@ -472,6 +475,10 @@ class SettingsPage(BasePage):
         hw.add(self.hw_label)
         self.content_layout.addWidget(hw)
 
+    def _open_render_logs(self):
+        PATHS.logs.mkdir(parents=True,exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(PATHS.logs)))
+
     def _check_update(self):
         self.update_button.setEnabled(False)
         self._update_worker = UpdateCheck(self)
@@ -693,6 +700,8 @@ class HardwareSummary(QThread):
 
     def summary(self):
         prof = detect_hardware()
+        from ...core.ffmpeg import ffmpeg_version
+        engine=ffmpeg_version()
         enc = ", ".join(sorted(prof.ffmpeg_encoders.keys())) or "none detected"
         return (
             f"OS: {prof.os_name} {prof.os_version} ({prof.arch})\n"
@@ -703,5 +712,7 @@ class HardwareSummary(QThread):
             f"Automatic worker budget now: {suggest_worker_threads()} threads\n"
             f"Torch: {'available' if prof.torch_available else 'not installed'}"
             f"{' (CUDA)' if prof.torch_cuda else ''}{' (Metal)' if prof.torch_mps else ''}\n"
-            f"FFmpeg encoders: {enc}"
+            f"Engine: {engine}\n"
+            f"FFmpeg encoders: {enc}\n"
+            f"Native crash recovery: automatic compatibility retry; diagnostics in {PATHS.logs}"
         )

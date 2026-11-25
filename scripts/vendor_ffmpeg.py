@@ -17,6 +17,9 @@ application then runs under Rosetta, or not at all.
 from __future__ import annotations
 
 import json
+import hashlib
+import gzip
+import os
 import shutil
 import sys
 import tarfile
@@ -58,6 +61,53 @@ FFPROBE_PKGS = {
     "win32-ia32": ("@ffprobe-installer/win32-ia32", "ffprobe.exe"),
 }
 
+# The Intel macOS npm artifact used FFmpeg 4.x/x264 from 2018, matching
+# the reported CoreText/first-frame SIGSEGV. Refresh this release target with
+# a pinned, architecture-checked upstream artifact; never silently reuse it.
+INTEL_FFMPEG = {
+    'release':'b6.1.1',
+    'license_sha256':'2e1d16c72fd74e12063776371da757322f8b77589386532f4fd8634bde7de1af',
+    'readme_sha256':'e88a0325f8e5b75210355e37341824f074d3cd82def2125be54c914b62848a36',
+    'archive_sha256':'929b375c1182d956c51f7ac25e0b2b0411fb01f6f407aa15c9758efeb4242106',
+}
+
+
+def fetch_intel_ffmpeg():
+    target=DEST/'darwin-x64'/'ffmpeg'
+    manifest=target.parent/'ffmpeg-provenance.json'
+    if target.exists() and manifest.exists():
+        data=json.loads(manifest.read_text())
+        if data.get('archive_sha256')==INTEL_FFMPEG['archive_sha256'] and data.get('binary_sha256')==hashlib.sha256(target.read_bytes()).hexdigest():
+            check_arch(target,'darwin-x64')
+            print('  [skip] verified pinned Intel FFmpeg '+INTEL_FFMPEG['release'])
+            return
+    base='https://github.com/eugeneware/ffmpeg-static/releases/download/'+INTEL_FFMPEG['release']+'/'
+    temporary=ROOT/'.vendor-tmp'/'intel-modern.gz'
+    _download(base+'ffmpeg-darwin-x64.gz',temporary)
+    if hashlib.sha256(temporary.read_bytes()).hexdigest()!=INTEL_FFMPEG['archive_sha256']:
+        raise RuntimeError('Intel FFmpeg archive checksum mismatch')
+    target.parent.mkdir(parents=True,exist_ok=True)
+    candidate=target.with_name('.ffmpeg-new')
+    try:
+        with gzip.open(temporary,'rb') as source,candidate.open('wb') as output:
+            shutil.copyfileobj(source,output)
+        candidate.chmod(0o755)
+        check_arch(candidate,'darwin-x64')
+        # Keep upstream provenance/licenses with the shipped binary.
+        for name in ('darwin-x64.LICENSE','darwin-x64.README'):
+            _download(base+name,target.parent/name)
+            expected=INTEL_FFMPEG['license_sha256' if name.endswith('.LICENSE') else 'readme_sha256']
+            if hashlib.sha256((target.parent/name).read_bytes()).hexdigest()!=expected:
+                raise RuntimeError('Intel FFmpeg license/provenance checksum mismatch')
+        data={**INTEL_FFMPEG,'url':base+'ffmpeg-darwin-x64.gz',
+              'binary_sha256':hashlib.sha256(candidate.read_bytes()).hexdigest()}
+        os.replace(candidate,target)
+        manifest.write_text(json.dumps(data,indent=2))
+    finally:
+        candidate.unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
+
+
 # --------------------------------------------------------------------------------------
 # Downloading
 # --------------------------------------------------------------------------------------
@@ -87,6 +137,9 @@ def _extract(tarball: Path, work_dir: Path) -> Path:
 
 def fetch_ffmpeg() -> None:
     for key, pkg in FFMPEG_PKGS.items():
+        if key=='darwin-x64':
+            fetch_intel_ffmpeg()
+            continue
         target = DEST / key
         exe = target / ("ffmpeg.exe" if key.startswith("win32") else "ffmpeg")
         if exe.exists():
