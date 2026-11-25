@@ -110,6 +110,47 @@ def start_service(*, cancelled=None):
     )
 
 
+def verify_windows_signature(asset):
+    # PowerShell 7 launchers (including CI) export a PSModulePath that can
+    # make Windows PowerShell 5.1 resolve incompatible security modules.
+    # Use the OS executable and its own security manifest, not PATH/modules
+    # inherited from the launcher. Keep Authenticode fail-closed.
+    env = {
+        key: value for key, value in os.environ.items() if key.upper() != "PSMODULEPATH"
+    }
+    env["CLIPOS_OLLAMA_INSTALLER"] = str(asset)
+    command = [
+        str(
+            Path(os.environ.get("SystemRoot", r"C:\Windows"))
+            / "System32"
+            / "WindowsPowerShell"
+            / "v1.0"
+            / "powershell.exe"
+        ),
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        '$ErrorActionPreference="Stop"; Import-Module (Join-Path $PSHOME "Modules/Microsoft.PowerShell.Security/Microsoft.PowerShell.Security.psd1") -ErrorAction Stop; $s=Get-AuthenticodeSignature -LiteralPath $env:CLIPOS_OLLAMA_INSTALLER; $s | Select-Object Status,StatusMessage,@{Name="Signer";Expression={$_.SignerCertificate.Subject}} | ConvertTo-Json -Compress; if($s.Status -ne "Valid"){exit 1}',
+    ]
+    signature = subprocess.run(
+        command,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if signature.returncode:
+        raise RuntimeError(
+            "Windows blocked Ollama installer: Authenticode verification failed. "
+            "The installer was not executed. "
+            + (
+                signature.stdout.strip()
+                or signature.stderr.strip()
+                or "No signature diagnostics supplied"
+            )
+        )
+
+
 def install(*, consent=False, progress=None, cancelled=None):
     if not consent:
         raise PermissionError("Explicit OS installation confirmation is required")
@@ -152,30 +193,7 @@ def install(*, consent=False, progress=None, cancelled=None):
     if system == "Windows":
         # Authenticode AND the pinned official SHA protect the executable. OS
         # installer remains interactive: no hidden elevation or silent flags.
-        command = [
-            "powershell",
-            "-NoProfile",
-            "-NonInteractive",
-            "-Command",
-            '$s=Get-AuthenticodeSignature -LiteralPath $env:CLIPOS_OLLAMA_INSTALLER; $s | Select-Object Status,StatusMessage,@{Name="Signer";Expression={$_.SignerCertificate.Subject}} | ConvertTo-Json -Compress; if($s.Status -ne "Valid"){exit 1}',
-        ]
-        signature = subprocess.run(
-            command,
-            env={**os.environ, "CLIPOS_OLLAMA_INSTALLER": str(asset)},
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if signature.returncode:
-            raise RuntimeError(
-                "Windows blocked Ollama installer: Authenticode verification failed. "
-                "The installer was not executed. "
-                + (
-                    signature.stdout.strip()
-                    or signature.stderr.strip()
-                    or "No signature diagnostics supplied"
-                )
-            )
+        verify_windows_signature(asset)
         process = subprocess.Popen([str(asset)])
         while process.poll() is None:
             if cancelled and cancelled():
