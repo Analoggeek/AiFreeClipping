@@ -325,7 +325,8 @@ class CaptionStudioPage(BasePage):
         save.clicked.connect(self._save_default)
         controls.add(save)
 
-        apply_btn = QPushButton("Apply style to pending clips")
+        apply_btn = QPushButton('Use for exports & pending clips')
+        apply_btn.setToolTip('Save these global export defaults and label all pending clips with this preset. Existing rendered files are unchanged.')
         apply_btn.clicked.connect(self._apply_all)
         controls.add(apply_btn)
 
@@ -483,14 +484,16 @@ class CaptionStudioPage(BasePage):
         if isinstance(profile,dict):self._restore_settings(profile)
 
     def _apply_all(self) -> None:
+        self.db.set_settings(self._current_settings())
         with self.db.transaction():
             cursor = self.db.conn.execute(
                 "UPDATE clips SET caption_style=? WHERE status='pending'",
                 (self.preview.style_key,),
             )
             n = cursor.rowcount
+        self.window.settings_changed.emit()
         self.window.data_changed.emit()
-        self.window.notify(f"Caption style applied to {n} pending clips")
+        self.window.notify(f"Export caption defaults saved; {n} pending clips tagged. Re-export to update files.")
 
     def refresh(self) -> None:
         self._refresh_custom()

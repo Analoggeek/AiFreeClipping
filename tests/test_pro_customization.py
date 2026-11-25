@@ -71,6 +71,11 @@ def test_studio_defaults_and_named_custom_profile_reopen(tmp_path):
         assert page.colors['primary']=='#123456' and page.offset_spin.value()==.35
         page.refresh()
         assert page._extra_options()['alignment_override']=='right'
+        pid=db.create_project(name='Pending captions',duration=5,width=1920,height=1080)
+        cid=db.create_clip(project_id=pid,start_time=0,end_time=2)
+        page._select_style('neon_gaming');page._apply_all()
+        assert db.get_setting('caption_style')=='neon_gaming'
+        assert db.get_clip(cid)['caption_style']=='neon_gaming'
         page.category.setCurrentText('Gaming')
         assert not page.style_buttons['neon_gaming'].isHidden()
         assert page.style_buttons['modern_podcast'].isHidden()
