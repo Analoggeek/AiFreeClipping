@@ -126,6 +126,14 @@ def check_architecture(bundle: Path, binary: Path | None) -> None:
           f"{wanted} wanted, {found or 'unknown'} found")
 
 
+def media_executables(resources: Path):
+    """Exact executable names only; provenance/license files are data."""
+    for folder in sorted((resources/'ffmpeg').glob('*')):
+        for name in ('ffmpeg','ffprobe','ffmpeg.exe','ffprobe.exe'):
+            path=folder/name
+            if path.is_file():yield path
+
+
 def verify(bundle: Path, binary: Path | None) -> int:
     print(f"=== Verifying bundle: {bundle} ===\n")
 
@@ -170,13 +178,10 @@ def verify(bundle: Path, binary: Path | None) -> int:
     if os.name == "nt":
         print("   (not applicable on Windows)")
     else:
-        for folder in sorted((res / "ffmpeg").glob("*")):
-            for exe in folder.glob("ffmpeg*"):
-                if exe.name.endswith(".exe"):
-                    continue
-                mode = exe.stat().st_mode
-                check(f"{exe.relative_to(res)} is executable",
-                      bool(mode & stat.S_IXUSR))
+        for exe in media_executables(res):
+            if exe.name.endswith('.exe'):continue
+            mode = exe.stat().st_mode
+            check(f"{exe.relative_to(res)} is executable",bool(mode & stat.S_IXUSR))
 
     print("\n-- bundled Python modules --")
     # PyInstaller packs the application modules into a PYZ archive inside the
