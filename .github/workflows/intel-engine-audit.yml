@@ -15,14 +15,29 @@ jobs:
     runs-on: macos-15-intel
     timeout-minutes: 15
     steps:
-      - name: Preserve timed-out Intel test context
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          architecture: x64
+      - name: Install test dependencies
+        run: |
+          python scripts/install_deps.py
+          python -m pip install pytest-timeout
+      - name: Fetch verified engines
+        run: python scripts/vendor_ffmpeg.py
+      - name: Bounded native render tests
         env:
+          QT_QPA_PLATFORM: minimal
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh run view 45558003804 --job 139014647807 --log > previous-run.log
-          tail -c 45000 previous-run.log > timeout-context.log
-          gh issue create --title "Intel test timeout context" --body-file timeout-context.log
+          set +e
+          python -m pytest tests/test_imported_layouts.py tests/test_native_render_stability.py -vv --timeout=120 -o faulthandler_timeout=90 > native-tests.log 2>&1
+          result=$?
+          tail -c 55000 native-tests.log > report.log
+          gh issue create --title "Bounded Intel render tests" --body-file report.log
+          exit "$result"
       - name: Inspect upstream Intel 6.0 compatibility candidate
         env:
           GH_TOKEN: ${{ github.token }}
