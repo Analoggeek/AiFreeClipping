@@ -1350,3 +1350,5 @@ html:has(body.reduce-motion) {
     padding: 8px 5px;
   }
 }
+
+#panel-home img{aspect-ratio:1440/1056}

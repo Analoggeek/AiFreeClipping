@@ -1,6 +1,6 @@
 # Ai clipping PRO website
 
-Responsive, dependency-free product website for the published **v3.6.0** native
+Responsive, dependency-free product website for the published **v3.6.1** native
 application. GitHub Pages serves `main:/docs` at
 **https://analoggeek.github.io/AiFreeClipping/**.
 
@@ -11,7 +11,7 @@ application. GitHub Pages serves `main:/docs` at
 - Keyboard-operable screenshot tabs, download filters, mobile navigation, native
   FAQ disclosures, Linux command copy and persisted reduced-motion preference.
 - OS reduced-motion support; visible keyboard focus, skip link and semantic landmarks.
-- All seven direct v3.6.0 release assets work without JavaScript, with no API request,
+- All seven direct v3.6.1 release assets work without JavaScript, with no API request,
   analytics, cookies, external fonts or external runtime dependencies.
 - No browser-based video processing demo or fake project/model/download statistics.
 
@@ -44,7 +44,7 @@ fallback, and the absence of unexpected browser errors or third-party requests.
 Merging the static files into `main` triggers the repository's existing GitHub Pages
 branch deployment. The Pages build/deployment result must be checked before claiming
 the public site is updated. No desktop installer rebuild or version change is required
-for a website/README-only update. Native v3.6.0 installer assets are not replaced.
+for a website/README-only update. Native v3.6.1 installer assets are not replaced.
 
 ## Updating the current release
 
