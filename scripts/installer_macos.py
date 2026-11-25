@@ -38,7 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP_NAME = "CLIPOS"
 BUNDLE_ID = "com.clipos.studio"
-VERSION = "3.5.0"
+VERSION = "3.6.0"
 
 
 # --------------------------------------------------------------------------

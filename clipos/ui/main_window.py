@@ -135,7 +135,7 @@ class MainWindow(QMainWindow):
         self.current_key = "home"
         self._busy = False
 
-        self.setWindowTitle("Ai clipping PRO 3.5 — Local AI Video Editor")
+        self.setWindowTitle("Ai clipping PRO 3.6 — Local AI Video Editor")
         self.setMinimumSize(1180, 760)
         self.resize(1440, 900)
 
@@ -203,7 +203,7 @@ class MainWindow(QMainWindow):
         brand.setObjectName("SidebarBrand")
         brand_row.addWidget(brand);brand_row.addStretch();lay.addLayout(brand_row)
 
-        self.brand_tag = tag = QLabel("3.5  ·  Local AI Video Editor")
+        self.brand_tag = tag = QLabel("3.6  ·  Local AI Video Editor")
         tag.setObjectName("CardSubtitle")
         lay.addWidget(tag)
         lay.addSpacing(12)

@@ -11,7 +11,7 @@ from ..core.hardware import choose_encoder
 from .renderer import RenderResult, tempo_filter, _filter_args
 
 
-def graph(project):
+def graph(project,work_dir=None):
     """Return inputs/filter graph for enabled video layers and independent audio lanes."""
     project.validate()
     duration=project.duration
@@ -19,7 +19,7 @@ def graph(project):
     media={source.id:source for source in project.media}
     active=[(lane,item) for lane in project.lanes if lane.enabled for item in lane.items]
     if len(active)>64:raise ValueError('Current export supports at most 64 active items')
-    for source_id in {item.media_id for _,item in active}:
+    for source_id in {item.media_id for lane,item in active if lane.kind in ('video','audio')}:
         source=media[source_id]
         if not Path(source.path).is_file():raise FileNotFoundError(f'Missing media: {source.path}')
         info=probe(source.path)
@@ -28,25 +28,39 @@ def graph(project):
     inputs=[]
     parts=[f'color=c=black:s={project.width}x{project.height}:r={project.fps}:d={duration:.6f}[canvas]',
            f'anullsrc=r=48000:cl=stereo,atrim=duration={duration:.6f}[silence]']
-    base='[canvas]';audio=['[silence]']
+    base='[canvas]';audio=['[silence]'];input_index=0
     for index,(lane,item) in enumerate(active):
+        if lane.kind=='transition':continue
+        if lane.kind=='effect':
+            parts.append(f"{base}eq=brightness={item.brightness:.8f}:contrast={item.contrast:.8f}:saturation={item.saturation:.8f}:enable='gte(t,{item.at:.6f})*lt(t,{item.at+item.duration:.6f})'[effect{index}]")
+            base=f'[effect{index}]';continue
+        if lane.kind=='caption':
+            if work_dir is None:raise ValueError('Caption export requires a work directory')
+            from hashlib import sha256
+            from .overlay_tracks import write_caption
+            from .renderer import _ass_filter
+            caption_path=Path(work_dir)/('lane-'+sha256(item.id.encode()).hexdigest()[:24]+'.ass')
+            write_caption(caption_path,item,project.width,project.height)
+            parts.append(f'{base}{_ass_filter(caption_path)}[caption{index}]')
+            base=f'[caption{index}]';continue
         source=media[item.media_id]
+        stream=input_index;input_index+=1
         inputs+=['-threads','2','-ss',f'{item.source_in:.6f}','-t',f'{item.length:.6f}','-i',source.path]
         if lane.kind=='video':
             width=max(2,int(item.w*project.width)//2*2)
             height=max(2,int(item.h*project.height)//2*2)
             x=round(item.x*project.width);y=round(item.y*project.height)
-            parts.append(f'[{index}:v]setpts=(PTS-STARTPTS)/{item.speed:.8f},fps={project.fps},'
+            parts.append(f'[{stream}:v]setpts=(PTS-STARTPTS)/{item.speed:.8f},fps={project.fps},'
                 f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},'
                 f'setsar=1,' + video_effects(item) + 'format=rgba,' + video_opacity(item) +
-                video_fades(item) +
+                video_fades(item) + dissolve_filter(project,item) +
                 f'setpts=PTS+{item.at:.6f}/TB[layer{index}]')
             parts.append(f'{base}[layer{index}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:'
                 f"enable='gte(t,{item.at:.6f})*lt(t,{item.at+item.duration:.6f})'[composite{index}]")
             base=f'[composite{index}]'
         else:
             delay=round(item.at*1000)
-            parts.append(f'[{index}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},'
+            parts.append(f'[{stream}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},'
                 f'aresample=48000,aformat=channel_layouts=stereo,' + audio_gain(item) +
                 f'atrim=duration={item.duration:.6f},' + audio_envelope(item) + f'adelay={delay}|{delay}[audio{index}]')
             audio.append(f'[audio{index}]')
@@ -61,7 +75,8 @@ def export_project(project,output,work_dir,*,encoder='auto',progress_cb=None,can
     if output.suffix.lower()!='.mp4':raise ValueError('Multitrack export requires an .mp4 path')
     if output.resolve() in {Path(media.path).resolve() for media in project.media}:
         raise ValueError('Export cannot overwrite source media')
-    inputs,filters,video,audio=graph(project)
+    work_dir=Path(work_dir);work_dir.mkdir(parents=True,exist_ok=True)
+    inputs,filters,video,audio=graph(project,work_dir)
     output.parent.mkdir(parents=True,exist_ok=True)
     work_dir=Path(work_dir);work_dir.mkdir(parents=True,exist_ok=True)
     fd,temp=tempfile.mkstemp(prefix='.multitrack-',suffix='.mp4',dir=output.parent)
@@ -176,3 +191,9 @@ def video_effects(item):
     if item.rotation:
         filters.append(f'rotate={item.rotation:.8f}*PI/180:ow=iw:oh=ih:c=black')
     return ','.join(filters)+(',' if filters else '')
+
+
+def dissolve_filter(project,item):
+    from .overlay_tracks import dissolve_duration
+    duration=dissolve_duration(project,item.id)
+    return f'fade=t=in:st=0:d={duration:.8f}:alpha=1,' if duration else ''

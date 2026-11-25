@@ -11,7 +11,7 @@ import time
 from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
-    QCheckBox,QComboBox,QDoubleSpinBox,QFileDialog,QFormLayout,QHBoxLayout,QLabel,QPushButton,QSplitter,QWidget,QVBoxLayout,
+    QCheckBox,QComboBox,QDoubleSpinBox,QFileDialog,QFormLayout,QInputDialog,QHBoxLayout,QLabel,QPushButton,QSplitter,QWidget,QVBoxLayout,
     QProgressBar,QTableWidget,QTableWidgetItem,QScrollArea,
 )
 
@@ -115,6 +115,16 @@ class MultitrackPage(BasePage):
                              ('Export MP4…',self._export),('Cancel export',self._cancel_export)]:
             button=QPushButton(text);button.clicked.connect(handler);row.addWidget(button)
         self.content_layout.addLayout(row)
+        overlays=FlowLayout();overlays.addWidget(QLabel('Dedicated lanes:'))
+        self.caption_style_combo=QComboBox()
+        from ...captions.caption_engine import CAPTION_STYLES
+        for key,style in CAPTION_STYLES.items():self.caption_style_combo.addItem(style.name,key)
+        self.caption_style_combo.setCurrentIndex(max(0,self.caption_style_combo.findData(self.db.get_setting('caption_style','bold_viral'))))
+        overlays.addWidget(self.caption_style_combo)
+        for text,handler in [('Add caption…',self._add_caption),('Edit caption…',self._edit_caption),
+                             ('Add color effect…',self._add_effect),('Dissolve into selected video…',self._add_dissolve)]:
+            button=QPushButton(text);button.clicked.connect(handler);overlays.addWidget(button)
+        self.content_layout.addLayout(overlays)
         self.preview=QLabel('Import local media to preview. No example video is loaded.')
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter);self.preview.setMinimumHeight(250)
         stage=QSplitter(Qt.Orientation.Horizontal)
@@ -221,6 +231,56 @@ class MultitrackPage(BasePage):
             shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
             shortcut.activated.connect(handler);self.shortcuts.append(shortcut)
 
+    def _overlay_length(self,title,default=3.):
+        return QInputDialog.getDouble(self,title,'Duration in timeline seconds',default,.05,21600-self.cursor.value(),2)
+
+    def _add_caption(self):
+        text,ok=QInputDialog.getMultiLineText(self,'Caption lane','Caption text (up to 1000 characters)')
+        if not ok:return
+        length,ok=self._overlay_length('Caption duration')
+        if not ok:return
+        settings=self.db.get_settings()
+        options={target:settings.get(source,default) for source,target,default in [
+            ('caption_primary','primary_override',''),('caption_highlight','highlight_override',''),
+            ('caption_outline','outline_override',''),('caption_animation','animation_override',''),
+            ('caption_alignment','alignment_override',''),('caption_font','font_override',''),
+            ('caption_size','size_override',58),('caption_stroke','stroke_override',4),
+            ('caption_position','position_override','bottom'),('caption_timing_offset','timing_offset',0.)]}
+        options.update(shadow_override=bool(settings.get('caption_shadow',True)),background_override=bool(settings.get('caption_background',False)))
+        try:
+            selected=self.project.add_caption(text,self.cursor.value(),length,self.caption_style_combo.currentData(),options)
+            self._changed();self._timeline_selected(*selected)
+        except Exception as exc:self._error(str(exc))
+
+    def _edit_caption(self):
+        try:
+            lane_id,item_id=self._selected();lane,item=self.project.find(lane_id,item_id)
+            if lane.kind!='caption':raise ValueError('Select a caption item first')
+            text,ok=QInputDialog.getMultiLineText(self,'Edit caption','Caption text',item.text)
+            if not ok:return
+            self.project.change_item(lane_id,item_id,text=text,caption_style=self.caption_style_combo.currentData())
+            self._changed()
+        except Exception as exc:self._error(str(exc))
+
+    def _add_effect(self):
+        presets={'Monochrome':(0.,1.,0.),'Punchy':(.02,1.2,1.15),'Lifted shadows':(.08,.95,1.)}
+        name,ok=QInputDialog.getItem(self,'Color effect lane','Starting treatment (adjust it in the Inspector)',list(presets),0,False)
+        if not ok:return
+        length,ok=self._overlay_length('Effect duration')
+        if not ok:return
+        try:
+            selected=self.project.add_effect(self.cursor.value(),length,*presets[name])
+            self._changed();self._timeline_selected(*selected)
+        except Exception as exc:self._error(str(exc))
+
+    def _add_dissolve(self):
+        duration,ok=QInputDialog.getDouble(self,'Cross-dissolve lane','Overlap two video items first. Select the incoming video above the outgoing layer. Dissolve duration (seconds):',.5,.05,30.,2)
+        if not ok:return
+        try:
+            selected=self.project.add_dissolve(*self._selected(),duration)
+            self._changed();self._timeline_selected(*selected)
+        except Exception as exc:self._error(str(exc))
+
     def _canvas_changed(self,*_):
         try:
             width,height=self.canvas_combo.currentData();fps=self.fps_combo.currentData()
@@ -250,7 +310,9 @@ class MultitrackPage(BasePage):
             return
         for key,spin in self.inspector_controls.items():
             spin.blockSignals(True);spin.setValue(getattr(item,key));spin.blockSignals(False)
-            spin.setEnabled(not lane.locked and (key=='gain' if lane.kind=='audio' else key!='gain'))
+            compatible=(key=='gain' or key in ('fade_in','fade_out')) if lane.kind=='audio' else key!='gain' if lane.kind=='video' else key in ('brightness','contrast','saturation') if lane.kind=='effect' else False
+            spin.setEnabled(not lane.locked and compatible)
+        if lane.kind=='caption':self.caption_style_combo.setCurrentIndex(max(0,self.caption_style_combo.findData(item.caption_style)))
 
     def _step_frame(self,delta):
         self._stop()
@@ -315,15 +377,17 @@ class MultitrackPage(BasePage):
         for lane in self.project.lanes:
             for item in lane.items:
                 self._rows.append((lane.id,item.id))
-                values=[lane.name,lane.kind,Path(sources[item.media_id].path).name]+[getattr(item,field) for field in self.fields]
+                values=[lane.name,lane.kind,Path(sources[item.media_id].path).name if item.media_id in sources else item.text[:80] if lane.kind=='caption' else 'Cross dissolve' if lane.kind=='transition' else 'Color adjustment']+[getattr(item,field) for field in self.fields]
                 for col,value in enumerate(values):
                     cell=QTableWidgetItem(str(value))
-                    inactive=(lane.kind=='video' and col==7) or (lane.kind=='audio' and 8<=col<=12)
+                    inactive=(lane.kind=='video' and col==7) or (lane.kind=='audio' and 8<=col<=12) or (lane.kind in ('caption','effect','transition') and col not in (0,1,2,3,5))
                     if inactive:cell.setText('—')
                     if col in (1,2) or inactive:cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
                     self.table.setItem(row,col,cell)
                 for col,field in [(15,'fade_in'),(16,'fade_out')]:
-                    self.table.setItem(row,col,QTableWidgetItem(str(getattr(item,field))))
+                    cell=QTableWidgetItem(str(getattr(item,field)))
+                    if lane.kind not in ('video','audio'):cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                    self.table.setItem(row,col,cell)
                 for col,checked in [(13,lane.enabled),(14,lane.locked)]:
                     cell=QTableWidgetItem();cell.setFlags(Qt.ItemFlag.ItemIsUserCheckable|Qt.ItemFlag.ItemIsEnabled|Qt.ItemFlag.ItemIsSelectable)
                     cell.setCheckState(Qt.CheckState.Checked if checked else Qt.CheckState.Unchecked)
@@ -350,7 +414,8 @@ class MultitrackPage(BasePage):
             self.status.setText('Waveform analysis already running');return
         try:
             _,item=self.project.find(*self._selected())
-            source=next(m for m in self.project.media if m.id==item.media_id)
+            source=next((m for m in self.project.media if m.id==item.media_id),None)
+            if source is None:raise ValueError('Select a source video/audio item, not an overlay lane')
             if not source.has_audio:raise ValueError('Selected source has no audio')
             if self.waveform_worker:self.waveform_worker.deleteLater()
             self.waveform_worker=WaveformWorker(source,self)
@@ -384,6 +449,8 @@ class MultitrackPage(BasePage):
         if not hasattr(self,'key_status'):return
         try:
             lane,item=self.project.find(*self._selected())
+            if lane.kind not in ('video','audio'):
+                self.key_status.setText(f'{lane.kind.title()} lane · drag/trim timing on the timeline. Captions use their preset motion; color effects use the Inspector. Dissolves must fit the video overlap.');return
             keys=item.opacity_keys if lane.kind=='video' else item.gain_keys
             self.key_value.setMaximum(1 if lane.kind=='video' else 4)
             self.key_status.setText(('Opacity' if lane.kind=='video' else 'Gain')+' keys (clip seconds): '+
@@ -439,6 +506,7 @@ class MultitrackPage(BasePage):
     def _relink(self):
         try:
             _,item=self.project.find(*self._selected())
+            if not item.media_id:raise ValueError('Caption, effect and transition lanes do not reference source files')
             path,_=QFileDialog.getOpenFileName(self,'Relink selected source for all its items','','Media files (*)')
             if path:self.project.relink(item.media_id,path);self._changed()
         except Exception as exc:self._error(str(exc))

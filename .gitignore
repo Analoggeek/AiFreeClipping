@@ -56,3 +56,6 @@ desktop.ini
 
 # Generated UI captures / local acceptance artifacts.
 /artifacts/
+
+# Disposable browser acceptance tooling and downloaded binaries
+/.cache/
