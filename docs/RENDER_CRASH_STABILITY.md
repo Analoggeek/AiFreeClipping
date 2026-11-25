@@ -75,3 +75,15 @@ Official release jobs now build/test macos-15 arm64 and macos-15-intel x86_64
 separately, each with its own frozen bundle checks, arch-labelled DMG/archive and
 all-platform publication gate. Verbose test identity/120s stack diagnostics
 make future stalls actionable instead of waiting without test identification.
+
+Full-order bounded Intel tests isolated a second concrete issue (issue133):
+**range** renders with an infinitely looped music input hang inside FFmpeg6.0
+once the downstream atrim reaches EOF; timeline cases finish. This occurs on
+native Intel too, so the earlier Rosetta stall was not sufficient evidence of
+a Rosetta-specific fault. Music inputs are now explicitly time-bounded at the
+demuxer (`-stream_loop -1 -t <edited duration> -i music`) for both range and
+timeline paths. Existing tests assert this scope and continue measuring actual
+looped music beyond source EOF and requested export duration, with/without
+ducking. Nothing is fixed by removing music. The bounded audit also forced
+QT_QPA_PLATFORM=minimal on macOS, which prevented native playback; it now uses
+the native GUI platform, just like release tests (not a playback-test skip).

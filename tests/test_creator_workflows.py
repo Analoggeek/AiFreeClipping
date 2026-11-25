@@ -212,7 +212,7 @@ def test_new_animated_caption_styles_reach_real_clip_export(video,tmp_path,style
 
 @pytest.mark.parametrize('timeline_mode',[False,True])
 @pytest.mark.parametrize('ducking',[False,True])
-def test_music_is_mixed_into_actual_range_and_timeline_exports(video,tmp_path,timeline_mode,ducking):
+def test_music_is_mixed_into_actual_range_and_timeline_exports(video,tmp_path,timeline_mode,ducking,monkeypatch):
     import numpy as np
     from clipos.core.ffmpeg import require_ffmpeg,probe
     ffmpeg=require_ffmpeg()
@@ -224,6 +224,18 @@ def test_music_is_mixed_into_actual_range_and_timeline_exports(video,tmp_path,ti
         normalize_audio=False,noise_reduction=False,sound_effects=False,encoder_preference='cpu',
         background_music=str(music),bgm_volume=.5,bgm_ducking=ducking)
     output=tmp_path/'mixed.mp4'
+    from clipos.core.ffmpeg import FFmpegRunner
+    original_run=FFmpegRunner.run
+    def bounded_music_run(self,args,*a,**kw):
+        loop=args.index('-stream_loop')
+        assert args[loop+1]=='-1'
+        # Bound the demuxed input itself, not only atrim downstream: FFmpeg6
+        # otherwise keeps reading an infinite music source after filter EOF.
+        assert args[loop+2]=='-t'
+        assert float(args[loop+3])==pytest.approx(1.5 if timeline_mode else 2)
+        assert args[loop+4]=='-i' and args[loop+5]==str(music)
+        return original_run(self,args,*a,**kw)
+    monkeypatch.setattr(FFmpegRunner,'run',bounded_music_run)
     renderer=ClipRenderer(tmp_path/'work')
     if timeline_mode:
         timeline=Timeline.from_clip(0,2,source_duration=2)
