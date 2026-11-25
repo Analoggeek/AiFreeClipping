@@ -260,3 +260,13 @@ their own LGPL/GPL terms.
 **Ai clipping PRO · by Analoggeek**
 
 </div>
+
+### Integrated production studio (development branch)
+
+An additive **Clip Queue & Editor** foundation is under development in the same
+native app. Generated clips feed the queue, which supports multiselection and
+background import into the existing non-destructive multitrack assembly engine.
+Graphical trim/move, linked A/V split/remove, undo/redo and assembly save/open are
+available in this increment. Source playback is not composited timeline preview.
+This is **not yet the complete professional editor** or a new published release.
+See [phase status and limitations](docs/PRODUCTION_STUDIO_PLAN.md).

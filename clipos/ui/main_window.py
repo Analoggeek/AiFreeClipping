@@ -217,6 +217,7 @@ class MainWindow(QMainWindow):
         nav_defs = [
             ('clipper','','Video Clipper'),
             ('library','','Clip Library'),
+            ('studio','','Clip Queue & Editor'),
             ('models','','AI Models'),
             ('settings','','Settings'),
         ]
@@ -259,8 +260,9 @@ class MainWindow(QMainWindow):
         from .pages.models import ModelsPage
         from .pages.essential_settings import EssentialSettingsPage
         from .pages.clip_library import ClipLibraryPage
+        from .pages.studio import StudioPage
         self._page_classes={'clipper':VideoClipperPage,'library':ClipLibraryPage,
-                            'models':ModelsPage,'settings':EssentialSettingsPage}
+                            'models':ModelsPage,'settings':EssentialSettingsPage,'studio':StudioPage}
         self._ensure_page('clipper')
 
     def _ensure_page(self,key):

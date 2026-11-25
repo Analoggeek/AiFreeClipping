@@ -62,10 +62,16 @@ def native(tmp_path, monkeypatch):
         db.close()
 
 
-def test_only_four_routes_and_no_retired_feature_construction(native):
+def test_core_routes_and_integrated_studio_without_retired_feature_construction(native):
     app, db, window, _ = native
     assert set(window.pages) == {"clipper"}
-    assert set(window.nav_buttons) == {"clipper", "library", "models", "settings"}
+    assert set(window.nav_buttons) == {
+        "clipper",
+        "library",
+        "models",
+        "settings",
+        "studio",
+    }
     for key in (
         "home",
         "workflow",
@@ -171,3 +177,44 @@ def test_explicit_speech_model_missing_stops_without_download_or_silent_fallback
             generate_clips(db, pid, crop, paths.exports, speech=True)
         download.assert_not_called()
     assert not db.list_clips(pid)
+
+
+def test_studio_twenty_queue_entries_real_media_import_split_and_reopen(
+    native, tmp_path
+):
+    """20 DB queue entries reference real fixture media; not 20 AI-generated clips."""
+    from clipos.video.multitrack import MultitrackProject
+
+    app, db, window, paths = native
+    video = source(tmp_path, 320, 180)
+    pid = db.create_project(name="Queue acceptance", source_path=str(video), duration=2)
+    window.navigate("studio")
+    page = window.pages["studio"]
+    assert page.queue.rowCount() == 0
+    for index in range(20):
+        db.create_clip(
+            project_id=pid,
+            title=f"Clip {index + 1}",
+            output_path=str(video),
+            duration=2,
+        )
+    window.data_changed.emit()
+    assert page.queue.rowCount() == 20
+    page.queue.selectAll()
+    page.add_selected()
+    deadline = time.monotonic() + 15
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert len(page.project.media) == 20
+    assert page.project.duration == pytest.approx(40)
+    lane = page.project.lanes[0]
+    item = lane.items[0]
+    page.project.split(lane.id, item.id, 1, linked=True)
+    page.draw_timeline()
+    assert len(page.project.lanes[0].items) == 2
+    saved = tmp_path / "assembly.json"
+    page.project.save(saved)
+    assert MultitrackProject.load(saved).to_dict() == page.project.to_dict()
+    assert video.is_file()

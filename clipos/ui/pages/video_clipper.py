@@ -530,6 +530,8 @@ class VideoClipperPage(BasePage):
                 )
             )
             self.window.data_changed.emit()
+            if len(result) > len(errors):
+                self.navigate("studio")
 
         self._start(job, done)
 

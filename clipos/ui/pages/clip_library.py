@@ -1,4 +1,4 @@
-"""Generated, playable local media only; no routes back to a manual editor."""
+"""Generated local media library with an integrated assembly queue route."""
 
 from pathlib import Path
 import shutil
@@ -32,6 +32,9 @@ class ClipLibraryPage(BasePage):
         self.search.setPlaceholderText("Search clips…")
         self.search.textChanged.connect(self.refresh)
         header.add_action(self.search)
+        editor = QPushButton("Open Clip Queue & Editor")
+        editor.clicked.connect(lambda: self.navigate("studio"))
+        header.add_action(editor)
         card.add(header)
         self.grid_host = QWidget()
         self.grid = QGridLayout(self.grid_host)
