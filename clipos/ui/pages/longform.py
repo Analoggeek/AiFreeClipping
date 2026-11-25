@@ -28,7 +28,7 @@ class LongformWorker(QThread):
 
 class LongformPage(BasePage):
     page_title='Automatic long-form editor'
-    page_subtitle='Local quiet + frozen-picture evidence · editable chronological keeps · CPU MP4 assembly'
+    page_subtitle='Local quiet + frozen-picture evidence · editable chronological keeps · hardware-probed MP4 assembly'
 
     def __init__(self,window):
         self.path=None;self.data=None;self.worker=None
@@ -108,7 +108,12 @@ class LongformPage(BasePage):
             if not self.path:raise ValueError('Analyze or open a plan first')
             self._write(self.path)
             output,_=QFileDialog.getSaveFileName(self,'Export chronological long-form video','','MP4 (*.mp4)')
-            if output:self._start(longform.export,(self.path,output),lambda data:self.status.setText(f"Exported {data['output_path']} · {data['duration']:.2f}s · {data['segments']} parts"))
+            if output:
+                from functools import partial
+                from ...core.editing import render_settings
+                settings=render_settings(self.db)
+                action=partial(longform.export,encoder=settings.encoder_preference,threads=settings.threads)
+                self._start(action,(self.path,output),lambda data:self.status.setText(f"Exported {data['output_path']} · {data['duration']:.2f}s · {data['segments']} parts · {data['encoder']}"))
         except Exception as exc:self.status.setText(str(exc))
 
     def _cancel(self):

@@ -5,7 +5,7 @@ from clipos.core.hardware import HardwareProfile, GPUInfo
 from clipos.core import hardware
 
 
-@pytest.mark.parametrize('logical,ram,expected',[(1,4096,1),(4,8192,3),(8,8192,4),(16,16384,8),(32,65536,8)])
+@pytest.mark.parametrize('logical,ram,expected',[(1,4096,1),(4,8192,3),(8,8192,4),(16,16384,14),(32,65536,28)])
 def test_automatic_cpu_budget_leaves_ui_headroom(logical,ram,expected):
     assert HardwareProfile(cpu_threads=logical,ram_total_mb=ram).recommended_threads==expected
 

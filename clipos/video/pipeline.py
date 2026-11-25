@@ -547,60 +547,62 @@ class ClipOSPipeline:
         self.external_cancel = cancel_cb or previous_cancel
         results: list[dict] = []
 
-        for index, clip_id in enumerate(clip_ids):
-            if cancel_cb and cancel_cb():
-                break
-            clip = self.db.get_clip(clip_id)
-            if clip is None:
-                results.append({"clip_id": clip_id, "error": "clip not found"})
-                continue
+        try:
+            for index, clip_id in enumerate(clip_ids):
+                if cancel_cb and cancel_cb():
+                    break
+                clip = self.db.get_clip(clip_id)
+                if clip is None:
+                    results.append({"clip_id": clip_id, "error": "clip not found"})
+                    continue
 
-            target = batch / f"clip_{clip_id:03d}_{_safe_folder(clip['title'])}.mp4"
-            target.parent.mkdir(parents=True, exist_ok=True)
+                target = batch / f"clip_{clip_id:03d}_{_safe_folder(clip['title'])}.mp4"
+                target.parent.mkdir(parents=True, exist_ok=True)
 
-            def cb(pct: float, msg: str, idx: int = index) -> None:
-                if progress_cb:
-                    progress_cb(idx, total, msg, pct)
+                def cb(pct: float, msg: str, idx: int = index) -> None:
+                    if progress_cb:
+                        progress_cb(idx, total, msg, pct)
 
-            try:
-                info = self.render_clip(
-                    clip_id, target, deepcopy(settings), analysis,
-                    make_thumbnails=True, progress_cb=cb,
-                )
-                size = int(info.get("size_bytes", 0))
-                thumbs = info.get("thumbnails") or []
-                self.db.update_clip(
-                    clip_id, status="exported", output_path=str(target),
-                    thumbnail_path=thumbs[0] if thumbs else "",
-                )
-                export_id = self.db.create_export(
-                    project_id=self.project_id, clip_id=clip_id,
-                    output_path=str(target), status="done", size_bytes=size,
-                    duration=float(info.get("duration", 0.0)),
-                    width=int(info.get("width", settings.width)),
-                    height=int(info.get("height", settings.height)),
-                    fps=int(settings.fps), codec=settings.codec,
-                    bitrate=int(settings.bitrate_kbps),
-                )
-                info.update({"clip_id": clip_id, "output_path": str(target), "export_id": export_id, "error": ""})
-                results.append(info)
-            except PipelineCancelled:
-                self.db.update_clip(clip_id, status="cancelled")
-                break
-            except Exception as exc:
-                self.db.update_clip(clip_id, status="error")
-                log.exception("export failed for clip %s", clip_id)
-                self.db.create_export(
-                    project_id=self.project_id, clip_id=clip_id,
-                    output_path=str(target), status="failed", size_bytes=0,
-                    duration=0.0, error=str(exc),
-                )
-                results.append({
-                    "clip_id": clip_id, "output_path": str(target),
-                    "size_bytes": 0, "error": str(exc),
-                })
-            manifest_path.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
-        self.external_cancel = previous_cancel
+                try:
+                    info = self.render_clip(
+                        clip_id, target, deepcopy(settings), analysis,
+                        make_thumbnails=True, progress_cb=cb,
+                    )
+                    size = int(info.get("size_bytes", 0))
+                    thumbs = info.get("thumbnails") or []
+                    self.db.update_clip(
+                        clip_id, status="exported", output_path=str(target),
+                        thumbnail_path=thumbs[0] if thumbs else "",
+                    )
+                    export_id = self.db.create_export(
+                        project_id=self.project_id, clip_id=clip_id,
+                        output_path=str(target), status="done", size_bytes=size,
+                        duration=float(info.get("duration", 0.0)),
+                        width=int(info.get("width", settings.width)),
+                        height=int(info.get("height", settings.height)),
+                        fps=int(settings.fps), codec=settings.codec,
+                        bitrate=int(settings.bitrate_kbps),
+                    )
+                    info.update({"clip_id": clip_id, "output_path": str(target), "export_id": export_id, "error": ""})
+                    results.append(info)
+                except PipelineCancelled:
+                    self.db.update_clip(clip_id, status="cancelled")
+                    break
+                except Exception as exc:
+                    self.db.update_clip(clip_id, status="error")
+                    log.exception("export failed for clip %s", clip_id)
+                    self.db.create_export(
+                        project_id=self.project_id, clip_id=clip_id,
+                        output_path=str(target), status="failed", size_bytes=0,
+                        duration=0.0, error=str(exc),
+                    )
+                    results.append({
+                        "clip_id": clip_id, "output_path": str(target),
+                        "size_bytes": 0, "error": str(exc),
+                    })
+                manifest_path.write_text(json.dumps(results, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+        finally:
+            self.external_cancel = previous_cancel
         return results
 
 

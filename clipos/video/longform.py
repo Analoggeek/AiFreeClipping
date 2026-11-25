@@ -100,7 +100,7 @@ def load(path):
     return data,timeline
 
 
-def export(plan_path,output,*,cancel_cb=None,progress_cb=None,width=1920,height=1080):
+def export(plan_path,output,*,cancel_cb=None,progress_cb=None,width=1920,height=1080,encoder="auto",threads=0):
     data,timeline=load(plan_path);source=Path(data['source']);output=Path(output)
     if output.suffix.lower()!='.mp4' or output.resolve() in (source.resolve(),Path(plan_path).resolve()):
         raise ValueError('Select MP4 output separate from source and plan')
@@ -108,19 +108,39 @@ def export(plan_path,output,*,cancel_cb=None,progress_cb=None,width=1920,height=
     info=probe(source)
     if abs(info.duration-timeline.source_duration)>.2 or not info.has_video:raise ValueError('Long-form plan duration does not match source')
     output.parent.mkdir(parents=True,exist_ok=True)
+    from ..core.hardware import choose_encoder,suggest_worker_threads
+    budget=str(suggest_worker_threads(threads));choice=choose_encoder(encoder)
+    warnings=[]
     with tempfile.TemporaryDirectory(prefix='.longform-',dir=output.parent) as temporary:
         root=Path(temporary);parts=[]
-        for index,segment in enumerate(timeline.segments):
-            if cancel_cb and cancel_cb():raise FFmpegCancelled()
-            part=root/f'part-{index:05d}.mp4';parts.append(part)
-            audio=[] if info.has_audio else ['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']
-            FFmpegRunner(total_duration=segment.duration,cancel_cb=cancel_cb,
-                progress_cb=lambda p,t,i=index:progress_cb((i+p/100)/len(timeline.segments)*95,'Encoding chronological keep segments') if progress_cb else None).run([
-                '-threads','2','-ss',str(segment.start),'-t',str(segment.source_duration),'-i',str(source),*audio,
-                '-map','0:v:0','-map','0:a:0' if info.has_audio else '1:a:0',
-                '-vf',f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30',
-                '-c:v','libx264','-preset','fast','-crf','21','-pix_fmt','yuv420p','-threads','2',
-                '-c:a','aac','-ar','48000','-ac','2','-b:a','160k','-t',str(segment.duration),str(part)])
+        # Restart ALL parts after a device failure: never concatenate mixed
+        # hardware/software codec configurations into one unchecked stream.
+        for attempt in range(2):
+            parts=[]
+            try:
+                for index,segment in enumerate(timeline.segments):
+                    if cancel_cb and cancel_cb():raise FFmpegCancelled()
+                    part=root/f'part-{index:05d}.mp4';parts.append(part)
+                    audio=[] if info.has_audio else ['-f','lavfi','-i','anullsrc=r=48000:cl=stereo']
+                    video=['-c:v',choice.video_encoder]
+                    if choice.hw_accel=='nvenc':video+=['-preset','p4','-b:v','8M']
+                    elif choice.hw_accel=='qsv':video+=['-preset','fast','-b:v','8M']
+                    elif choice.hw_accel=='amf':video+=['-quality','speed','-b:v','8M']
+                    elif choice.hw_accel=='videotoolbox':video+=['-allow_sw','0','-b:v','8M']
+                    else:video+=['-preset','veryfast','-crf','21']
+                    FFmpegRunner(total_duration=segment.duration,cancel_cb=cancel_cb,
+                        progress_cb=lambda p,t,i=index:progress_cb((i+p/100)/len(timeline.segments)*95,'Encoding chronological keep segments') if progress_cb else None).run([
+                        '-threads',budget,'-filter_threads',budget,'-ss',str(segment.start),'-t',str(segment.source_duration),'-i',str(source),*audio,
+                        '-map','0:v:0','-map','0:a:0' if info.has_audio else '1:a:0',
+                        '-vf',f'scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30',
+                        *video,'-pix_fmt','yuv420p','-threads',budget,
+                        '-c:a','aac','-ar','48000','-ac','2','-b:a','160k','-t',str(segment.duration),str(part)])
+                break
+            except FFmpegCancelled:raise
+            except Exception as exc:
+                if not choice.is_hardware or attempt:raise
+                warnings.append('Hardware encoding failed; all parts restarted on CPU: '+str(exc)[:300])
+                choice=choose_encoder('cpu')
         listing=root/'parts.txt';listing.write_text(''.join(f"file '{part.name}'\n" for part in parts))
         target=root/'complete.mp4'
         FFmpegRunner(total_duration=timeline.duration,cancel_cb=cancel_cb).run([
@@ -132,4 +152,4 @@ def export(plan_path,output,*,cancel_cb=None,progress_cb=None,width=1920,height=
         if cancel_cb and cancel_cb():raise FFmpegCancelled()
         os.replace(target,output)
     if progress_cb:progress_cb(100,'Long-form MP4 exported')
-    return {'output_path':str(output),'duration':result.duration,'segments':len(parts),'size_bytes':output.stat().st_size,'encoder':'libx264 CPU'}
+    return {'output_path':str(output),'duration':result.duration,'segments':len(parts),'size_bytes':output.stat().st_size,'encoder':choice.description,'warnings':warnings}
