@@ -8,12 +8,21 @@ concurrency:
   cancel-in-progress: true
 permissions:
   contents: read
+  actions: read
   issues: write
 jobs:
   audit:
     runs-on: macos-15-intel
     timeout-minutes: 15
     steps:
+      - name: Preserve timed-out Intel test context
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh run view 45558003804 --job 139014647807 --log > previous-run.log
+          tail -c 45000 previous-run.log > timeout-context.log
+          gh issue create --title "Intel test timeout context" --body-file timeout-context.log
       - name: Inspect upstream Intel 6.0 compatibility candidate
         env:
           GH_TOKEN: ${{ github.token }}
