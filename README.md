@@ -11,12 +11,12 @@ shape your captions, edit real timelines and export local files—without a mand
 cloud account, upload or subscription.
 
 **[Explore the website ↗](https://analoggeek.github.io/AiFreeClipping/)** ·
-**[Download v3.6.0 ↓](#download)** ·
+**[Download v3.6.1 ↓](#download)** ·
 **[Quick start](#quick-start)** ·
 **[What works](#features)** ·
 **[Support](https://github.com/Analoggeek/AiFreeClipping/issues)**
 
-**LATEST RELEASE: v3.6.0** · Windows · Apple Silicon · Intel Mac · Linux
+**LATEST RELEASE: v3.6.1** · Windows · Apple Silicon · Intel Mac · Linux
 
 </div>
 
@@ -25,16 +25,16 @@ cloud account, upload or subscription.
 ## Download
 
 Choose your platform. Every link below is a direct download from the official
-**v3.6.0** release—no download manager or account required.
+**v3.6.1** release—no download manager or account required.
 
 | Your system | Installer | Alternative |
 | :--- | :--- | :--- |
-| **Windows 10 / 11 · x64** | [**Download EXE ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.0/CLIPOS-Setup.exe) | — |
-| **macOS · Apple Silicon** | [**Download ARM64 DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.0/CLIPOS-3.6.0-arm64.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.0/CLIPOS-arm64.app.tar.gz) |
-| **macOS · Intel x86_64** | [**Download Intel DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.0/CLIPOS-3.6.0-intel.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.0/CLIPOS-intel.app.tar.gz) |
-| **Linux · Debian / Ubuntu amd64** | [**Download DEB ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.0/CLIPOS_3.6.0_amd64.deb) | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.0/CLIPOS-3.6.0-linux-x86_64.zip) |
+| **Windows 10 / 11 · x64** | [**Download EXE ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-Setup.exe) | — |
+| **macOS · Apple Silicon** | [**Download ARM64 DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-arm64.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-arm64.app.tar.gz) |
+| **macOS · Intel x86_64** | [**Download Intel DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-intel.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-intel.app.tar.gz) |
+| **Linux · Debian / Ubuntu amd64** | [**Download DEB ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS_3.6.1_amd64.deb) | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-linux-x86_64.zip) |
 
-[Release notes & all seven assets ↗](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.6.0)
+[Release notes & all seven assets ↗](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.6.1)
 
 > **Which Mac build?** Open **Apple menu → About This Mac**. “Chip: Apple M…” means
 > Apple Silicon; “Processor: Intel…” means the Intel build. Asset/executable names
@@ -49,7 +49,7 @@ Choose your platform. Every link below is a direct download from the official
 - **Debian / Ubuntu:** open the DEB in your package manager, or use:
 
   ```bash
-  sudo apt install ./CLIPOS_3.6.0_amd64.deb
+  sudo apt install ./CLIPOS_3.6.1_amd64.deb
   ```
 
 Download only from the official release. Native signature integrity checks are
@@ -60,9 +60,9 @@ Follow official OS security guidance; do not disable security protections.
 
 ## Inside the workspace
 
-[![Actual Ai clipping PRO Home screen](docs/assets/home.webp)](https://analoggeek.github.io/AiFreeClipping/#studio)
+[![Actual Ai clipping PRO reference-aligned Create clips dashboard](docs/assets/home.webp)](https://analoggeek.github.io/AiFreeClipping/#studio)
 
-*Actual v3.6 application capture. Empty-library counts are genuine—not seeded project statistics.*
+*Actual v3.6.1 application capture. The empty recent-project list and model availability are genuine—not seeded demo data.*
 
 ## Features
 
@@ -110,13 +110,24 @@ falls back to cue-level motion rather than fabricated synchronization.
 
 ![Actual multitrack validation project with caption, effect and dissolve lanes](docs/assets/editor.webp)
 
-Actual v3.6 application capture using generated red/blue validation footage—not
+Actual v3.6.1 application capture using generated red/blue validation footage—not
 user recordings. The purple blend is a real cross-dissolve, with ASS captions over
 video and a timed color-effect lane. The decoded preview is best-effort.
 
 [How to use these lanes](docs/MULTITRACK_OVERLAY_LANES.md)
 
 </details>
+
+## Reference-aligned native workspace
+
+The dashboard follows the supplied two-column design: hero, connected four-step
+workflow, real import target and six quick styles; Director, actual recent projects
+and model availability alongside. Narrow windows stack the columns. Editor (Pro)
+includes a Project Media panel linked to real timeline items. Settings has direct
+section navigation; existing preferences and projects are preserved.
+
+No fabricated project thumbnails, account/profile, cloud generation or model-ready
+badges are used. This is a native Qt interpretation, not a pixel-identical mockup.
 
 ## Quick start
 
@@ -175,14 +186,14 @@ These limitations are part of the current release, not hidden roadmap features:
 
 | Check | Verified result |
 | :--- | :--- |
-| Local full regression suite | **672 passed · 21 skipped** |
+| Local full regression suite | **676 passed · 21 skipped** |
 | Real import → analysis → render → batch export E2E | **35 / 35 passed** |
 | Native installer, editing and bundle verification | **Windows · Apple Silicon · Intel · Linux passed** |
 | Official release gate | **All seven nonempty assets published** |
 
-[Native installer checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45638993928) ·
-[Intel audit](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45639006957) ·
-[Official release build](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45646294150)
+[Native installer checks](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45656220903) ·
+[Intel audit](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45656205495) ·
+[Official release build](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45662127271)
 
 Automated checks do not replace manual acceptance on every source recording,
 physical device, driver or speech model. Skipped checks are not counted as passes.
@@ -243,7 +254,7 @@ their own LGPL/GPL terms.
 **Local intelligence. Creative independence.**
 
 [Website](https://analoggeek.github.io/AiFreeClipping/) ·
-[Download](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.6.0) ·
+[Download](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.6.1) ·
 [Report an issue](https://github.com/Analoggeek/AiFreeClipping/issues)
 
 **Ai clipping PRO · by Analoggeek**

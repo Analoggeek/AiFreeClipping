@@ -5,7 +5,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / 'docs'
-RELEASE = 'v3.6.0'
+RELEASE = 'v3.6.1'
 
 
 class Page(HTMLParser):
