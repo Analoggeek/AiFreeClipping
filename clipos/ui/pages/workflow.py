@@ -9,7 +9,7 @@ from PySide6.QtGui import QDesktopServices, QIcon
 from PySide6.QtWidgets import (QAbstractItemView, QButtonGroup, QCheckBox, QComboBox,
     QDoubleSpinBox, QFileDialog, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMessageBox, QPushButton, QProgressBar, QSlider, QSpinBox,
-    QStackedWidget, QFrame, QTextEdit, QVBoxLayout, QWidget)
+    QStackedWidget, QFrame, QBoxLayout, QTextEdit, QVBoxLayout, QWidget)
 from .base import BasePage
 from ..widgets.common import Card, SectionHeader
 from ..widgets.crop_selector import CropSelector
@@ -42,7 +42,7 @@ class WorkflowPage(BasePage):
         steps=QHBoxLayout();self.step_buttons=[];self.group=QButtonGroup(self)
         for i,label in enumerate(('1  Import','2  Select & style','3  Edit & review','4  Export')):
             b=QPushButton(label);b.setCheckable(True);self.group.addButton(b);b.clicked.connect(lambda _=False,n=i:self.go(n));steps.addWidget(b);self.step_buttons.append(b)
-        self.content_layout.addLayout(steps)
+        self.steps_bar=QWidget();self.steps_bar.setLayout(steps);self.content_layout.addWidget(self.steps_bar)
         self.stack=QStackedWidget();self.content_layout.addWidget(self.stack)
         for build in (self._import_ui,self._select_ui,self._review_ui,self._export_ui):
             page=QWidget();layout=QVBoxLayout(page);layout.setContentsMargins(0,0,0,0);build(layout);layout.addStretch();self.stack.addWidget(page)
@@ -68,24 +68,38 @@ class WorkflowPage(BasePage):
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         from ..widgets.import_drop import ImportDrop
         from ...core.resources import resource_file
-        hero=QFrame();hero.setObjectName('DashboardHero');hl=QHBoxLayout(hero);hl.setContentsMargins(26,24,26,24)
+        self.dashboard_columns=QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        self.dashboard_columns.setSpacing(18)
+        self.dashboard_left=QWidget();left=QVBoxLayout(self.dashboard_left);left.setContentsMargins(0,0,0,0)
+        left.setSpacing(18);left.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.dashboard_aside=QWidget();self.dashboard_aside.setMaximumWidth(380)
+        self.dashboard_right=QVBoxLayout(self.dashboard_aside);self.dashboard_right.setContentsMargins(0,0,0,0)
+        self.dashboard_right.setSpacing(16);self.dashboard_right.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.dashboard_columns.addWidget(self.dashboard_left,3);self.dashboard_columns.addWidget(self.dashboard_aside,1)
+        layout.addLayout(self.dashboard_columns)
+        hero=QFrame();hero.setObjectName('DashboardHero');hl=QHBoxLayout(hero);hl.setContentsMargins(26,28,26,28)
         text=QVBoxLayout();title=QLabel('Create standout clips with AI');title.setObjectName('HeroTitle');title.setWordWrap(True);text.addWidget(title)
-        sub=QLabel('Import a recording. Find meaningful moments, frame, caption and export.\nLocal tools. Your media stays on this device.');sub.setWordWrap(True);text.addWidget(sub)
-        text.addWidget(QLabel('Auto clip selection   ·   Speech captions   ·   Real editing'));hl.addLayout(text,1)
-        mark=QLabel();mark.setPixmap(QIcon(str(resource_file('icons','clipos-mark.svg'))).pixmap(124,124));hl.addWidget(mark);layout.addWidget(hero)
-        columns=QHBoxLayout();left=QVBoxLayout();left.setAlignment(Qt.AlignmentFlag.AlignTop);self.dashboard_right=QVBoxLayout();self.dashboard_right.setAlignment(Qt.AlignmentFlag.AlignTop);columns.addLayout(left,3);columns.addLayout(self.dashboard_right,2);layout.addLayout(columns)
-        drop=ImportDrop();drop.setMaximumHeight(310);dl=QVBoxLayout(drop);dl.setContentsMargins(24,28,24,28)
-        title=QLabel('Import video');title.setObjectName('PageTitle');dl.addWidget(title)
+        sub=QLabel('Import a video, find meaningful moments, edit, add captions and export professional shorts on your device.');sub.setObjectName('HeroSubtitle');sub.setWordWrap(True);text.addWidget(sub)
+        badges=QLabel('✦  Auto clip selection   ·   Speech captions   ·   Smart editing');badges.setObjectName('HeroSubtitle');badges.setWordWrap(True);text.addWidget(badges);hl.addLayout(text,1)
+        mark=QLabel();mark.setPixmap(QIcon(str(resource_file('icons','clipos-mark.svg'))).pixmap(108,108));hl.addWidget(mark);left.addWidget(hero)
+        steps=QHBoxLayout();steps.setSpacing(10)
+        for i,(title,detail) in enumerate((('Import','Video or link'),('Select style','Layout && captions'),('Edit && review','Fine-tune clips'),('Export','Save locally'))):
+            button=QPushButton(f'{i+1}. {title}\n{detail}');button.setObjectName('WorkflowStep');button.setCheckable(True);button.setChecked(i==0)
+            button.clicked.connect(lambda _=False,n=i:self.go(n));steps.addWidget(button)
+        left.addLayout(steps)
+        drop=ImportDrop();drop.setMinimumHeight(260);dl=QVBoxLayout(drop);dl.setContentsMargins(24,28,24,28)
+        icon=QLabel('⇧');icon.setObjectName('UploadGlyph');icon.setAlignment(Qt.AlignmentFlag.AlignCenter);dl.addWidget(icon)
+        title=QLabel('Import video');title.setObjectName('PageTitle');title.setAlignment(Qt.AlignmentFlag.AlignCenter);dl.addWidget(title)
         hint=QLabel('Drag a local recording here, choose a video, or paste an authorised public link.');hint.setWordWrap(True);dl.addWidget(hint)
         self.source=QLineEdit();self.source.setPlaceholderText('Local file path or authorised video URL');dl.addWidget(self.source)
-        row=QHBoxLayout();self._button('Choose local video',self._choose_file,row);self._button('Import video',lambda:self._import(False),row,True);dl.addLayout(row)
-        self._button('One-click: import, select & edit',lambda:self._import(True),dl,True)
+        row=QHBoxLayout();self._button('Paste video link',self._paste_link,row);self._button('Choose local video',self._choose_file,row);self._button('Import video',lambda:self._import(False),row,True);dl.addLayout(row)
+        self._button('One-click: import, select && edit',lambda:self._import(True),dl,True)
         note=QLabel('Uses your selected style. Models are installed separately with permission. Review uncertain facecam crops before final export.');note.setWordWrap(True);dl.addWidget(note)
         drop.file_dropped.connect(self._drop_import);left.addWidget(drop)
-        styles=Card();styles.setMaximumHeight(245);styles.add(SectionHeader('Quick styles','Connected to the existing edit recipes—not decorative tiles.'))
+        styles=Card();styles.add(SectionHeader('Quick styles','Connected to the existing edit recipes—not decorative tiles.'))
         row=QGridLayout();self.quick_style_buttons={}
         for label,key in [('Gaming','gaming'),('Podcast','podcast'),('Talking head','talking_head'),('Educational','educational'),('Reaction','reaction'),('Cinematic','cinematic')]:
-            button=QPushButton(label);button.setObjectName('QuickStyle');button.setCheckable(True)
+            button=QPushButton({'Gaming':'◈','Podcast':'♬','Talking head':'◉','Educational':'◇','Reaction':'✦','Cinematic':'▣'}[label]+'\n'+label);button.setObjectName('QuickStyle');button.setCheckable(True)
             button.setToolTip('Uses '+PRESETS[key][0]+' recipe; refine in Select & style')
             button.clicked.connect(lambda checked=False,k=key:self._quick_style(k));row.addWidget(button,len(self.quick_style_buttons)//3,len(self.quick_style_buttons)%3);self.quick_style_buttons[label]=(button,key)
         styles.add_layout(row);left.addWidget(styles)
@@ -94,9 +108,33 @@ class WorkflowPage(BasePage):
         self.recent_projects.itemActivated.connect(lambda item:self.load_project(item.data(Qt.ItemDataRole.UserRole)))
         recent.add(self.recent_projects);self._button('View all projects',lambda:self.window.navigate('projects'),recent.layout());self.dashboard_right.addWidget(recent)
         self._refresh_recent()
-        self.director_status=QLabel('Local AI model: not checked. No readiness assumed.');self.director_status.setWordWrap(True);self.dashboard_right.addWidget(self.director_status)
-        self._button('Check local director readiness',self._check_director,self.dashboard_right)
-        self._button('AI models · install / verify local weights',lambda:self.window.navigate('models'),self.dashboard_right)
+        models=Card();models.add(SectionHeader('AI models status','Measured availability, not assumed readiness'))
+        self.director_status=QLabel('Local director: not checked');self.director_status.setWordWrap(True);models.add(self.director_status)
+        self._button('Check local director',self._check_director,models.layout())
+        self.model_summary=QLabel();self.model_summary.setWordWrap(True);models.add(self.model_summary)
+        self._button('Manage models →',lambda:self.window.navigate('models'),models.layout())
+        self.dashboard_right.addWidget(models)
+        self._refresh_dashboard_models()
+
+    def resizeEvent(self,event):
+        super().resizeEvent(event)
+        if hasattr(self,'dashboard_columns'):
+            narrow=self.width()<1080
+            self.dashboard_columns.setDirection(QBoxLayout.Direction.TopToBottom if narrow else QBoxLayout.Direction.LeftToRight)
+            self.dashboard_aside.setMaximumWidth(16777215 if narrow else 380)
+
+    def _paste_link(self):
+        from PySide6.QtWidgets import QApplication
+        self.source.setText(QApplication.clipboard().text().strip())
+        self.source.setFocus()
+        self.status.setText('Review the pasted source, then choose Import video. Only authorised sources are supported.')
+
+    def _refresh_dashboard_models(self):
+        from ...ai.transcription import model_installed
+        from ...core.resources import resource_file
+        speech=next((size for size in ('tiny','base','small','medium','large-v3') if model_installed(size)),None)
+        face=resource_file('models','face_detection_yunet_2023mar.onnx').is_file()
+        self.model_summary.setText('Speech · '+('Whisper '+speech+' cached' if speech else 'Not downloaded')+'\nFace detection · '+('YuNet weights available' if face else 'Weights unavailable')+'\nInference quality requires an actual recording.')
 
     def _check_director(self):
         if getattr(self,'model_check',None) and self.model_check.isRunning():return
@@ -112,18 +150,22 @@ class WorkflowPage(BasePage):
 
     def _refresh_recent(self):
         if not hasattr(self,'recent_projects'):return
-        self.recent_projects.clear()
+        self.recent_projects.clear();self.recent_projects.setToolTip('Activate a project to reopen it')
         for project in self.db.list_projects()[:4]:
-            item=QListWidgetItem(project['name']);item.setData(Qt.ItemDataRole.UserRole,project['id']);self.recent_projects.addItem(item)
+            item=QListWidgetItem(project['name']+'\n'+str(project['status'])+' · '+str(round(project['duration'] or 0))+' s');item.setData(Qt.ItemDataRole.UserRole,project['id']);self.recent_projects.addItem(item)
         if not self.recent_projects.count():self.recent_projects.setToolTip('No projects yet. Import a recording to begin.')
 
     def _drop_import(self,path):
         if self._busy():return
         self.source.setText(path);self._import(False)
 
+    def _sync_quick_styles(self):
+        item=self.presets.currentItem();key=item.data(Qt.ItemDataRole.UserRole) if item else None
+        for button,value in self.quick_style_buttons.values():button.setChecked(value==key)
+
     def _quick_style(self,key):
         self.presets.setCurrentRow(list(PRESETS).index(key))
-        for button,value in self.quick_style_buttons.values():button.setChecked(value==key)
+        self._sync_quick_styles()
 
 
     def _select_ui(self,layout):
@@ -184,14 +226,13 @@ class WorkflowPage(BasePage):
         self.enhance=QCheckBox('SDR colour + clarity');row.addWidget(self.enhance)
         self._button('Preview recipe (4 seconds)',self._recipe_preview,row);card.add_layout(row)
         layout.addWidget(card)
-        agent=Card();agent.add(SectionHeader('AI Director · Gemma / local Ollama',
-            'Uses installed local Ollama weights only. Plans existing recipes, captions and ranges—not object detection or multi-track editing. Review before applying.'))
+        agent=Card();agent.add(SectionHeader('✦ AI Director','Tell me what you want to create. Local Gemma / Ollama only.'))
         self.agent_instruction=QLineEdit();self.agent_instruction.setMaxLength(2000)
         self.agent_instruction.setPlaceholderText('Make 10 gaming shorts, gameplay above player, bigger captions…');agent.add(self.agent_instruction)
         self._button('Propose local edit plan',self._propose_agent_plan,agent.layout())
-        self.agent_plan_view=QTextEdit();self.agent_plan_view.setReadOnly(True);self.agent_plan_view.setFixedHeight(105);agent.add(self.agent_plan_view)
+        self.agent_plan_view=QTextEdit();self.agent_plan_view.setReadOnly(True);self.agent_plan_view.setFixedHeight(80);agent.add(self.agent_plan_view)
         self.agent_apply=QPushButton('Apply reviewed plan to project');self.agent_apply.setEnabled(False);self.agent_apply.clicked.connect(self._apply_agent_plan);agent.add(self.agent_apply)
-        self.agent_run=QPushButton('Approve plan & render clips');self.agent_run.setEnabled(False);self.agent_run.clicked.connect(self._execute_agent_plan);agent.add(self.agent_run)
+        self.agent_run=QPushButton('Approve plan && render clips');self.agent_run.setEnabled(False);self.agent_run.clicked.connect(self._execute_agent_plan);agent.add(self.agent_run)
         row=QHBoxLayout();self._button('Undo director edit',lambda:self._director_history(False),row);self._button('Redo director edit',lambda:self._director_history(True),row);agent.add_layout(row)
         note=QLabel('Apply only, or approve and render using the real local pipeline. No model is downloaded by this action.');note.setWordWrap(True);agent.add(note)
         self.dashboard_right.insertWidget(0,agent)
@@ -227,7 +268,7 @@ class WorkflowPage(BasePage):
         if index>0 and not self.project_id:
             self.status.setText('Import or open a project first.') if hasattr(self,'status') else None
             return
-        self.stack.setCurrentIndex(index);self.step_buttons[index].setChecked(True)
+        self.stack.setCurrentIndex(index);self.steps_bar.setVisible(index!=0);self.step_buttons[index].setChecked(True)
         if self.player:
             self.player.pause()
             if index==1 and self.source_sink is not None:
@@ -411,7 +452,7 @@ class WorkflowPage(BasePage):
         self._loading=True;s=self.db.get_settings()
         self.studio_layout.setCurrentIndex(max(0,self.studio_layout.findData(s.get('studio_layout','bottom'))));self.camera_size.setValue(float(s.get('camera_size',1/3))*100)
         key=s.get('editing_preset','gaming');self.presets.setCurrentRow(list(PRESETS).index(key) if key in PRESETS else 0)
-        self.caption.setCurrentIndex(max(0,self.caption.findData(s.get('caption_style','clean_professional'))));self.caption_on.setChecked(bool(s.get('auto_caption',True)));self.cap_size.setValue(int(s.get('caption_size',48)));self.count.setValue(int(s.get('default_clip_count',5)));self.duration.setCurrentText(s.get('default_clip_duration','30-45'));self.enhance.setChecked(bool(s.get('gaming_enhance',False)));self.destination.setText(s.get('output_dir',str(PATHS.exports)));self._loading=False;self._update_composition()
+        self.caption.setCurrentIndex(max(0,self.caption.findData(s.get('caption_style','clean_professional'))));self.caption_on.setChecked(bool(s.get('auto_caption',True)));self.cap_size.setValue(int(s.get('caption_size',48)));self.count.setValue(int(s.get('default_clip_count',5)));self.duration.setCurrentText(s.get('default_clip_duration','30-45'));self.enhance.setChecked(bool(s.get('gaming_enhance',False)));self.destination.setText(s.get('output_dir',str(PATHS.exports)));self._loading=False;self._sync_quick_styles();self._update_composition()
 
     def _preset_changed(self,index):
         if index<0 or self._loading:return
@@ -420,7 +461,7 @@ class WorkflowPage(BasePage):
         key=self.presets.item(index).data(Qt.ItemDataRole.UserRole);style=apply_preset(RenderSettings(),key).caption_style
         self.caption.setCurrentIndex(max(0,self.caption.findData(style)))
         self.db.set_settings({**self._preferences(),'editing_preset':key,'caption_style':style})
-        self._update_composition()
+        self._sync_quick_styles();self._update_composition()
         if hasattr(self,'status'):self.status.setText(f'Applied {PRESETS[key][0]}. Live view shows framing; Preview recipe renders the actual edit. Run Edit all clips to apply to outputs.')
 
     def _settings(self):
@@ -611,6 +652,7 @@ class WorkflowPage(BasePage):
 
     def refresh(self):
         self._refresh_recent()
+        self._refresh_dashboard_models()
         self._load_preferences()
         if not self.project_id and self.db.get_settings().get('restore_on_launch',True):
             pid=self.db.get_setting('active_project','')

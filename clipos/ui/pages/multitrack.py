@@ -12,7 +12,7 @@ from PySide6.QtCore import Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap, QShortcut, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,QComboBox,QDoubleSpinBox,QFileDialog,QFormLayout,QInputDialog,QHBoxLayout,QLabel,QPushButton,QSplitter,QWidget,QVBoxLayout,
-    QProgressBar,QTableWidget,QTableWidgetItem,QScrollArea,
+    QListWidget,QListWidgetItem,QProgressBar,QTableWidget,QTableWidgetItem,QScrollArea,
 )
 
 from ...core.config import PATHS
@@ -128,6 +128,12 @@ class MultitrackPage(BasePage):
         self.preview=QLabel('Import local media to preview. No example video is loaded.')
         self.preview.setAlignment(Qt.AlignmentFlag.AlignCenter);self.preview.setMinimumHeight(250)
         stage=QSplitter(Qt.Orientation.Horizontal)
+        media_card=Card();media_card.setMinimumWidth(180);media_card.setMaximumWidth(260)
+        media_card.add(SectionHeader('Project media','Imported local sources'))
+        self.media_bin=QListWidget();self.media_bin.setAccessibleName('Project media sources')
+        self.media_bin.itemActivated.connect(self._activate_media);media_card.add(self.media_bin)
+        import_button=QPushButton('+ Import media');import_button.setObjectName('Primary');import_button.clicked.connect(self._import);media_card.add(import_button)
+        stage.addWidget(media_card)
         viewer=Card();viewer.add(SectionHeader('Program monitor','Decoded draft preview · final export uses FFmpeg'))
         viewer.add(self.preview);stage.addWidget(viewer)
         inspector=Card();inspector.add(SectionHeader('Inspector','Selected video / audio layer'))
@@ -148,7 +154,7 @@ class MultitrackPage(BasePage):
         inspector_scroll=QScrollArea();inspector_scroll.setWidgetResizable(True);inspector_scroll.setWidget(inspector)
         inspector_scroll.setMinimumWidth(280);inspector_scroll.setMinimumHeight(300)
         stage.addWidget(inspector_scroll);stage.setMaximumHeight(460)
-        stage.setStretchFactor(0,3);stage.setStretchFactor(1,1);stage.setSizes([700,300])
+        stage.setStretchFactor(0,0);stage.setStretchFactor(1,3);stage.setStretchFactor(2,1);stage.setSizes([200,700,300])
         self.content_layout.addWidget(stage)
         canvas=FlowLayout();canvas.addWidget(QLabel('Canvas / export:'))
         self.canvas_combo=QComboBox()
@@ -332,6 +338,16 @@ class MultitrackPage(BasePage):
     def _new(self):
         self._stop();self.project=MultitrackProject();self.path=None;self._changed()
 
+    def _activate_media(self,entry):
+        media_id=entry.data(Qt.ItemDataRole.UserRole)
+        for lane in self.project.lanes:
+            for item in lane.items:
+                if item.media_id==media_id:
+                    self._stop();self.cursor.setValue(item.at)
+                    if (lane.id,item.id) in self._rows:self.table.setCurrentCell(self._rows.index((lane.id,item.id)),0)
+                    self._seek(item.at);return
+        self.status.setText('This source has no timeline item. Import it to add a new layer.')
+
     def _import(self):
         paths,_=QFileDialog.getOpenFileNames(self,'Import authorized local video/audio','','Media files (*)')
         for path in paths:
@@ -401,6 +417,12 @@ class MultitrackPage(BasePage):
         self.canvas_combo.setCurrentIndex(self.canvas_combo.findData(dimensions))
         if self.fps_combo.findData(self.project.fps)<0:self.fps_combo.addItem(f'{self.project.fps} fps',self.project.fps)
         self.fps_combo.setCurrentIndex(self.fps_combo.findData(self.project.fps))
+        self.media_bin.clear()
+        for media in self.project.media:
+            kind='Video + audio' if media.has_video and media.has_audio else ('Video' if media.has_video else 'Audio')
+            entry=QListWidgetItem(f'{Path(media.path).name}\n{kind} · {media.duration:.2f} s')
+            entry.setData(Qt.ItemDataRole.UserRole,media.id);entry.setToolTip(media.path)
+            self.media_bin.addItem(entry)
         self.timeline.set_project(self.project)
         self._refresh_keys()
         self.cursor.setMaximum(self.project.duration)

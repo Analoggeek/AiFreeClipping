@@ -17,6 +17,7 @@ from ...core.hardware import detect_hardware, choose_encoder, suggest_worker_thr
 from ...core.logging_setup import get_logger
 from ..theme import Metrics, PALETTES, apply_theme
 from ..widgets.common import Card, SectionHeader, format_size
+from ..widgets.flow_layout import FlowLayout
 from .base import BasePage
 
 log = get_logger(__name__)
@@ -484,6 +485,15 @@ class SettingsPage(BasePage):
         self.hw_label.setObjectName("CardSubtitle")
         hw.add(self.hw_label)
         self.content_layout.addWidget(hw)
+
+        # Real section navigation, preserving every existing setting and signal.
+        nav=QWidget();nav.setObjectName('SettingsNavigation');links=FlowLayout(nav)
+        self.section_links={}
+        for title,section in [('General',updates),('Appearance',appear),('Editing',defaults),('Captions',caps),('Tracking',tracking),('AI models',llm),('Storage',storage),('Recovery',rec),('Performance',hw)]:
+            button=QPushButton(title);button.clicked.connect(lambda _=False,w=section:self.scroll.ensureWidgetVisible(w,0,16))
+            self.section_links[title]=button;links.addWidget(button)
+        self.layout.insertWidget(1,nav)
+
 
     def _open_render_logs(self):
         PATHS.logs.mkdir(parents=True,exist_ok=True)
