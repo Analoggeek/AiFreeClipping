@@ -157,15 +157,25 @@ def install(*, consent=False, progress=None, cancelled=None):
             "-NoProfile",
             "-NonInteractive",
             "-Command",
-            '$s=Get-AuthenticodeSignature -LiteralPath $env:CLIPOS_OLLAMA_INSTALLER; if($s.Status -ne "Valid"){exit 1}',
+            '$s=Get-AuthenticodeSignature -LiteralPath $env:CLIPOS_OLLAMA_INSTALLER; $s | Select-Object Status,StatusMessage,@{Name="Signer";Expression={$_.SignerCertificate.Subject}} | ConvertTo-Json -Compress; if($s.Status -ne "Valid"){exit 1}',
         ]
-        subprocess.run(
+        signature = subprocess.run(
             command,
             env={**os.environ, "CLIPOS_OLLAMA_INSTALLER": str(asset)},
-            check=True,
             capture_output=True,
+            text=True,
             timeout=60,
         )
+        if signature.returncode:
+            raise RuntimeError(
+                "Windows blocked Ollama installer: Authenticode verification failed. "
+                "The installer was not executed. "
+                + (
+                    signature.stdout.strip()
+                    or signature.stderr.strip()
+                    or "No signature diagnostics supplied"
+                )
+            )
         process = subprocess.Popen([str(asset)])
         while process.poll() is None:
             if cancelled and cancelled():

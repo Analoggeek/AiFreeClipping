@@ -76,3 +76,20 @@ silence and is a runtime check, not speech-accuracy certification.
 Speech downloads bind all files to one upstream immutable revision and verify
 LFS SHA256/size or Git blob identity before inference and registration; large
 weights use the resumable downloader with real byte progress and cancellation.
+
+### OS runtime audit follow-up (`97cbe91`)
+
+Run `45675004809`: fresh Intel and Apple Silicon macOS Ollama installation
+and API version 0.40.18 succeeded. Windows correctly stopped before executable
+launch because Authenticode status was not Valid; the prior exception omitted
+PowerShell's diagnostic output. Preserve this fail-closed policy and expose the
+signature status/message rather than bypassing verification. Windows installation
+acceptance remains blocked pending diagnosis.
+
+The same run passed real tiny Whisper download/integrity, CPU silence inference,
+and registry persistence. A subsequent known-speech gate uses the official
+OpenAI Whisper JFK fixture pinned by Git blob identity and reports word error
+rate against its reference (maximum 25%). This is a single English runtime
+acceptance sample, not broad speech-recognition quality certification. Its result
+must be checked before claiming it passed. Interactive OS dialogs still require
+physical desktop acceptance.
