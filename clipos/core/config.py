@@ -60,6 +60,7 @@ PATHS = AppPaths()
 
 DEFAULT_SETTINGS: dict = {
     "theme": "dark",
+    "sidebar_collapsed": False,
     "editing_preset": "gaming",
     "gaming_enhance": False,
     "language": "en",

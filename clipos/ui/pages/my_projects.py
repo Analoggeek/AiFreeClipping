@@ -5,7 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton,
+    QComboBox, QGridLayout, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton,
     QVBoxLayout, QWidget,
 )
 
@@ -19,7 +19,7 @@ log = get_logger(__name__)
 
 class MyProjectsPage(BasePage):
     page_title = "My Projects"
-    page_subtitle = "Every project is stored locally in your CLIPOS folder."
+    page_subtitle = "Local projects · search, reopen, duplicate and manage your edits."
 
     def __init__(self, window) -> None:
         self._rows: list[tuple] = []
@@ -33,10 +33,12 @@ class MyProjectsPage(BasePage):
         self.search.setMaximumWidth(240)
         self.search.textChanged.connect(self.refresh)
         header.add_action(self.search)
+        self.filter=QComboBox();self.filter.addItem('All projects','all');self.filter.addItem('Active','active');self.filter.addItem('Archived','archived');self.filter.currentIndexChanged.connect(self.refresh);header.add_action(self.filter)
+        self.sort=QComboBox();self.sort.addItems(['Recently updated','Name','Duration']);self.sort.currentIndexChanged.connect(self.refresh);header.add_action(self.sort)
         card.add(header)
 
         self.list_body = QWidget()
-        self._list_layout = QVBoxLayout(self.list_body)
+        self._list_layout = QGridLayout(self.list_body)
         self._list_layout.setSpacing(Metrics.sm)
         self._list_layout.setContentsMargins(0, Metrics.sm, 0, 0)
         card.add(self.list_body)
@@ -55,18 +57,22 @@ class MyProjectsPage(BasePage):
         if query:
             projects = [p for p in projects if query in p["name"].lower()]
 
+        mode=self.filter.currentData()
+        if mode!='all':projects=[p for p in projects if bool(p['archived'])==(mode=='archived')]
+        projects=sorted(projects,key=lambda p:p['name'].casefold() if self.sort.currentIndex()==1 else p['duration'] if self.sort.currentIndex()==2 else p['updated_at'],reverse=self.sort.currentIndex()!=1)
         if not projects:
             lbl = QLabel("No projects yet." if not query else "No projects match your search.")
             lbl.setObjectName("CardSubtitle")
             self._list_layout.addWidget(lbl)
             return
 
-        for p in projects:
-            self._list_layout.addWidget(self._project_row(p))
+        for index,p in enumerate(projects):
+            self._list_layout.addWidget(self._project_row(p),index//2,index%2)
 
     def _project_row(self, p) -> QWidget:
         row = QWidget()
-        lay = QHBoxLayout(row)
+        row.setObjectName("Card")
+        lay = QVBoxLayout(row)
         lay.setContentsMargins(Metrics.sm, Metrics.sm, Metrics.sm, Metrics.sm)
         lay.setSpacing(Metrics.md)
 
@@ -83,9 +89,10 @@ class MyProjectsPage(BasePage):
         meta = QLabel(
             f"{format_duration(p['duration'])} · {p['width']}×{p['height']} · "
             f"{format_size(p['size_bytes'])} · {p['status']} · "
-            f"{p['aspect_ratio']} · {p['clip_count']} clips"
+            f"{p['aspect_ratio']} · {len(self.db.list_clips(p['id']))} clips · Updated {p['updated_at']}"
         )
         meta.setObjectName("CardSubtitle")
+        meta.setWordWrap(True)
         info.addWidget(meta)
         lay.addLayout(info, 1)
 

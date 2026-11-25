@@ -61,7 +61,8 @@ def test_retired_pages_and_dashboard_share_real_workflow(tmp_path):
     from clipos.ui.main_window import MainWindow
     app=QApplication.instance() or QApplication([]);db=Database(tmp_path/'ui.db');w=MainWindow(db)
     try:
-        assert not {'longform','captions','templates'} & w._page_classes.keys()
+        assert 'longform' not in w._page_classes
+        assert {'home','captions','templates','export','multitrack'} <= w._page_classes.keys()
         page=w.pages['workflow'];page._quick_style('podcast')
         assert db.get_setting('editing_preset')=='podcast'
         page._propose_agent_plan();assert 'Import or open' in page.status.text()

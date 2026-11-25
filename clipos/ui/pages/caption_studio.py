@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QFormLayout, QGridLayout, QHBoxLayout,
@@ -18,6 +18,29 @@ from ..widgets.common import Card, SectionHeader
 from .base import BasePage
 
 log = get_logger(__name__)
+
+
+class CaptionRenderWorker(QThread):
+    ready=Signal(bytes)
+    failed=Signal(str)
+
+    def __init__(self,key,options,parent=None):
+        super().__init__(parent);self.key=key;self.options=options
+
+    def run(self):
+        import tempfile,subprocess
+        from ...captions.caption_engine import CaptionCue,write_ass,get_style
+        from ...core.ffmpeg import require_ffmpeg
+        try:
+            with tempfile.TemporaryDirectory(prefix='clipos-caption-') as folder:
+                ass=Path(folder)/'sample.ass'
+                write_ass(ass,[CaptionCue(0,3,'HERE IS THE TRUTH ABOUT THE SKY')],get_style(self.key),**self.options)
+                # Use a relative subtitle path so drive-letter/FFmpeg filter quoting
+                # is identical across Windows and Unix.
+                result=subprocess.run([require_ffmpeg(),'-v','error','-f','lavfi','-i','color=c=0x111827:s=1080x1920:r=1:d=2','-vf','ass=sample.ass,scale=324:576','-ss','1','-frames:v','1','-threads','1','-f','image2pipe','-vcodec','png','-'],cwd=folder,capture_output=True,timeout=45)
+                if result.returncode or not result.stdout:raise RuntimeError(result.stderr.decode(errors='replace')[-1500:] or 'No rendered frame')
+                self.ready.emit(result.stdout)
+        except Exception as exc:self.failed.emit(str(exc))
 
 
 class CaptionPreview(QWidget):
@@ -188,6 +211,9 @@ class CaptionStudioPage(BasePage):
         preview_card.add(SectionHeader("Typography Sample", "Illustrative background; export renders actual ASS motion"))
         self.preview = CaptionPreview()
         preview_card.add(self.preview)
+        self.rendered_frame=QLabel('Render a frame to verify actual ASS typography and motion at one second.');self.rendered_frame.setWordWrap(True);preview_card.add(self.rendered_frame)
+        self.render_button=QPushButton('Render actual caption frame');self.render_button.clicked.connect(self._render_actual);preview_card.add(self.render_button)
+        self._render_worker=None
         self.preview_text = QLabel("Preview text")
         self.preview_text.setObjectName("CardSubtitle")
         preview_card.add(self.preview_text)
@@ -259,7 +285,7 @@ class CaptionStudioPage(BasePage):
         save.clicked.connect(self._save_default)
         controls.add(save)
 
-        apply_btn = QPushButton("Apply to All Clips")
+        apply_btn = QPushButton("Apply style to pending clips")
         apply_btn.clicked.connect(self._apply_all)
         controls.add(apply_btn)
 
@@ -269,6 +295,25 @@ class CaptionStudioPage(BasePage):
         self._select_style("bold_viral")
 
     # -- handlers ------------------------------------------------------------------
+    def _render_actual(self):
+        if self._render_worker and self._render_worker.isRunning():return
+        self.render_button.setEnabled(False);self.rendered_frame.setText('Rendering with local FFmpeg / libass…')
+        options=dict(font_override=self.preview.font_family,size_override=self.preview.size,position_override=self.preview.position,stroke_override=self.preview.stroke,shadow_override=self.preview.shadow,background_override=self.preview.background)
+        self._render_worker=CaptionRenderWorker(self.preview.style_key,options,self)
+        self._render_worker.ready.connect(self._show_render)
+        self._render_worker.failed.connect(lambda error:self.rendered_frame.setText('Render failed: '+error))
+        self._render_worker.finished.connect(lambda:self.render_button.setEnabled(True))
+        self._render_worker.start()
+
+    def _show_render(self,data):
+        pixmap=QPixmap()
+        if pixmap.loadFromData(data):self.rendered_frame.setPixmap(pixmap)
+        else:self.rendered_frame.setText('Could not decode rendered frame')
+
+    def shutdown(self):
+        self.preview.stop()
+        if self._render_worker and self._render_worker.isRunning():self._render_worker.wait(50000)
+
     def _select_style(self, key: str) -> None:
         self.preview.style_key = key
         for k, b in self.style_buttons.items():
@@ -279,6 +324,8 @@ class CaptionStudioPage(BasePage):
         self.preview.size = st.size
         self.preview.stroke = int(st.stroke_width)
         self.preview.shadow = st.shadow > 0
+        self.stroke_spin.blockSignals(True);self.stroke_spin.setValue(self.preview.stroke);self.stroke_spin.blockSignals(False)
+        self.shadow_check.blockSignals(True);self.shadow_check.setChecked(self.preview.shadow);self.shadow_check.blockSignals(False)
         self.size_slider.blockSignals(True)
         self.size_slider.setValue(st.size)
         self.size_slider.blockSignals(False)
@@ -323,10 +370,13 @@ class CaptionStudioPage(BasePage):
         self.window.notify(f"'{get_style(key).name}' saved as the default caption style")
 
     def _apply_all(self) -> None:
-        n = self.db.execute(
-            "UPDATE clips SET caption_style=? WHERE status='pending'",
-            (self.preview.style_key,),
-        )
+        with self.db.transaction():
+            cursor = self.db.conn.execute(
+                "UPDATE clips SET caption_style=? WHERE status='pending'",
+                (self.preview.style_key,),
+            )
+            n = cursor.rowcount
+        self.window.data_changed.emit()
         self.window.notify(f"Caption style applied to {n} pending clips")
 
     def refresh(self) -> None:
@@ -334,3 +384,9 @@ class CaptionStudioPage(BasePage):
         key = settings.get("caption_style", "bold_viral")
         if key in self.style_buttons:
             self._select_style(key)
+        self.font_combo.setCurrentText(settings.get('caption_font',self.preview.font_family))
+        self.size_slider.setValue(int(settings.get('caption_size',58)))
+        self.position_combo.setCurrentText(settings.get('caption_position','bottom'))
+        self.stroke_spin.setValue(int(settings.get('caption_stroke',4)))
+        self.shadow_check.setChecked(bool(settings.get('caption_shadow',True)))
+        self.bg_check.setChecked(bool(settings.get('caption_background',False)))

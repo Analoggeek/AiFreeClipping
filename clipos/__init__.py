@@ -1,3 +1,3 @@
-"""CLIPOS — AI Automatic Video Clipping Studio."""
-__version__ = "3.1.1"
-APP_NAME = "CLIPOS"
+"""Ai clipping PRO — native offline-first video editing (formerly CLIPOS)."""
+__version__ = "3.5.0"
+APP_NAME = "Ai clipping PRO"

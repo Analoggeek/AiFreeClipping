@@ -56,10 +56,10 @@ def test_startup_is_lazy_and_workspace_is_removed_without_deleting_projects(tmp_
     window=MainWindow(Database(tmp_path/'ui.db'))
     try:
         assert set(window.pages)=={'workflow'}
-        assert 'multitrack' not in window.nav_buttons and 'multitrack' not in window._page_classes
+        assert 'multitrack' not in window.nav_buttons and 'multitrack' in window._page_classes
         window.navigate('templates')
-        assert 'templates' not in window.pages  # retired at user request
-        assert not {'templates','captions','longform'} & window._page_classes.keys()
+        assert 'templates' in window.pages  # restored at user request for 3.5
+        assert 'longform' not in window._page_classes
         window.navigate('settings')
         assert window.pages['settings']._hardware_worker is not None
     finally:

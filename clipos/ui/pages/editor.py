@@ -414,6 +414,7 @@ class EditorPage(BasePage):
 
         # -- header ------------------------------------------------------------
         header = QHBoxLayout()
+        multitrack=QPushButton('Multitrack / media layers');multitrack.clicked.connect(lambda:self.window.navigate('multitrack'));header.addWidget(multitrack)
         header.addStretch(1)
         self.btn_undo = QPushButton("Undo")
         self.btn_redo = QPushButton("Redo")

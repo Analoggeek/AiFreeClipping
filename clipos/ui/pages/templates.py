@@ -51,7 +51,7 @@ class TemplatesPage(BasePage):
         self.content_layout.addWidget(card)
 
         cap_card = Card()
-        cap_card.add(SectionHeader("Caption Styles", "All eight styles, ready to preview"))
+        cap_card.add(SectionHeader("Caption Styles", "38 working styles · typography and motion"))
         cgrid = QGridLayout()
         cgrid.setSpacing(Metrics.sm)
         for i, (key, st) in enumerate(CAPTION_STYLES.items()):

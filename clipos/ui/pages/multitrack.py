@@ -93,7 +93,7 @@ class ExportWorker(QThread):
 
 
 class MultitrackPage(BasePage):
-    page_title='Multitrack workspace'
+    page_title='Editor (Pro) · Multitrack'
     page_subtitle='Independent overlapping sources · decoded preview + native audio-clock path · audiovisual export'
     fields=['at','source_in','length','speed','gain','x','y','w','h','opacity']
 
@@ -107,6 +107,7 @@ class MultitrackPage(BasePage):
         self.frames.ready.connect(self._frame_ready)
         self.frames.failed.connect(self._error)
         row=QHBoxLayout()
+        clip_editor=QPushButton('Clip editor / AI Director');clip_editor.clicked.connect(lambda:self.window.navigate('editor'));row.addWidget(clip_editor)
         for text,handler in [('New',self._new),('Import media…',self._import),('Open project…',self._open),
                              ('Save project…',self._save),('Recover workspace',self._recover),
                              ('Export MP4…',self._export),('Cancel export',self._cancel_export)]:

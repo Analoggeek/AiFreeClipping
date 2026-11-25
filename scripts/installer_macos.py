@@ -38,7 +38,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP_NAME = "CLIPOS"
 BUNDLE_ID = "com.clipos.studio"
-VERSION = "3.1.1"
+VERSION = "3.5.0"
 
 
 # --------------------------------------------------------------------------
@@ -47,7 +47,7 @@ VERSION = "3.1.1"
 PLIST_ENTRIES: dict[str, object] = {
     "CFBundleIdentifier": BUNDLE_ID,
     "CFBundleName": APP_NAME,
-    "CFBundleDisplayName": APP_NAME,
+    "CFBundleDisplayName": "Ai clipping PRO",
     "CFBundleShortVersionString": VERSION,
     "CFBundleVersion": VERSION,
     "CFBundleExecutable": APP_NAME,

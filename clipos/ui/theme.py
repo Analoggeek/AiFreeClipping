@@ -467,6 +467,10 @@ QScrollArea > QWidget > QWidget {{ background: transparent; }}
 
 def apply_theme(app, theme_name: str = "dark") -> Palette:
     """Apply a theme to a QApplication and return the palette used."""
+    if theme_name=='system':
+        from PySide6.QtGui import QGuiApplication
+        from PySide6.QtCore import Qt
+        theme_name='light' if QGuiApplication.styleHints().colorScheme()==Qt.ColorScheme.Light else 'dark'
     p = PALETTES.get(theme_name, DARK)
     app.setStyleSheet(stylesheet(p))
     _ACTIVE["name"] = p.name

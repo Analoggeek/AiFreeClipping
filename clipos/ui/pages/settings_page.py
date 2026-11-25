@@ -73,7 +73,8 @@ class SettingsPage(BasePage):
         self.theme_combo = QComboBox()
         self.theme_combo.addItem("Dark", "dark")
         self.theme_combo.addItem("Light", "light")
-        self.theme_combo.setCurrentIndex(0 if settings.get("theme") == "dark" else 1)
+        self.theme_combo.addItem("System", "system")
+        self.theme_combo.setCurrentIndex(max(0,self.theme_combo.findData(settings.get("theme","dark"))))
         self.theme_combo.currentIndexChanged.connect(self._apply_theme)
         form.addRow("Theme", self.theme_combo)
 
