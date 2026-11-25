@@ -22,7 +22,7 @@ import re
 import shutil
 import tempfile
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 from pathlib import Path
 from typing import Callable, Sequence
 
@@ -50,6 +50,7 @@ log = get_logger(__name__)
 @dataclass
 class RenderSettings:
     """User-facing editing options for one clip."""
+    crop_config: dict | None = None
     editing_preset: str = "clean"
     auto_facecam: bool = True
     studio_layout: str = "bottom"
@@ -523,8 +524,14 @@ class ClipRenderer:
         from ..core.ffmpeg import probe
 
         info = probe(source)
-        src_w = info.video.width if info.video else settings.width
-        src_h = info.video.height if info.video else settings.height
+        from .crop_config import display_dimensions
+        src_w,src_h = display_dimensions(info.video)
+        selected_crop = None
+        if settings.crop_config is not None:
+            from .crop_config import CropConfig
+            selected_crop=CropConfig.from_dict(settings.crop_config)
+            selected_crop.filter(src_w,src_h)  # reject stale/invalid source before work
+            settings=replace(settings,width=selected_crop.output_width,height=selected_crop.output_height,aspect=selected_crop.aspect_ratio)
         has_audio = info.has_audio
         result.steps.append(f"Source {src_w}x{src_h}, {info.duration:.1f}s, audio={has_audio}")
 
@@ -547,7 +554,7 @@ class ClipRenderer:
         vf_parts.append(f"fps={settings.fps}")
 
         body_graph = None
-        if settings.smart_reframe and settings.body_reframe and settings.editing_preset != "gaming" and visual and visual.person_tracking.get("artifact"):
+        if selected_crop is None and settings.smart_reframe and settings.body_reframe and settings.editing_preset != "gaming" and visual and visual.person_tracking.get("artifact"):
             from .body_reframe import body_keys, body_crop_filter
             keys, chosen = body_keys(visual.person_tracking["artifact"],source,start,end,settings.body_track_id)
             if keys:
@@ -561,7 +568,7 @@ class ClipRenderer:
                 result.warnings.append("Selected body evidence lacks coverage; existing face/center framing used")
 
         shot_graph=None
-        if settings.smart_reframe and settings.shot_aware_reframe and settings.editing_preset!='gaming' and not body_graph and visual:
+        if selected_crop is None and settings.smart_reframe and settings.shot_aware_reframe and settings.editing_preset!='gaming' and not body_graph and visual:
             from .shot_reframe import crop_filter,validate_binding
             try:
                 validate_binding(visual,source)
@@ -569,7 +576,10 @@ class ClipRenderer:
                     src_w,src_h,settings.width,settings.height)
             except ValueError as exc:result.warnings.append(str(exc)+'; existing framing retained')
 
-        if settings.editing_preset == "gaming":
+        if selected_crop is not None:
+            vf_parts.append(selected_crop.filter(src_w,src_h))
+            result.steps.append('Authoritative user crop applied; automatic reframing bypassed')
+        elif settings.editing_preset == "gaming":
             from .presets import gaming_filter
             facecam, gameplay = settings.facecam_rect, settings.gameplay_rect
             if settings.auto_facecam and settings.studio_layout not in ("blur", "fill", "game"):
@@ -818,6 +828,8 @@ class ClipRenderer:
         result.duration = out_info.duration
         result.width = out_info.video.width if out_info.video else 0
         result.height = out_info.video.height if out_info.video else 0
+        if settings.crop_config is not None and (result.width,result.height)!=(settings.width,settings.height):
+            raise RuntimeError('Encoded dimensions do not match saved crop configuration')
         result.size_bytes = out_info.size_bytes
         result.elapsed = time.time() - t_start
         result.steps.append(f"Rendered {result.width}x{result.height} in {result.elapsed:.1f}s")
@@ -855,6 +867,14 @@ class ClipRenderer:
         output = Path(output)
         segments = list(timeline.segments)
         source_info = probe(source)
+        from .crop_config import display_dimensions
+        display_w,display_h=display_dimensions(source_info.video)
+        selected_crop=None
+        if settings.crop_config is not None:
+            from .crop_config import CropConfig
+            selected_crop=CropConfig.from_dict(settings.crop_config)
+            selected_crop.filter(display_w,display_h)
+            settings=replace(settings,width=selected_crop.output_width,height=selected_crop.output_height,aspect=selected_crop.aspect_ratio)
         has_audio = source_info.has_audio
         if not segments:
             raise ValueError("Cannot render an empty timeline")
@@ -866,7 +886,9 @@ class ClipRenderer:
         seg_filters: list[str] = []
         for seg in segments:
             parts: list[str] = []
-            if settings.editing_preset == "gaming":
+            if selected_crop is not None:
+                parts.append(selected_crop.filter(display_w,display_h))
+            elif settings.editing_preset == "gaming":
                 from .presets import gaming_filter
                 facecam,gameplay=settings.facecam_rect,settings.gameplay_rect
                 if settings.auto_facecam and settings.studio_layout not in ("blur", "fill", "game"):
@@ -1066,6 +1088,8 @@ class ClipRenderer:
         result.duration = out_info.duration
         result.width = out_info.video.width if out_info.video else 0
         result.height = out_info.video.height if out_info.video else 0
+        if settings.crop_config is not None and (result.width,result.height)!=(settings.width,settings.height):
+            raise RuntimeError('Encoded dimensions do not match saved crop configuration')
         result.size_bytes = out_info.size_bytes
         result.elapsed = time.time() - t_start
         result.steps.append(

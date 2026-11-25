@@ -1,0 +1,60 @@
+name: Clean clipping real model audit
+on:
+  push:
+    branches: [arena/b6de10fc-aifreeclipping]
+    paths: ['.github/workflows/clean-model-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: clean-model-audit-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  real-weights:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU inference and tracking dependencies
+        run: |
+          python -m pip install 'numpy<3' 'onnxruntime>=1.16,<2' 'opencv-python-headless>=4.8,<5' scipy matplotlib pillow pyyaml tqdm defusedxml
+          python -m pip install --no-deps supervision==0.27.0
+      - name: Download official weights and execute real inference and tracker
+        run: |
+          curl --fail --location --retry 3 https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx -o /tmp/yolox_nano.onnx
+          python - <<'PY' > model-audit.txt
+          import hashlib
+          from pathlib import Path
+          import numpy as np
+          import supervision as sv
+          from clipos.ai.person_tracking import LocalYOLOX
+          p=Path('/tmp/yolox_nano.onnx')
+          print('Official YOLOX nano asset size:',p.stat().st_size)
+          print('SHA256:',hashlib.sha256(p.read_bytes()).hexdigest())
+          detector=LocalYOLOX(p)
+          detections=detector.detect(np.zeros((416,416,3),dtype=np.uint8))
+          print('Real CPU ONNX weights loaded and inference completed. Blank-frame results:',len(detections))
+          tracker=sv.ByteTrack(minimum_consecutive_frames=1)
+          ids=[]
+          for frame in range(10):
+              d=sv.Detections(xyxy=np.array([[20+frame,30,100+frame,180]],dtype=np.float32),confidence=np.array([.95]),class_id=np.array([0]))
+              tracks=tracker.update_with_detections(d)
+              if len(tracks):ids.append(int(tracks.tracker_id[0]))
+          assert ids and len(set(ids))==1,ids
+          print('Actual supervision ByteTrack CPU test: stable ID across synthetic detections:',ids)
+          print('These tests verify loading/runtime, NOT person-detection accuracy or trained-model clipping quality.')
+          PY
+          cat model-audit.txt
+      - name: Record reproducible audit evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body="$(cat model-audit.txt)"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-model-audit
+          path: model-audit.txt

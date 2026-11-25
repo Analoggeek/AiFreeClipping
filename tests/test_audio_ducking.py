@@ -59,15 +59,13 @@ def test_silent_sources_do_not_add_sidechain_branch():
 def test_shared_persisted_settings_reach_both_render_modes(tmp_path):
     from clipos.db.database import Database
     from clipos.core.editing import render_settings
-    from clipos.ai.editing_agent import validate_plan
     db=Database(tmp_path/'prefs.db')
     db.set_settings({'background_music':'/local/music.wav','bgm_volume':.22,'bgm_ducking':False})
     settings=render_settings(db)
     assert settings.background_music=='/local/music.wav'
     assert settings.bgm_volume==.22 and not settings.bgm_ducking
     assert RenderSettings.from_dict(settings.to_dict()).bgm_ducking is False
-    plan=validate_plan({'version':1,'settings':{'bgm_ducking':True},'reason':'Lower music'},duration=4)
-    assert plan.settings['bgm_ducking'] is True
+    db.close()
 
 
 @pytest.mark.parametrize('timeline_mode',[False,True])

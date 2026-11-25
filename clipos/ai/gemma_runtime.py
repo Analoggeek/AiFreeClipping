@@ -10,7 +10,7 @@ from ..core.local_ai import LocalOllama, LocalAIError
 
 DEFAULT_MODEL = 'gemma:7b'
 # Verified Ollama library identifiers; pull still fails visibly if unavailable.
-GEMMA_TAGS = ('gemma:7b','gemma:7b-instruct-v1.1-q4_K_S','gemma:7b-instruct-v1.1-q3_K_S','gemma:2b')
+GEMMA_TAGS = ('qwen2.5:0.5b','llama3.2:1b','gemma:7b','gemma:7b-instruct-v1.1-q4_K_S','gemma:7b-instruct-v1.1-q3_K_S','gemma:2b')
 PROFILES = {'Low memory': {'num_ctx':2048,'num_predict':1000},
             'Balanced': {'num_ctx':4096,'num_predict':1500},
             'High quality': {'num_ctx':8192,'num_predict':2000}}
@@ -47,7 +47,7 @@ class GemmaRuntime:
             if not success:raise LocalAIError('Model download ended without confirmation')
             return self.client.require_local_model(model)
         except LocalAIError:raise
-        except Exception as exc:raise LocalAIError(f'Gemma download failed: {type(exc).__name__}; check local Ollama logs') from exc
+        except Exception as exc:raise LocalAIError(f'Local model download failed: {type(exc).__name__}: {str(exc)[:240]}. Check the local runtime connection, model tag and registry access; retry resumes reusable Ollama blobs.') from exc
 
     def unload(self,model):
         self.client.require_local_model(model)
@@ -55,5 +55,5 @@ class GemmaRuntime:
 
     def verify_offline(self,model):
         self.client.require_local_model(model)
-        text=self.client.generate('Reply with the word READY.',model)
+        text=self.client.generate('Reply with the word READY.',model,options={'num_ctx':2048,'num_predict':128})
         return 'Local GGUF inference responded: '+text[:160]+'. This checks Ollama only; it is not a whole-system firewall or Whisper/vision certification.'

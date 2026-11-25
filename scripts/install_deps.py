@@ -41,7 +41,7 @@ CORE = [
     "requests>=2.31",
     "huggingface-hub>=0.23",
     "faster-whisper>=1.0,<2",
-    "onnxruntime>=1.16",
+    "onnxruntime>=1.16,<2",
     "scenedetect>=0.6.3",
 ]
 
@@ -225,12 +225,12 @@ def _install(args) -> int:
     if getattr(args, "diarization", False):
         run(pip("install", "sherpa-onnx==1.12.34"), "installing optional neural diarization runtime")
 
-    if getattr(args, "tracking", False):
-        run(pip("install", "scipy>=1.10,<2", "matplotlib>=3.7,<4", "defusedxml>=0.7", "pyyaml>=6", "tqdm>=4.65"),
-            "installing tracking support")
-        # supervision normally requests GUI OpenCV. Use the tested headless
-        # implementation below instead, never overwrite it with OpenCV 5.
-        run(pip("install", "--no-deps", "supervision==0.27.0"), "installing ByteTrack runtime")
+    # Tracking is part of the clean product, including default frozen builds.
+    run(pip("install", "scipy>=1.10,<2", "matplotlib>=3.7,<4", "defusedxml>=0.7", "pyyaml>=6", "tqdm>=4.65"),
+        "installing tracking support")
+    # supervision normally requests GUI OpenCV. Use the tested headless
+    # implementation below instead, never overwrite it with OpenCV 5.
+    run(pip("install", "--no-deps", "supervision==0.27.0"), "installing ByteTrack runtime")
 
     if args.build:
         # The self-extracting Windows installer needs a C compiler.  On

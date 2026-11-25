@@ -224,6 +224,22 @@ def verify(bundle: Path, binary: Path | None) -> int:
             existing = env.get("LD_LIBRARY_PATH", "")
             env["LD_LIBRARY_PATH"] = f"{stubs}{os.pathsep}{existing}" if existing \
                 else str(stubs)
+        # Exercise the actual frozen imports/inference path; source-environment
+        # tests cannot detect an excluded matplotlib or missing package metadata.
+        import json,tempfile
+        weights=Path(__file__).resolve().parents[1]/'build'/'yolox-validation.onnx'
+        if env.get('GITHUB_ACTIONS')=='true':
+            fetched=subprocess.run([sys.executable,str(Path(__file__).with_name('fetch_validation_weights.py'))],capture_output=True,text=True,timeout=120)
+            check('official YOLOX validation weights fetched and SHA256 verified',fetched.returncode==0,(fetched.stderr or fetched.stdout)[-800:])
+        if weights.is_file():env['CLIPOS_VERIFY_YOLOX_WEIGHTS']=str(weights)
+        with tempfile.TemporaryDirectory() as directory:
+            report=Path(directory)/'frozen-runtime.json'
+            try:
+                runtime=subprocess.run([str(binary),'--verify-clipping-runtime',str(report)],env=env,capture_output=True,text=True,timeout=180)
+                data=json.loads(report.read_text(encoding='utf-8')) if report.is_file() else {}
+                check('frozen ByteTrack and ONNX CPU runtime execute',runtime.returncode==0 and data.get('status')=='ok',str(data)[:1200] or runtime.stderr[-800:])
+                if weights.is_file():check('frozen YOLOX actual weights load and infer',data.get('status')=='ok' and 'inference completed' in data.get('yolox',''),str(data.get('yolox','not executed')))
+            except Exception as exc:check('frozen runtime verification completes',False,str(exc))
         # Remember where the log file ends, so only lines this run wrote are
         # considered — a stale "ready" line must never pass the check.
         #

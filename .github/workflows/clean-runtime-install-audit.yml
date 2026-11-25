@@ -1,0 +1,96 @@
+name: Clean clipping actual OS runtime installation
+on:
+  push:
+    branches: [arena/b6de10fc-aifreeclipping]
+    paths: ['.github/workflows/clean-runtime-install-audit.yml', 'clipos/core/ollama_install.py']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: clean-runtime-install-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  official-installer:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Execute actual official installer lifecycle on disposable runner
+        run: python scripts/test_ollama_installer.py
+      - name: Record exact installation and API evidence
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if [ -f ollama-install-acceptance.json ]; then
+            gh api repos/${{ github.repository }}/commits/${{ github.sha }}/comments -f body="$(cat ollama-install-acceptance.json)"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ollama-install-${{ matrix.os }}
+          path: ollama-install-acceptance.json
+  actual-whisper:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install faster-whisper psutil
+      - name: Official pinned-revision speech download, integrity, actual CPU inference and persistence
+        run: |
+          python - <<'PY' > whisper-acceptance.txt
+          import tempfile
+          from pathlib import Path
+          from clipos.ai.model_manager import ModelManager
+          from clipos.db.database import Database
+          with tempfile.TemporaryDirectory() as folder:
+              path=Path(folder)/'models.db';db=Database(path)
+              print(ModelManager(db).download_whisper('tiny',consent=True),flush=True)
+              before=ModelManager(db).registry();db.close();db=Database(path)
+              assert ModelManager(db).registry()==before
+              print('Registry persisted after database reopen:',list(before),flush=True)
+              db.close()
+          # Public-domain JFK speech fixture distributed by official OpenAI
+          # Whisper tests. Git blob identity pins the exact test audio bytes.
+          import urllib.request,hashlib,re
+          from faster_whisper import WhisperModel
+          from clipos.ai.transcription import local_model_path
+          audio=Path(tempfile.gettempdir())/'clipos-jfk.flac'
+          request=urllib.request.Request('https://api.github.com/repos/openai/whisper/git/blobs/e44b7c13897eae7f78beb220c61fe77429a3961d',headers={'Accept':'application/vnd.github.raw+json'})
+          with urllib.request.urlopen(request,timeout=60) as response:payload=response.read()
+          assert hashlib.sha1(f'blob {len(payload)}\0'.encode()+payload).hexdigest()=='e44b7c13897eae7f78beb220c61fe77429a3961d'
+          audio.write_bytes(payload)
+          model=WhisperModel(str(local_model_path('tiny')),device='cpu',compute_type='int8',local_files_only=True)
+          segments,_=model.transcribe(str(audio),beam_size=5,language='en')
+          actual=' '.join(part.text for part in segments)
+          print('Actual known-speech transcript:',actual,flush=True)
+          words=re.sub(r'[^a-z ]','',actual.lower()).split()
+          reference='and so my fellow americans ask not what your country can do for you ask what you can do for your country'.split()
+          row=list(range(len(reference)+1))
+          for i,word in enumerate(words,1):
+              following=[i]
+              for j,expected in enumerate(reference,1):following.append(min(following[-1]+1,row[j]+1,row[j-1]+(word!=expected)))
+              row=following
+          wer=row[-1]/len(reference)
+          print('Known-speech word error rate:',wer,flush=True)
+          assert wer<=0.25, f'Known-speech WER exceeded 25%: {wer}'
+          print('Known English speech acceptance passed; not a multilingual/noise/accent quality certification.',flush=True)
+          audio.unlink(missing_ok=True)
+          PY
+          cat whisper-acceptance.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: actual-whisper-inference
+          path: whisper-acceptance.txt

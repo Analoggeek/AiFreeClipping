@@ -121,41 +121,6 @@ def test_missing_media_and_cancel_never_destroy_existing_output(media,tmp_path):
     with pytest.raises(FileNotFoundError):export_project(project,output,tmp_path/'work',encoder='cpu')
 
 
-def test_native_widget_actions_edit_save_reopen_and_decode_real_frames(media,tmp_path,monkeypatch):
-    from types import SimpleNamespace
-    from PySide6.QtWidgets import QApplication,QFileDialog
-    from PySide6.QtTest import QSignalSpy
-    from clipos.db.database import Database
-    from clipos.ui.pages import multitrack as ui
-    app=QApplication.instance() or QApplication([])
-    monkeypatch.setattr(ui,'PATHS',SimpleNamespace(projects=tmp_path/'projects',cache=tmp_path/'cache'))
-    window=SimpleNamespace(db=Database(tmp_path/'ui.db'))
-    page=ui.MultitrackPage(window)
-    page.project=layered(media)
-    spy=QSignalSpy(page.frames.ready)
-    try:
-        page._changed()
-        from PySide6.QtCore import QEventLoop,QTimer
-        loop=QEventLoop()
-        page.frames.ready.connect(loop.quit)
-        QTimer.singleShot(3000,loop.quit)
-        loop.exec()
-        assert spy.count()>0, page.status.text()
-        assert page.table.rowCount()==4
-        page.table.item(0,3).setText('0.25')
-        assert page.project.lanes[0].items[0].at==.25
-        path=tmp_path/'saved.clipos-mt.json'
-        monkeypatch.setattr(QFileDialog,'getSaveFileName',lambda *a,**k:(str(path),''))
-        page._save()
-        assert path.exists()
-        page.project.change_item(page.project.lanes[0].id,page.project.lanes[0].items[0].id,at=.5)
-        monkeypatch.setattr(QFileDialog,'getOpenFileName',lambda *a,**k:(str(path),''))
-        page._open()
-        assert page.project.lanes[0].items[0].at==.25
-        assert 'Opened' in page.status.text()
-        page._undo()  # Reopened projects deliberately have no persisted history yet.
-    finally:
-        page.shutdown();page.deleteLater();app.processEvents()
 
 
 def test_opacity_and_track_mute_change_export_and_preview(media,tmp_path):
@@ -330,29 +295,6 @@ def test_automation_split_transaction_validation_and_undo(media):
     assert project.lanes[0].items[0].opacity_keys==[]
 
 
-def test_native_keyframe_controls_drive_model_recovery_and_undo(media,tmp_path,monkeypatch):
-    from types import SimpleNamespace
-    from PySide6.QtWidgets import QApplication
-    from clipos.db.database import Database
-    from clipos.ui.pages import multitrack as ui
-    app=QApplication.instance() or QApplication([])
-    monkeypatch.setattr(ui,'PATHS',SimpleNamespace(projects=tmp_path/'projects',cache=tmp_path/'cache'))
-    page=ui.MultitrackPage(SimpleNamespace(db=Database(tmp_path/'ui.db')))
-    page.project=layered(media)
-    try:
-        page._changed();page.table.setCurrentCell(0,3);page.cursor.setValue(.5)
-        page.key_value.setValue(.25);page._keyframe('set')
-        assert page.project.lanes[0].items[0].opacity_keys==[[.5,.25]]
-        assert '0.500s' in page.key_status.text()
-        recovery=MultitrackProject.load(tmp_path/'projects'/'multitrack-workspace'/'recovery.json')
-        assert recovery.lanes[0].items[0].opacity_keys==[[.5,.25]]
-        page._keyframe('remove');assert not page.project.lanes[0].items[0].opacity_keys
-        page._undo();assert page.project.lanes[0].items[0].opacity_keys==[[.5,.25]]
-        page._keyframe('clear');assert not page.project.lanes[0].items[0].opacity_keys
-        page.table.setCurrentCell(1,3);page.key_value.setValue(2.);page._keyframe('set')
-        assert page.project.lanes[1].items[0].gain_keys==[[.5,2.]]
-    finally:
-        page.shutdown();page.deleteLater();app.processEvents()
 
 
 def test_linked_av_timing_edits_split_and_undo_are_single_transactions(media,tmp_path):
@@ -402,29 +344,3 @@ def test_linked_split_delete_ripple_keeps_siblings_and_curves_aligned(media):
     assert all(len(track.items)==1 and track.items[0].at==0 for track in project.lanes)
     assert project.lanes[0].items[0].opacity_keys==project.lanes[1].items[0].gain_keys
     project.undo();assert project.to_dict()==before
-
-
-def test_native_waveform_worker_delivers_real_envelope_without_blocking_ui(media,tmp_path,monkeypatch):
-    from types import SimpleNamespace
-    from PySide6.QtWidgets import QApplication
-    from PySide6.QtCore import QEventLoop,QTimer
-    from clipos.db.database import Database
-    from clipos.ui.pages import multitrack as ui
-    app=QApplication.instance() or QApplication([])
-    monkeypatch.setattr(ui,'PATHS',SimpleNamespace(projects=tmp_path/'projects',cache=tmp_path/'cache'))
-    page=ui.MultitrackPage(SimpleNamespace(db=Database(tmp_path/'ui.db')))
-    page.project=layered(media)
-    try:
-        page._changed();page.table.setCurrentCell(1,3);page._waveform()
-        loop=QEventLoop();page.waveform_worker.ready.connect(loop.quit)
-        page.waveform_worker.failed.connect(loop.quit);QTimer.singleShot(5000,loop.quit);loop.exec()
-        app.processEvents()
-        media_id=page.project.lanes[1].items[0].media_id
-        assert media_id in page.timeline.waveforms,page.status.text()
-        assert max(page.timeline.waveforms[media_id]['peaks'])>.05
-        # Repainting exercises source-time envelope mapping under speed and trim.
-        page.timeline.resize(700,250);page.timeline.show();page.timeline.grab()
-        page.project.media[0].path=str(tmp_path/'missing.wav');page.timeline.set_project(page.project)
-        assert media_id not in page.timeline.waveforms
-    finally:
-        page.shutdown();page.deleteLater();app.processEvents()

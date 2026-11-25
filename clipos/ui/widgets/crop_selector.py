@@ -74,7 +74,7 @@ class CropSelector(QWidget):
         r=self.display_rect()
         if not self.image.isNull():p.drawPixmap(r.toRect(),self.image)
         else:
-            p.setPen(QColor('#aabacc'));p.drawText(self.contentsRect(),Qt.AlignmentFlag.AlignCenter,'Import a recording to select gameplay / player regions')
+            p.setPen(QColor('#aabacc'));p.drawText(self.contentsRect(),Qt.AlignmentFlag.AlignCenter,getattr(self,'empty_text','Import a recording to select gameplay / player regions'))
         # Draw active last so even overlapping source regions remain identifiable.
         for key in [k for k in self.regions if k!=self.active]+[self.active]:
             rect=self.regions[key]

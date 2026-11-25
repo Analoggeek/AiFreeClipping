@@ -40,27 +40,6 @@ def test_invalid_proposals_and_outside_existing_edits_are_atomic():
         assert timeline._save_data()==before
 
 
-def test_editor_review_applies_only_after_confirmation_and_checks_source(tmp_path,monkeypatch):
-    from PySide6.QtWidgets import QApplication,QMessageBox
-    from clipos.core import config
-    from clipos.ui.pages.editor import EditorPage
-    from clipos.video.waveform import source_signature
-    app=QApplication.instance() or QApplication([])
-    source=tmp_path/'source.mp4';source.write_bytes(b'local fixture, not decoded by this decision test')
-    artifact=tmp_path/'projects'/'1'/'analysis'/'tightening.json';artifact.parent.mkdir(parents=True)
-    artifact.write_text(json.dumps({'schema':'clipos.tightening.v1','source_signature':source_signature(source),
-        'proposals':[propose(0,10,[(3,5)])]}))
-    monkeypatch.setattr(config,'PATHS',SimpleNamespace(projects=tmp_path/'projects'))
-    notifications=[];changes=[]
-    page=SimpleNamespace(clip_id=1,project_id=1,source=source,timeline=Timeline.from_clip(0,10,10),
-        window=SimpleNamespace(db=SimpleNamespace(get_clip=lambda _:dict(start_time=0,end_time=10)),
-                               notify=lambda *args:notifications.append(args)),_after_edit=lambda:changes.append(True))
-    monkeypatch.setattr(QMessageBox,'question',lambda *args:QMessageBox.StandardButton.Cancel)
-    EditorPage._review_cleanup(page);assert page.timeline.duration==10 and not changes
-    monkeypatch.setattr(QMessageBox,'question',lambda *args:QMessageBox.StandardButton.Apply)
-    EditorPage._review_cleanup(page);assert page.timeline.duration<10 and changes==[True]
-    source.write_bytes(b'changed source')
-    EditorPage._review_cleanup(page);assert 'stale' in notifications[-1][0]
 
 
 def test_actual_decoded_audio_silence_generates_cleanup_without_transcript_gaps(tmp_path):

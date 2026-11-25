@@ -118,6 +118,7 @@ class ClipOSPipeline:
         stt_model: str = "base",
         language: str = "",
         sample_rate: float = 2.0,
+        speech_enabled: bool = True,
     ) -> AnalysisResult:
         """Run the full analysis pass over a source video."""
         t0 = time.time()
@@ -172,7 +173,7 @@ class ClipOSPipeline:
 
         # -- speech ------------------------------------------------------------
         self._report("speech", 48.0, "Transcribing speech (offline)")
-        if info.has_audio and wav_path.exists():
+        if info.has_audio and wav_path.exists() and speech_enabled:
             # Only try to transcribe when the model is actually on disk.
             # Asking Whisper to load a model it has to fetch would block the
             # whole analysis on a network download, and the app's contract is
@@ -206,7 +207,7 @@ class ClipOSPipeline:
                     self._report("speech", 78.0, f"Transcription failed: {exc}")
         else:
             result.transcription_available = False
-            result.transcription_error = "No audio track in source video"
+            result.transcription_error = "Speech analysis explicitly disabled" if not speech_enabled else "No audio track in source video"
         self._check_cancel()
 
         segmentation=self.db.get_setting("diarization_segmentation","")
@@ -348,9 +349,9 @@ class ClipOSPipeline:
         return clips
 
     # -- persistence ------------------------------------------------------------
-    def save_clips(self, clips: list, aspect: str = "9:16") -> list[int]:
+    def save_clips(self, clips: list, aspect: str = "9:16", *, replace_existing: bool = True) -> list[int]:
         """Persist detected clips, replacing any previous ones for this project."""
-        self.db.execute("DELETE FROM clips WHERE project_id=?", (self.project_id,))
+        if replace_existing:self.db.execute("DELETE FROM clips WHERE project_id=?", (self.project_id,))
         ids: list[int] = []
         from ..ai.preferences import features
         for c in clips:
@@ -416,6 +417,15 @@ class ClipOSPipeline:
 
         self._report("render", 5.0, "Preparing clip")
 
+        # Per-project crop is authoritative even when an older caller supplies
+        # global recipe/framing settings. Never mutate a caller-shared snapshot.
+        from .crop_config import load_crop
+        crop=load_crop(self.db,self.project_id)
+        if crop is not None:
+            from dataclasses import replace
+            settings=replace(settings,crop_config=crop.to_dict(),width=crop.output_width,
+                height=crop.output_height,aspect=crop.aspect_ratio)
+
         # Build captions for the clip
         cues = []
         if settings.show_captions:
@@ -446,7 +456,7 @@ class ClipOSPipeline:
 
         saved_edit = PATHS.projects / str(self.project_id) / "edits" / f"{clip_id}.json"
         from .timeline import Timeline
-        if saved_edit.exists() or Timeline.backup_path(saved_edit).exists():
+        if settings.crop_config is None and (saved_edit.exists() or Timeline.backup_path(saved_edit).exists()):
             timeline = Timeline.load(saved_edit)
             if timeline.recovered_from:
                 self._report("render", 5., "Recovered previous timeline backup; latest edits may be missing")
