@@ -297,12 +297,14 @@ class SettingsPage(BasePage):
         llm.add(SectionHeader("Local LLM (optional)", "Local Ollama — metadata and bounded edit plans; loopback only"))
         form4 = QFormLayout()
         form4.setSpacing(Metrics.md)
+        form4.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        form4.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
 
         self.llm_model_combo = QComboBox()
         self.llm_model_combo.setEditable(True)
-        for m in ("llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral:7b", "gemma2:9b"):
+        for m in ("gemma:7b", "llama3.2:3b", "qwen2.5:7b", "mistral:7b", "gemma2:9b"):
             self.llm_model_combo.addItem(m)
-        self.llm_model_combo.setCurrentText(settings.get("llm_model", "llama3.1:8b"))
+        self.llm_model_combo.setCurrentText(settings.get("llm_model", "gemma:7b"))
         self.llm_model_combo.currentTextChanged.connect(
             lambda t: self._save("llm_model", t)
         )
@@ -377,6 +379,13 @@ class SettingsPage(BasePage):
             setattr(self,key+'_field',field);form4.addRow(label,field)
         llm.add(QLabel('Phrases match transcript words, not unseen visuals. Missing local model keeps measured ranking.'))
         llm.add_layout(form4)
+        self.dependency_note=QLabel();self.dependency_note.setWordWrap(True)
+        self.dependency_note.setObjectName('CardSubtitle');llm.add(self.dependency_note)
+        for toggle in (self.talknet_check,self.selection_sound_check,self.selection_vision_check):
+            toggle.toggled.connect(self._dependency_note)
+        for field in (self.talknet_checkpoint_field,self.selection_sound_model_field,self.selection_vision_model_field):
+            field.textChanged.connect(self._dependency_note)
+        self._dependency_note()
         self.llm_status = QLabel("")
         self.llm_status.setObjectName("CardSubtitle")
         llm.add(self.llm_status)
@@ -568,6 +577,14 @@ class SettingsPage(BasePage):
         theme = self.theme_combo.currentData()
         self.db.set_setting("theme", theme)
         apply_theme(self.window, theme)
+
+    def _dependency_note(self,*_):
+        from pathlib import Path
+        warnings=[]
+        if self.talknet_check.isChecked() and not Path(self.talknet_checkpoint_field.text()).is_file():warnings.append('TalkNet enabled but trusted checkpoint is missing.')
+        if self.selection_sound_check.isChecked() and (not self.selection_sound_model_field.text().strip() or not Path(self.selection_sound_model_field.text()).is_dir()):warnings.append('AST enabled but local model directory is missing.')
+        if self.selection_vision_check.isChecked() and not self.selection_vision_model_field.text().strip():warnings.append('Visual review enabled but no installed vision model selected. Gemma 7B text weights are not a vision detector.')
+        self.dependency_note.setText(' '.join(warnings) if warnings else 'Model paths configured or optional analysis disabled. A checked option is a request, not proof that a model/runtime is installed. Verify in AI models; missing analysis is reported, never fabricated.')
 
     def _reset_preferences(self):
         from ...ai.preferences import reset

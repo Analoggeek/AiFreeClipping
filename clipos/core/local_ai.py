@@ -46,7 +46,7 @@ class LocalOllama:
         self.opener=urllib.request.build_opener(urllib.request.ProxyHandler({}),_NoRedirect())
 
     def request(self,path,payload=None):
-        if path not in ('/api/tags','/api/show','/api/generate'):
+        if path not in ('/api/tags','/api/show','/api/generate','/api/ps'):
             raise LocalAIError('Unsupported local inference operation')
         data=json.dumps(payload,allow_nan=False).encode() if payload is not None else None
         req=urllib.request.Request(self.host+path,data=data,headers={'Content-Type':'application/json','User-Agent':'CLIPOS-local-AI'})
@@ -75,7 +75,7 @@ class LocalOllama:
             raise LocalAIError('Model does not expose installed local GGUF weights; remote/unknown models are refused')
         return info
 
-    def generate(self,prompt,model,*,json_output=False,images=None):
+    def generate(self,prompt,model,*,json_output=False,images=None,options=None):
         info=self.require_local_model(model)
         if images is not None:
             import base64
@@ -89,6 +89,12 @@ class LocalOllama:
         if not isinstance(prompt,str) or len(prompt)>40000:raise LocalAIError('Prompt exceeds local input budget')
         payload={'model':model,'prompt':prompt,'stream':False,'keep_alive':'2m',
                  'options':{'temperature':.1,'num_predict':1500,'num_ctx':8192}}
+        if options is not None:
+            if not isinstance(options,dict) or set(options)-{'num_ctx','num_predict'}:raise LocalAIError('Unsupported inference options')
+            for key,value in options.items():
+                hi=8192 if key=='num_ctx' else 2000
+                if type(value) is not int or not 128<=value<=hi:raise LocalAIError('Inference option outside safe memory/output bounds')
+            payload['options'].update(options)
         if images is not None:payload['images']=images
         if json_output:payload['format']='json'
         result=self.request('/api/generate',payload)

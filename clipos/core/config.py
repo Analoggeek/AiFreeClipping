@@ -95,7 +95,7 @@ DEFAULT_SETTINGS: dict = {
     "selection_exclude": "",
     "selection_direction": "",
     "selection_compile_intent": False,
-    "llm_model": "llama3.1:8b",
+    "llm_model": "gemma:7b",
     "ollama_host": "http://127.0.0.1:11434",
     "bgm_volume": 0.12,
     "background_music": "",

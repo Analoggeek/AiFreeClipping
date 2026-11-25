@@ -53,3 +53,6 @@ desktop.ini
 
 # Local reference checkouts and model-acceptance scratch data (never shipped).
 .local/
+
+# Generated UI captures / local acceptance artifacts.
+/artifacts/

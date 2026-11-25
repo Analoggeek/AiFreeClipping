@@ -6,7 +6,7 @@ from PySide6.QtCore import QPointF
 
 def navigation_icon(key):
     pm=QPixmap(24,24);pm.fill(Qt.GlobalColor.transparent)
-    p=QPainter(pm);p.setRenderHint(QPainter.RenderHint.Antialiasing);p.setPen(QPen(QColor('#13c7b2'),1.7,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
+    p=QPainter(pm);p.setRenderHint(QPainter.RenderHint.Antialiasing);p.setPen(QPen(QColor('#ac8aff'),1.7,Qt.PenStyle.SolidLine,Qt.PenCapStyle.RoundCap,Qt.PenJoinStyle.RoundJoin))
     if key=='workflow':
         p.drawRoundedRect(QRectF(3,3,18,18),5,5);p.drawPolygon(QPolygonF([QPointF(10,7),QPointF(17,12),QPointF(10,17)]))
     elif key=='projects':

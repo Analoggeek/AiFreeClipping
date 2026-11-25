@@ -441,6 +441,8 @@ class EditorPage(BasePage):
         header.addWidget(self.btn_render)
         header.addWidget(self.btn_cancel_render)
         root.addLayout(header)
+        from ..widgets.timeline_director import TimelineDirector
+        self.director=TimelineDirector(self);root.addWidget(self.director)
 
         # -- main split --------------------------------------------------------
         body = QHBoxLayout()
@@ -591,6 +593,7 @@ class EditorPage(BasePage):
     def shutdown(self) -> None:
         """Stop the workers so no thread outlives the window."""
         self._play_timer.stop()
+        self.director.shutdown()
         worker = self._worker
         if worker is not None and worker.isRunning():
             if not worker.wait(3000):

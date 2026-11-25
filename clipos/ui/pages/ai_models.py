@@ -61,6 +61,8 @@ class AiModelsPage(BasePage):
         super().__init__(window)
 
     def build(self) -> None:
+        from ..widgets.gemma_manager import GemmaManager
+        self.gemma=GemmaManager(self.window);self.content_layout.addWidget(self.gemma)
         card = Card()
         card.add(SectionHeader(
             "Speech Recognition (Whisper)",
@@ -202,6 +204,7 @@ class AiModelsPage(BasePage):
         self.refresh()
 
     def shutdown(self) -> None:
+        self.gemma.shutdown()
         """Stop a running model download and wait for it to finish."""
         worker = self._worker
         if worker is not None:

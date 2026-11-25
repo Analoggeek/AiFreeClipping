@@ -6,7 +6,7 @@ import webbrowser
 from pathlib import Path
 
 from PySide6.QtCore import QPropertyAnimation, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QKeySequence, QShortcut
+from PySide6.QtGui import QIcon, QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QButtonGroup, QFrame, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
     QPushButton, QStyle, QSizePolicy, QStackedWidget, QStatusBar, QVBoxLayout, QWidget,
@@ -193,9 +193,13 @@ class MainWindow(QMainWindow):
         lay.setContentsMargins(10, 12, 10, 12)
         lay.setSpacing(3)
 
+        from ..core.resources import resource_file
+        self.setWindowIcon(QIcon(str(resource_file('icons','clipos-mark.svg'))))
+        brand_row=QHBoxLayout()
+        mark=QLabel();mark.setPixmap(self.windowIcon().pixmap(48,48));brand_row.addWidget(mark)
         brand = QLabel("CLIPOS")
         brand.setObjectName("SidebarBrand")
-        lay.addWidget(brand)
+        brand_row.addWidget(brand);brand_row.addStretch();lay.addLayout(brand_row)
 
         tag = QLabel("AI Clipping Studio")
         tag.setObjectName("CardSubtitle")
@@ -207,8 +211,6 @@ class MainWindow(QMainWindow):
             ("projects", "", "Projects"),
             ("library", "", "Clip library"),
             ("editor", "", "Advanced editor"),
-            ("longform", "", "Automatic long-form"),
-            ("templates", "", "Presets & captions"),
             ("models", "", "AI models"),
             ("settings", "", "Settings"),
         ]
@@ -236,28 +238,19 @@ class MainWindow(QMainWindow):
         return bar
 
     def _register_pages(self) -> None:
-        from .pages.auto_clip_studio import AutoClipStudioPage
         from .pages.ai_models import AiModelsPage
-        from .pages.caption_studio import CaptionStudioPage
         from .pages.clip_library import ClipLibraryPage
         from .pages.editor import EditorPage
-        from .pages.longform import LongformPage
         from .pages.export_center import ExportCenterPage
         from .pages.workflow import WorkflowPage
-        from .pages.home import HomePage
         from .pages.my_projects import MyProjectsPage
-        from .pages.new_project import NewProjectPage
         from .pages.settings_page import SettingsPage
-        from .pages.templates import TemplatesPage
 
         page_classes = [
             ("workflow", WorkflowPage),
             ("projects", MyProjectsPage),
             ("library", ClipLibraryPage),
-            ("templates", TemplatesPage),
-            ("captions", CaptionStudioPage),
             ("editor", EditorPage),
-            ("longform", LongformPage),
             ("export", ExportCenterPage),
             ("models", AiModelsPage),
             ("settings", SettingsPage),
