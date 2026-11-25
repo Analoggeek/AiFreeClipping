@@ -20,7 +20,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
         run: |
-          gh run view 45570139715 --job 139054488991 --log > previous.log
+          gh run view 45570139715 --job 139054488991 --log > previous.log 2>&1 || true
           tail -c 55000 previous.log > report.log
           gh issue create --title "Native full-suite Intel stall context" --body-file report.log
       - uses: actions/checkout@v4
