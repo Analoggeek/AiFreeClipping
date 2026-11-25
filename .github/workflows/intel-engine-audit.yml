@@ -1,0 +1,20 @@
+name: Intel engine audit
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: macos-15-intel
+    steps:
+      - name: Inspect upstream Intel 6.0 compatibility candidate
+        run: |
+          set -euo pipefail
+          base=https://github.com/eugeneware/ffmpeg-static/releases/download/b6.0
+          for name in ffmpeg-darwin-x64.gz darwin-x64.LICENSE darwin-x64.README; do
+            curl -fL --retry 3 "$base/$name" -o "$name"
+            shasum -a 256 "$name"
+          done
+          gunzip ffmpeg-darwin-x64.gz
+          chmod +x ffmpeg-darwin-x64
+          ./ffmpeg-darwin-x64 -version
+          ./ffmpeg-darwin-x64 -filters | grep -E ' ass | drawtext '
