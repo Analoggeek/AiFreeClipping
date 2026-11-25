@@ -416,6 +416,15 @@ class ClipOSPipeline:
 
         self._report("render", 5.0, "Preparing clip")
 
+        # Per-project crop is authoritative even when an older caller supplies
+        # global recipe/framing settings. Never mutate a caller-shared snapshot.
+        from .crop_config import load_crop
+        crop=load_crop(self.db,self.project_id)
+        if crop is not None:
+            from dataclasses import replace
+            settings=replace(settings,crop_config=crop.to_dict(),width=crop.output_width,
+                height=crop.output_height,aspect=crop.aspect_ratio)
+
         # Build captions for the clip
         cues = []
         if settings.show_captions:
@@ -446,7 +455,7 @@ class ClipOSPipeline:
 
         saved_edit = PATHS.projects / str(self.project_id) / "edits" / f"{clip_id}.json"
         from .timeline import Timeline
-        if saved_edit.exists() or Timeline.backup_path(saved_edit).exists():
+        if settings.crop_config is None and (saved_edit.exists() or Timeline.backup_path(saved_edit).exists()):
             timeline = Timeline.load(saved_edit)
             if timeline.recovered_from:
                 self._report("render", 5., "Recovered previous timeline backup; latest edits may be missing")
