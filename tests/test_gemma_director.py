@@ -143,3 +143,18 @@ def test_quick_styles_reach_actual_captioned_export(tmp_path,key):
     output=tmp_path/'out.mp4'
     ClipRenderer(tmp_path/'work').render(source,output,0,1,settings,cues=[CaptionCue(0,1,'Actual style export',[])])
     assert probe(output).video.height==320 and output.stat().st_size>1000
+
+def test_native_audio_underrun_refills_real_pcm_instead_of_fatal_error():
+    import queue,time
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    QAudio=pytest.importorskip("PySide6.QtMultimedia",exc_type=ImportError).QAudio
+    from clipos.ui.multitrack_audio import AudioClockPlayer
+    pcm=b'\x01\x00\x02\x00'*10
+    fake=SimpleNamespace(sink=Mock(),timer=Mock(),failed=Mock(),ended=Mock(),device=Mock(),queue=queue.Queue(),pending=pcm,finished=False,error=None,_last_audio_activity=time.monotonic())
+    fake.sink.error.return_value=QAudio.Error.UnderrunError
+    fake.sink.bytesFree.return_value=len(pcm);fake.device.write.return_value=len(pcm)
+    AudioClockPlayer._pump(fake)
+    fake.device.write.assert_called_once_with(pcm);fake.failed.emit.assert_not_called()
+    fake.sink.error.return_value=QAudio.Error.IOError
+    AudioClockPlayer._pump(fake);fake.failed.emit.assert_called_once()

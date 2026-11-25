@@ -122,3 +122,11 @@ quality, model OOM/driver behaviour and whole-system offline inference are not
 claimed tested. The in-app explicit test is available for installed local models.
 Native release workflows now include this regression suite; installer publication
 is a separate gated operation, not automatic from changing source/UI.
+
+Initial native verification for this change: Intel audit45590291440 **506passed9skipped**;
+Windows and Linux installer/frozen checks passed in45590301925. macOS arm64
+packaging completed, but the later Rosetta Intel native-audio gate caught a
+transient Qt UnderrunError treated as fatal. Audio delivery now allows native
+PCM refill after underrun, keeps the processed-audio clock, fails real device
+errors, and bounds prolonged starvation at30s. A focused regression accompanies
+the change; macOS packaging is rerun rather than dropping that gate.

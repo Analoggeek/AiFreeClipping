@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 
 from PySide6.QtCore import QObject,QTimer,Signal
 from ..video.multitrack_render import audio_preview_command
@@ -35,6 +36,7 @@ class AudioClockPlayer(QObject):
         if not device.isFormatSupported(fmt):raise AudioDeviceUnavailable('Native device does not support 48 kHz stereo PCM preview')
         self.start_time=start;self.end_time=project.duration
         self.queue=queue.Queue(maxsize=8);self.pending=b'';self.finished=False;self.error=None
+        self._last_audio_activity=time.monotonic()
         self.stop_event=threading.Event()
         self.stderr=tempfile.TemporaryFile()
         self.process=None;self.reader=None;self.sink=None
@@ -72,8 +74,14 @@ class AudioClockPlayer(QObject):
 
     def _pump(self):
         from PySide6.QtMultimedia import QAudio
-        if self.sink.error()!=QAudio.Error.NoError:
-            self.timer.stop();self.failed.emit(f'Native audio output error: {self.sink.error()}');return
+        # Qt reports transient starvation as UnderrunError/IdleState while
+        # FFmpeg starts/refills PCM. Writing data resumes the native device;
+        # it is not a fatal device error or permission to invent a clock.
+        error=self.sink.error()
+        if error not in (QAudio.Error.NoError,QAudio.Error.UnderrunError):
+            self.timer.stop();self.failed.emit(f'Native audio output error: {error}');return
+        if error==QAudio.Error.UnderrunError and not self.finished and time.monotonic()-self._last_audio_activity>30:
+            self.timer.stop();self.failed.emit('Native audio stream stalled for 30 seconds');return
         if self.error:
             self.timer.stop();self.failed.emit(self.error);return
         if not self.pending:
@@ -86,6 +94,7 @@ class AudioClockPlayer(QObject):
             if count:
                 written=self.device.write(self.pending[:count])
                 if written<0:self.failed.emit('Native audio write failed');self.timer.stop();return
+                if written>0:self._last_audio_activity=time.monotonic()
                 self.pending=self.pending[written:]
         if self.finished and self.queue.empty() and not self.pending and self.sink.state()==QAudio.State.IdleState:
             self.timer.stop();self.ended.emit()
