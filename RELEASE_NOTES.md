@@ -28,6 +28,9 @@ in the sandbox; the changes below address concrete risky paths and add recovery.
   compatibility mode for the session, avoiding a fresh crash for every clip.
   Relaunch/binary replacement resets this policy. Compatibility mode is slower
   by design; normal successful renders retain accelerated/default performance.
+- Fix Intel music export cleanup hangs by calculating finite music repeats for
+  the edited duration rather than using an infinite demux loop. Actual looped
+  music and ducking remain present and are waveform-tested.
 - Never treat cancellation, out-of-memory killing, ordinary bad media/arguments
   or a second conservative failure as a successful export. Retries are bounded;
   pre-existing successful output remains protected by atomic replacement.
@@ -40,7 +43,9 @@ in the sandbox; the changes below address concrete risky paths and add recovery.
 
 ## Verification and limits
 
-Local full suite: **600 passed, 20 skipped**; real import-to-export/batch E2E:
+Native Intel full release regression audit: **477 passed, 9 skipped**
+(run45579158883), including native playback and actual music/caption recovery.
+Local full suite: **607 passed, 20 skipped**; real import-to-export/batch E2E:
 **35/35 passed**. Optional native/model checks account for skips; Intel runtime
 verification is mandatory in release CI, not asserted from Linux tests.
 

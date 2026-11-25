@@ -75,3 +75,33 @@ Official release jobs now build/test macos-15 arm64 and macos-15-intel x86_64
 separately, each with its own frozen bundle checks, arch-labelled DMG/archive and
 all-platform publication gate. Verbose test identity/120s stack diagnostics
 make future stalls actionable instead of waiting without test identification.
+
+Full-order bounded Intel tests isolated a second concrete issue (issue133):
+**range** renders with an infinitely looped music input hang inside FFmpeg6.0
+once the downstream atrim reaches EOF; timeline cases finish. This occurs on
+native Intel too, so the earlier Rosetta stall was not sufficient evidence of
+a Rosetta-specific fault. Music inputs are now explicitly time-bounded at the
+demuxer (`-stream_loop -1 -t <edited duration> -i music`) for both range and
+timeline paths. Existing tests assert this scope and continue measuring actual
+looped music beyond source EOF and requested export duration, with/without
+ducking. Nothing is fixed by removing music. The bounded audit also forced
+QT_QPA_PLATFORM=minimal on macOS, which prevented native playback; it now uses
+the native GUI platform, just like release tests (not a playback-test skip).
+
+Further native evidence (issue135) corrects the initial demux hypothesis:
+FFmpeg finishes all frames/audio and the MP4 trailer, then its infinite-loop
+input cleanup hangs. Input/output `-t`, scalar mode, one filter worker and input
+queues did NOT fix it. Native comparison run45578337455/issue136 showed finite
+`-stream_loop 2` exits0; `-stream_loop -1` did not. Production now computes
+`max(0, ceil(edited_duration / music_duration)-1)` repeats, also bounds input
+length, and rejects unknown/non-audio duration explicitly. This preserves real
+repeated/ducked music without a giant PCM staging file or caption/effect removal.
+Range/timeline tests inspect finite input scope and measure real looped waveform
+past the original music length. The full native suite is rerun after this fix;
+not merely the smaller successful layout subset. Full local600/20 plus focused
+51passed1skipped (including seven added finite-loop edge-case checks).
+
+Final native full-suite audit45579158883 / issue137: **477passed9skipped** in
+137.79s, including mandatory native playback and actual music-loop/caption
+exports. Final local suite **607passed20skipped**, E2E **35/35**. Frozen native
+installer gates remain separate and mandatory before public release.

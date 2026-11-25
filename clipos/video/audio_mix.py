@@ -4,6 +4,23 @@ from __future__ import annotations
 import math
 
 
+def music_input_args(path, duration: float):
+    """Finite repeats avoid FFmpeg6's infinite-loop input cleanup deadlock.
+
+    Bound both repeat count and input time; keep the same repeated music, not
+    silence padding or a whole-program PCM staging file.
+    """
+    from ..core.ffmpeg import probe
+    if not math.isfinite(duration) or duration<=0:
+        raise ValueError('Music mix duration must be positive')
+    info=probe(path)
+    if not info.has_audio or not math.isfinite(info.duration) or info.duration<=0:
+        raise ValueError('Background music must have decodable audio and a known positive duration')
+    loops=max(0,math.ceil(duration/info.duration)-1)
+    if loops>2147483647:raise ValueError('Background music is too short for the requested duration')
+    return ['-stream_loop',str(loops),'-t',f'{duration:.6f}','-i',str(path)]
+
+
 def music_mix_parts(voice: str, music_index: int, duration: float,
                     volume: float, ducking: bool, has_voice: bool):
     """Return FFmpeg graph parts and output label (no file/network access).

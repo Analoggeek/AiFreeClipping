@@ -158,3 +158,17 @@ def test_bundle_exec_verification_distinguishes_metadata_from_real_binaries(tmp_
     for name in ('ffmpeg-provenance.json','darwin-x64.LICENSE','darwin-x64.README'):
         (folder/name).write_text('data')
     assert {p.name for p in media_executables(tmp_path)}=={'ffmpeg','ffprobe'}
+
+@pytest.mark.parametrize('duration,length,loops',[(2,.7,'2'),(1.5,.7,'2'),(.5,.7,'0'),(2,1,'1')])
+def test_music_demux_has_finite_repeat_count(duration,length,loops):
+    from types import SimpleNamespace
+    from clipos.video.audio_mix import music_input_args
+    with patch('clipos.core.ffmpeg.probe',return_value=SimpleNamespace(has_audio=True,duration=length)):
+        assert music_input_args('music.wav',duration)==['-stream_loop',loops,'-t',f'{duration:.6f}','-i','music.wav']
+
+@pytest.mark.parametrize('audio,length',[(False,1),(True,0),(True,float('nan'))])
+def test_invalid_music_not_silently_dropped_or_infinitely_looped(audio,length):
+    from types import SimpleNamespace
+    from clipos.video.audio_mix import music_input_args
+    with patch('clipos.core.ffmpeg.probe',return_value=SimpleNamespace(has_audio=audio,duration=length)):
+        with pytest.raises(ValueError):music_input_args('music.wav',2)

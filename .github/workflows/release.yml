@@ -356,10 +356,12 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
-          for app in CLIPOS-arm64.app CLIPOS-intel.app; do
-            [ -d "dist/$app" ] || continue
-            tar -czf "dist/$app.tar.gz" -C dist "$app"
-          done
+          if [ -d dist/CLIPOS-arm64.app ]; then
+            tar -czf dist/CLIPOS-arm64.app.tar.gz -C dist CLIPOS-arm64.app
+          fi
+          if [ -d dist/CLIPOS-intel.app ]; then
+            tar -czf dist/CLIPOS-intel.app.tar.gz -C dist CLIPOS-intel.app
+          fi
 
       - name: Upload the build artifacts
         uses: actions/upload-artifact@v4
