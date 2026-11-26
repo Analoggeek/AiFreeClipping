@@ -58,6 +58,25 @@ class GraphicsPanel(QWidget):
         self.animation = QComboBox()
         self.animation.addItems(["fade", "slide"])
         layout.addWidget(self.animation)
+        from ...video.free_assets import asset_catalog
+
+        self.free_asset = QComboBox()
+        for asset in asset_catalog():
+            self.free_asset.addItem(asset["name"], asset["id"])
+        layout.addWidget(
+            QLabel("Optional online library · Noto Emoji / Google · Apache-2.0")
+        )
+        layout.addWidget(self.free_asset)
+        self.asset_license = QLabel(
+            "50 licensed PNG illustrations, not 50 template packs. One click downloads only the chosen image. Free commercial use under Apache-2.0; license/source saved beside the image. No account or API key. Downloaded art works offline. These copyrighted assets are freely licensed, not public-domain."
+        )
+        self.asset_license.setWordWrap(True)
+        layout.addWidget(self.asset_license)
+        download = QPushButton("Download / use selected library art as graphic logo")
+        download.clicked.connect(
+            lambda: self.studio.editing.run(self.download_library_art)
+        )
+        layout.addWidget(download)
         self.logo = QLabel("No logo selected.")
         self.logo.setWordWrap(True)
         layout.addWidget(self.logo)
@@ -226,3 +245,29 @@ class GraphicsPanel(QWidget):
                     Qt.TransformationMode.SmoothTransformation,
                 )
             )
+
+    def download_library_art(self):
+        from ...core.config import PATHS
+        from ...video.free_assets import download_asset
+
+        asset_id = self.free_asset.currentData()
+
+        def job(worker):
+            path = download_asset(
+                asset_id,
+                PATHS.media / "free-library",
+                cancelled=worker.cancelled.is_set,
+                progress=lambda pct, message: worker.progress.emit(pct, message),
+            )
+            return inspect_logo(path)
+
+        def done(result):
+            self.logo_path, self.logo_sha = result
+            self.logo.setText(self.logo_path)
+            self.studio.status.setText(
+                "Verified Apache-2.0 artwork selected as graphic logo. License/source stored alongside cached PNG. Add or rebuild graphic to apply."
+            )
+
+        self.studio._background(
+            job, done, "Downloading and verifying selected licensed artwork…"
+        )

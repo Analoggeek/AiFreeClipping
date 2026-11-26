@@ -154,3 +154,34 @@ Native status at this increment: Windows installer job for `4f8fa30` succeeded
 45739066758 remains pending behind it. Neither result certifies this newer asset
 revision. Physical audio-sync/permission tests remain NOT RUN. This library is
 20 compositions, not completion of 50 full asset-rich packs.
+
+
+### Optional one-click freely licensed artwork library
+
+Motion graphics now has a **50-item Noto Emoji illustration library**. Choose an
+item and click **Download / use selected library art as graphic logo**. Only the
+chosen PNG is downloaded; then Add/Rebuild applies it to the editable graphic.
+Cached verified artwork works offline. No account, API key or mandatory cloud is
+required. Internet is required only for the first explicit download. This is 50
+illustrations plus 20 original compositions, **not 50 complete template packs**.
+
+Assets are pinned to Google Noto Emoji revision
+`e8073ab740292f8d5f19b5de144087ac58044d06` under Apache-2.0. Freely licensed does
+not mean copyright-free or public-domain. The panel identifies provider/license;
+full license and per-file source/revision/SHA256 metadata are saved beside each
+PNG. Pinned Git blob/size and PNG format/dimensions are checked before atomic
+publication. Corrupt caches are rejected, not silently overwritten. Network,
+rate-limit and cancellation failures surface without fake success. Artwork is
+used unmodified; no trademark endorsement is implied.
+
+Verification: all **50 real upstream PNG downloads** succeeded and passed identity
+and image checks in this sandbox; one downloaded rocket was actually rendered
+into an alpha MOV with editable title/subtitle. Unit tests separately cover cache
+reuse, corruption/cancellation and license provenance. Full local regression:
+**695 passed, 15 skipped**. Native tests include the library contracts, not an
+assumed network availability pass.
+
+At last inspection native run 45738604181 (`4f8fa30`) had successful Windows and
+Linux jobs, with macOS still running. Newer commits need their own native results.
+Physical speaker/display sync and human permission-dialog QA remain **NOT RUN**;
+they require actual devices and cannot be fixed by claiming a simulated pass.
