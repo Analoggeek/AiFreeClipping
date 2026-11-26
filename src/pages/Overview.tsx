@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
-  Activity, ArrowRight, Captions, Clapperboard, Cpu, Download, Film, FolderDown, Gauge,
-  HardDrive, ImagePlus, Layers3, ListVideo, Mic2, ScanEye, Sparkles, UploadCloud, Zap,
+  ArrowRight, Captions, Clapperboard, Download, Film, FolderDown,
+  ImagePlus, Layers3, ListVideo, Mic2, ScanEye, Sparkles, UploadCloud,
 } from 'lucide-react';
 import { api } from '../api';
 import { Panel, Pill } from '../components/common';
 import logo from '../../brand/logo-3d.png';
 import type { PageId } from '../App';
-import type { HardwareInfo } from '../types';
 
 const PIPELINE = [
   { icon: Download, title: 'Download', detail: 'Any video or full playlist, max available quality', page: 'downloads' as PageId },
@@ -28,7 +27,6 @@ const FEATURES = [
 
 export default function Overview({ onNavigate, openClipper }: { onNavigate: (page: PageId) => void; openClipper: (ids: string[]) => void }) {
   const [stats, setStats] = useState({ media: 0, clips: 0, rendered: 0, running: 0 });
-  const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   useEffect(() => {
     Promise.all([api.media(), api.clips(), api.jobs()]).then(([media, clips, jobs]) => {
       setStats({
@@ -38,10 +36,6 @@ export default function Overview({ onNavigate, openClipper }: { onNavigate: (pag
         running: jobs.jobs.filter((job) => job.status === 'running').length,
       });
     }).catch(() => undefined);
-    const load = () => api.hardware().then(setHardware).catch(() => undefined);
-    void load();
-    const timer = window.setInterval(load, 4000);
-    return () => window.clearInterval(timer);
   }, []);
 
   return (
@@ -75,21 +69,6 @@ export default function Overview({ onNavigate, openClipper }: { onNavigate: (pag
           return <div className="stat-card" key={item.label}><Icon size={20} /><strong>{item.value}</strong><span>{item.label}</span></div>;
         })}
       </div>
-
-      <Panel title="Hardware engine" subtitle="Live usage and the encoder chosen for this machine" action={<button className="ghost-btn" onClick={() => onNavigate('models')}><Cpu size={15} /> Model setup</button>}>
-        <div className="hardware-bar">
-          <Pill tone="green"><Zap size={13} /> {hardware?.gpu?.name || 'Detecting GPU…'}</Pill>
-          <Pill><Activity size={13} /> CPU {hardware?.cpu_percent ?? '—'}%</Pill>
-          <Pill><Gauge size={13} /> RAM {hardware?.ram_percent ?? '—'}%</Pill>
-          <Pill><HardDrive size={13} /> {hardware?.disk_free_gb ?? '—'} GB free</Pill>
-          <Pill tone="violet">{hardware?.workers ?? 1} parallel renders</Pill>
-        </div>
-        <div className="hardware-meters">
-          <div><span>CPU</span><div className="meter"><i style={{ width: `${hardware?.cpu_percent ?? 0}%` }} /></div></div>
-          <div><span>RAM</span><div className="meter"><i style={{ width: `${hardware?.ram_percent ?? 0}%` }} /></div></div>
-          <div><span>Render workers</span><div className="meter"><i style={{ width: `${Math.min(100, (hardware?.workers ?? 1) / 8 * 100)}%` }} /></div></div>
-        </div>
-      </Panel>
 
       <Panel title="Your creation pipeline" subtitle="Every stage is connected — one workflow from source link to published Short">
         <div className="pipeline">

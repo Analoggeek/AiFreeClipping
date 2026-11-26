@@ -1,5 +1,15 @@
 # Release notes
 
+## v5.1.2 — stable downloads, compact HUD and root-level site
+
+- **Downloader fixed:** `JobManager.update()` now accepts positional progress/message arguments, so any legacy progress callback works. Download jobs no longer fail mid-run.
+- **Model downloads fixed:** the primary card button now downloads **and** installs directly in the app; external links use Electron's proper `openExternal` handler. API-key status reflects keys saved in Settings.
+- **Blank-screen guard:** React error boundary plus Electron renderer recovery reloads a crashed view instead of leaving an empty window.
+- **Correct version:** the sidebar and health endpoint now show the real app version (from `package.json` / Electron), not `1.0.0`.
+- **Cleaner layout:** live hardware usage moved into a compact sidebar panel below Settings and above the version line; duplicate center panels removed. App logo is now a small refined 3D mark.
+- **Website at repository root:** the animated marketing site is now `index.html`, `site.css`, `site.js` and `assets/` at the repo root; the React app entry is `app.html`. Site rebuilt with clearer sections and direct installer links.
+- **README rewritten:** quick start, model table, hardware tips, structure and troubleshooting in one place.
+
 ## v5.1.1 — reliable startup & redesigned site
 
 - **Startup fixed:** added a browser studio launcher (`npm start`) that works without Electron; `npm run dev:app` now falls back to it automatically when the Electron binary is unavailable. Vite accepts proxied preview hosts.

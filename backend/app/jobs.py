@@ -34,9 +34,9 @@ class JobManager:
     def update(
         self,
         job_id: str,
-        *,
         progress: float | None = None,
         message: str | None = None,
+        *,
         status: str | None = None,
         result: Any = None,
         error: str | None = None,

@@ -1,6 +1,6 @@
 {
   "name": "ai-clipper-pro",
-  "version": "5.1.1",
+  "version": "5.1.2",
   "description": "Local-first AI video clipping, editing and publishing studio — made by analoggeek",
   "author": "analoggeek",
   "license": "MIT",
@@ -10,7 +10,7 @@
     "dev": "vite --host 0.0.0.0",
     "dev:app": "node scripts/dev-app.cjs",
     "start": "node scripts/start-browser.cjs",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/copy-app-html.cjs",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "test": "python3 -m pytest backend/tests -q",

@@ -128,7 +128,7 @@ async def download(request, job_id: str | None = None) -> dict[str, Any]:
     if job_id:
         from ..jobs import jobs
 
-        jobs.update(job_id, 2, "Resolving video information…")
+        jobs.update(job_id, progress=2, message="Resolving video information…")
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = await asyncio.to_thread(ydl.extract_info, request.url, False)
     if not info:

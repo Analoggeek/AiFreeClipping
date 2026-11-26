@@ -119,7 +119,10 @@ def brand_asset(name: str) -> str | None:
 # --- health / system -----------------------------------------------------
 @app.get("/api/health")
 def health():
-    return ok(version=__version__, token_file=str(SECRET_PATH), home=str(SECRET_PATH.parent))
+    return ok(
+        version=os.getenv("AIFREECLIP_VERSION") or __version__,
+        token_file=str(SECRET_PATH), home=str(SECRET_PATH.parent),
+    )
 
 
 @app.get("/api/system/capabilities")

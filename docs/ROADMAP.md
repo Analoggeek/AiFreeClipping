@@ -1,5 +1,13 @@
 # Roadmap
 
+## Shipped in v5.1.2
+
+- Legacy-safe job progress updates and reliable download jobs
+- Direct in-app model download/install with working external links
+- Renderer crash recovery and compact sidebar hardware HUD
+- Real app version display and refined small 3D logo
+- Marketing website moved to repository root and README rewritten
+
 ## Shipped in v5.1.1
 
 - Reliable browser start (`npm start`) with Electron fallback

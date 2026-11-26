@@ -1,5 +1,3 @@
-import os
-
 from fastapi.testclient import TestClient
 
 from app.main import app
@@ -12,7 +10,7 @@ def test_health_needs_token():
 
 
 def test_health_and_capabilities():
-    token = open(os.path.expanduser("~/.AiFreeClipping/.api_token"), encoding="utf-8").read()
+    token = "aifreeclip-test-token"
     headers = {"X-AI-Clipper-Token": token}
     health = client.get("/api/health", headers=headers)
     assert health.status_code == 200
@@ -23,7 +21,7 @@ def test_health_and_capabilities():
 
 
 def test_hardware_endpoint_reports_workers():
-    token = open(os.path.expanduser("~/.AiFreeClipping/.api_token"), encoding="utf-8").read()
+    token = "aifreeclip-test-token"
     headers = {"X-AI-Clipper-Token": token}
     response = client.get("/api/system/hardware", headers=headers)
     assert response.status_code == 200
@@ -35,7 +33,7 @@ def test_hardware_endpoint_reports_workers():
 
 
 def test_apply_effects_to_multiple_clips():
-    token = open(os.path.expanduser("~/.AiFreeClipping/.api_token"), encoding="utf-8").read()
+    token = "aifreeclip-test-token"
     headers = {"X-AI-Clipper-Token": token}
     response = client.post(
         "/api/clips/apply-effects",

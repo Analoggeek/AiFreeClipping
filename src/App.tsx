@@ -3,9 +3,11 @@ import {
   Clapperboard, CloudDownload, Download, FolderOpen, LayoutDashboard, Library,
   ListVideo, MonitorPlay, Package, PlugZap, Settings, Sparkles, UploadCloud, WifiOff,
 } from 'lucide-react';
-import logo from '../brand/logo-3d.png';
+import logo from '../brand/logo-mark-3d.svg';
 import { api, apiBase } from './api';
+import type { HardwareInfo } from './types';
 import { Toast, useJobs } from './components/common';
+import ErrorBoundary from './components/ErrorBoundary';
 import Clipper from './pages/Clipper';
 import Downloads from './pages/Downloads';
 import Editor from './pages/Editor';
@@ -32,16 +34,24 @@ export default function App() {
   const [page, setPage] = useState<PageId>('overview');
   const [toast, setToast] = useState('');
   const [online, setOnline] = useState(false);
-  const [version, setVersion] = useState('1.0.0');
+  const [version, setVersion] = useState('5.1.2');
   const [mediaSelection, setMediaSelection] = useState<string[]>([]);
   const [clipSelection, setClipSelection] = useState<string[]>([]);
   const [folder, setFolder] = useState('');
+  const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const { jobs } = useJobs();
   const notify = useCallback((message: string) => setToast(message), []);
 
   useEffect(() => {
     api.health().then((result) => { setOnline(true); setVersion(result.version); }).catch(() => setOnline(false));
     api.folders().then((result) => setFolder(result.folders.exports)).catch(() => undefined);
+    if (window.desktop?.appInfo) {
+      void window.desktop.appInfo().then((info) => { if (info?.version) setVersion(info.version); }).catch(() => undefined);
+    }
+    const loadHardware = () => { void api.hardware().then(setHardware).catch(() => undefined); };
+    loadHardware();
+    const timer = window.setInterval(loadHardware, 4000);
+    return () => window.clearInterval(timer);
   }, []);
 
   const openClipper = (ids: string[]) => {
@@ -94,6 +104,13 @@ export default function App() {
             </div>
           ))}
         </nav>
+        <div className="sidebar-hardware">
+          <span className="nav-label">Hardware</span>
+          <strong>{hardware?.gpu?.name || 'Detecting…'}</strong>
+          <div className="mini-meter"><i style={{ width: `${hardware?.cpu_percent ?? 0}%` }} /><small>CPU {hardware?.cpu_percent ?? '—'}%</small></div>
+          <div className="mini-meter"><i style={{ width: `${hardware?.ram_percent ?? 0}%` }} /><small>RAM {hardware?.ram_percent ?? '—'}%</small></div>
+          <small className="hardware-foot">{hardware?.workers ?? 1} workers · {hardware?.disk_free_gb ?? '—'} GB free</small>
+        </div>
         <div className="sidebar-foot">
           <PlugZap size={15} className={online ? 'ok' : 'bad'} />
           <div><strong>{online ? 'Local engine online' : 'Engine offline'}</strong><small>v{version} · {apiBase || 'browser mode'}</small></div>
@@ -108,13 +125,13 @@ export default function App() {
             <button className="ghost-btn" onClick={() => folder && window.desktop?.revealPath(folder)} title="Open exports folder">
               <FolderOpen size={16} /> Exports
             </button>
-            <button className="ghost-btn" onClick={() => window.desktop?.openPath('https://github.com/Analoggeek/AiFreeClipping')}>
+            <button className="ghost-btn" onClick={() => window.desktop?.openExternal ? void window.desktop.openExternal('https://github.com/Analoggeek/AiFreeClipping') : window.open('https://github.com/Analoggeek/AiFreeClipping', '_blank')}>
               <CloudDownload size={16} /> GitHub
             </button>
             <div className="avatar"><Sparkles size={16} /></div>
           </div>
         </header>
-        <main className="page">{content}</main>
+        <main className="page"><ErrorBoundary>{content}</ErrorBoundary></main>
       </div>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
     </div>

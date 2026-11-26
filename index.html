@@ -1,13 +1,191 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#090b14" />
-    <title>AI Clipper Pro — made by analoggeek</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#060814" />
+  <meta name="description" content="AI Clipper Pro — a local-first AI studio that turns any video into viral-ready clips. Download, analyse, edit and publish offline. Made by analoggeek." />
+  <title>AI Clipper Pro — Clip faster. Create louder.</title>
+  <link rel="icon" href="assets/logo-mark.png" />
+  <link rel="stylesheet" href="site.css" />
+</head>
+<body>
+  <div class="cursor-glow" id="cursor-glow"></div>
+  <div class="noise"></div>
+  <div class="scanline"></div>
+
+  <header class="site-header" id="site-header">
+    <a class="brand" href="#top"><img src="assets/logo.svg" alt="AI Clipper Pro" /><span>AI Clipper <b>Pro</b></span></a>
+    <nav id="nav">
+      <a href="#features">Features</a>
+      <a href="#screens">Screens</a>
+      <a href="#models">AI models</a>
+      <a href="#hardware">Hardware</a>
+      <a href="#download">Download</a>
+    </nav>
+    <div class="header-actions">
+      <a class="header-ghost" href="https://github.com/Analoggeek/AiFreeClipping" target="_blank" rel="noopener">GitHub ↗</a>
+      <a class="header-cta" href="#download">Get the app <span>↓</span></a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Toggle navigation">☰</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-grid" aria-hidden="true"></div>
+      <div class="hero-copy reveal">
+        <div class="eyebrow"><i></i> LOCAL-FIRST CREATOR STUDIO · V5.1</div>
+        <h1>Clip faster.<br /><span>Create louder.</span></h1>
+        <p>Paste any video or playlist. Your own AI finds the viral moments, cuts them, captions them and exports them — privately, on your hardware. No uploads. No subscriptions.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#download">Download free <span>↓</span></a>
+          <a class="btn btn-outline" href="#screens">See the studio <span>→</span></a>
+        </div>
+        <div class="hero-metrics">
+          <div><strong data-count="5">0</strong><span>connected stages</span></div>
+          <div><strong data-count="6">0</strong><span>offline installers</span></div>
+          <div><strong data-count="14">0</strong><span>model options</span></div>
+          <div><strong data-count="0">0</strong><span>footage uploads</span></div>
+        </div>
+      </div>
+      <div class="hero-visual reveal">
+        <div class="halo halo-1"></div><div class="halo halo-2"></div>
+        <div class="hero-logo-wrap"><img src="assets/logo-hero.jpg" alt="AI Clipper Pro 3D logo" /></div>
+        <div class="float-chip chip-a"><i class="dot cyan"></i>Gemma 2 7B</div>
+        <div class="float-chip chip-b"><i class="dot violet"></i>Whisper</div>
+        <div class="float-chip chip-c"><i class="dot pink"></i>YOLOX + ByteTrack</div>
+        <div class="float-chip chip-d"><i class="dot green"></i>1080p exports</div>
+        <div class="made-badge">MADE BY <b>ANALOGGEEK</b></div>
+      </div>
+    </section>
+
+    <section class="marquee" aria-label="Technology stack">
+      <div class="marquee-track">
+        <span>GEMMA 2 7B</span><b>✦</b><span>WHISPER</span><b>✦</b><span>YOLOX ONNX</span><b>✦</b><span>BYTETRACK</span><b>✦</b><span>COMFYUI SDXL</span><b>✦</b><span>FFMPEG</span><b>✦</b><span>OLLAMA</span><b>✦</b><span>PIPER TTS</span><b>✦</b>
+        <span>GEMMA 2 7B</span><b>✦</b><span>WHISPER</span><b>✦</b><span>YOLOX ONNX</span><b>✦</b><span>BYTETRACK</span><b>✦</b><span>COMFYUI SDXL</span><b>✦</b><span>FFMPEG</span><b>✦</b><span>OLLAMA</span><b>✦</b><span>PIPER TTS</span><b>✦</b>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="section-head reveal"><span class="kicker">ONE WORKFLOW, EVERYTHING CONNECTED</span><h2>Your entire creator stack<br />in one dark, fast workspace</h2><p>No stitching together six tools. AI Clipper Pro handles the whole journey from source link to scheduled upload.</p></div>
+      <div class="bento">
+        <article class="bento-card wide reveal">
+          <div class="bento-icon">⇩</div><h3>Download anything</h3>
+          <p>Max-quality single videos, subtitles, full playlists with item selection and a permanent local library.</p>
+          <div class="mini-ui"><span></span><span></span><span></span><span></span></div>
+        </article>
+        <article class="bento-card reveal">
+          <div class="bento-icon">◎</div><h3>Find the hook</h3>
+          <p>Speech energy, scene changes and tracked player motion fused into one ranked viral score.</p>
+        </article>
+        <article class="bento-card reveal">
+          <div class="bento-icon">✂</div><h3>Clip in bulk</h3>
+          <p>Multiple non-overlapping moments from one source — or from many selected videos at once.</p>
+        </article>
+        <article class="bento-card tall reveal">
+          <div class="bento-icon">▤</div><h3>Real timeline editor</h3>
+          <p>Video, caption, sticker and audio tracks. Split, trim, inspect, import, search stock media and generate art on the spot.</p>
+          <div class="mini-timeline"><i></i><i></i><i></i><i></i></div>
+        </article>
+        <article class="bento-card reveal">
+          <div class="bento-icon">♪</div><h3>Sound & style</h3>
+          <p>Four caption presets, royalty-free procedural SFX, music beds, reframing, speed and color controls.</p>
+        </article>
+        <article class="bento-card wide reveal">
+          <div class="bento-icon">↥</div><h3>Publish in one click</h3>
+          <p>Parallel 1080p exports with fast-start, downloadable MP4s and optional resumable YouTube uploads through your own OAuth app.</p>
+          <div class="mini-bars"><i></i><i></i><i></i><i></i><i></i></div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section screens-section" id="screens">
+      <div class="section-head reveal"><span class="kicker">LOOK INSIDE</span><h2>Built like a pro editor.<br />Not a toy.</h2><p>Switch between the real workspace screens.</p></div>
+      <div class="screen-tabs reveal" role="tablist">
+        <button class="screen-tab active" data-screen="overview" role="tab"><b>01</b> Dashboard</button>
+        <button class="screen-tab" data-screen="clipper" role="tab"><b>02</b> AI Clipper</button>
+        <button class="screen-tab" data-screen="editor" role="tab"><b>03</b> Timeline Editor</button>
+      </div>
+      <div class="screen-stage reveal">
+        <div class="screen-glow"></div>
+        <img id="screen-image" src="assets/screen-overview.svg" alt="AI Clipper Pro dashboard screenshot" />
+        <div class="screen-caption"><span id="screen-title">Dashboard</span><p id="screen-detail">Library, live hardware usage and the complete creation pipeline.</p></div>
+      </div>
+    </section>
+
+    <section class="section workflow-section" id="workflow">
+      <div class="section-head reveal"><span class="kicker">THE FLOW</span><h2>Link in. Viral out.</h2></div>
+      <div class="flow-line reveal">
+        <div class="flow-step"><b>01</b><h3>Paste</h3><p>Video link or local file</p></div>
+        <div class="flow-step"><b>02</b><h3>Analyse</h3><p>Whisper + YOLOX locally</p></div>
+        <div class="flow-step"><b>03</b><h3>Clip</h3><p>Ranked viral moments</p></div>
+        <div class="flow-step"><b>04</b><h3>Enhance</h3><p>Captions, SFX, stickers</p></div>
+        <div class="flow-step"><b>05</b><h3>Publish</h3><p>Export or upload</p></div>
+      </div>
+    </section>
+
+    <section class="section models-section" id="models">
+      <div class="models-copy reveal">
+        <span class="kicker">YOUR MACHINES, YOUR MODELS</span>
+        <h2>One-click setup.<br />Then fully offline.</h2>
+        <p>Every model card inside the app has a direct download button. Model weights save into your own folder and start working immediately. Cloud features show a direct “Get API key” link.</p>
+        <div class="model-actions">
+          <a href="https://ollama.com/download" target="_blank" rel="noopener">Get Ollama runtime ↗</a>
+          <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Get Gemini API key ↗</a>
+        </div>
+      </div>
+      <div class="model-list reveal">
+        <a href="https://ollama.com/library/gemma2" target="_blank" rel="noopener"><i>LLM</i><strong>Gemma 2 7B</strong><span>1-click pull via Ollama</span><b>↗</b></a>
+        <a href="https://huggingface.co/Systran/faster-whisper-small" target="_blank" rel="noopener"><i>ASR</i><strong>Faster-Whisper</strong><span>Word-timed captions</span><b>↗</b></a>
+        <a href="https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx" target="_blank" rel="noopener"><i>VISION</i><strong>YOLOX Nano ONNX</strong><span>Torch-free local tracking</span><b>↗</b></a>
+        <a href="https://github.com/comfyanonymous/ComfyUI/releases" target="_blank" rel="noopener"><i>IMAGE</i><strong>ComfyUI SDXL</strong><span>Local stickers & thumbnails</span><b>↗</b></a>
+        <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener"><i>API</i><strong>YouTube Data API</strong><span>Direct channel uploads</span><b>↗</b></a>
+        <a href="https://www.pexels.com/api/" target="_blank" rel="noopener"><i>API</i><strong>Pexels / Pixabay</strong><span>Copyright-friendly stock</span><b>↗</b></a>
+      </div>
+    </section>
+
+    <section class="section hardware-section" id="hardware">
+      <div class="section-head reveal"><span class="kicker">HARDWARE AWARE</span><h2>It uses what your machine has.</h2><p>Live CPU, RAM, disk and GPU telemetry — plus per-clip render stats you can copy in one click.</p></div>
+      <div class="hardware-grid reveal">
+        <div class="hardware-card"><span>GPU ENCODER</span><strong>NVENC / Metal</strong><div class="bar"><i style="width:88%"></i></div><small>Auto-detected on every render</small></div>
+        <div class="hardware-card"><span>PARALLEL EXPORTS</span><strong data-count="8">0</strong><div class="bar"><i style="width:72%"></i></div><small>Tune with RENDER_WORKERS</small></div>
+        <div class="hardware-card"><span>CPU THREADS</span><strong>All cores</strong><div class="bar"><i style="width:94%"></i></div><small>FFmpeg + filters optimized</small></div>
+        <div class="hardware-card"><span>MODEL SIZE</span><strong>4 MB – 7 GB</strong><div class="bar"><i style="width:54%"></i></div><small>Choose speed or quality</small></div>
+      </div>
+    </section>
+
+    <section class="section download-section" id="download">
+      <div class="section-head reveal"><span class="kicker">READY WHEN YOU ARE</span><h2>Pick your platform</h2><p id="version-line">Installers include the app, local Python engine and FFmpeg. Models install from inside the app.</p></div>
+      <div class="platform-grid">
+        <a class="platform-card reveal" data-file="Windows-x64.exe" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><span class="platform-icon">▣</span><strong>Windows x64</strong><small>10 / 11 · NSIS installer</small><b>Download .exe ↗</b></a>
+        <a class="platform-card reveal" data-file="Windows-arm64.exe" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><span class="platform-icon">▣</span><strong>Windows ARM64</strong><small>11 · NSIS installer</small><b>Download .exe ↗</b></a>
+        <a class="platform-card reveal" data-file="macOS-x64.dmg" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><span class="platform-icon">◈</span><strong>macOS Intel</strong><small>x64 · DMG</small><b>Download .dmg ↗</b></a>
+        <a class="platform-card reveal" data-file="macOS-arm64.dmg" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><span class="platform-icon">◈</span><strong>Apple Silicon</strong><small>M1–M4 · DMG</small><b>Download .dmg ↗</b></a>
+        <a class="platform-card reveal" data-file="Linux-x86_64.AppImage" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><span class="platform-icon">⬡</span><strong>Linux AppImage</strong><small>x86_64 · portable</small><b>Download .AppImage ↗</b></a>
+        <a class="platform-card reveal" data-file="Linux-amd64.deb" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><span class="platform-icon">⬡</span><strong>Linux Debian</strong><small>Ubuntu / Debian · amd64</small><b>Download .deb ↗</b></a>
+      </div>
+      <div class="source-note reveal"><code>npm install && pip install -r backend/requirements.txt && npm start</code><button id="copy-command">Copy source command ⧉</button></div>
+      <p class="fine">Unsigned installers may trigger an OS warning on first launch. Verify with <code>SHA256SUMS.txt</code> from every release.</p>
+    </section>
+
+    <section class="section faq-section">
+      <div class="section-head reveal"><span class="kicker">GOOD TO KNOW</span><h2>Questions, answered</h2></div>
+      <div class="faq-list reveal">
+        <details open><summary>Does it really run offline?</summary><p>Yes. Downloading source videos needs internet. After the one-time model download, analysis, clipping, editing and rendering stay on your machine. Cloud keys are opt-in.</p></details>
+        <details><summary>Why didn't the app start on my computer?</summary><p>Use <code>npm start</code> for the browser studio — it works even without Electron. The desktop launcher also falls back automatically. Packaged builds now pick the exact Windows/macOS/Linux + x64/ARM64 engine binary.</p></details>
+        <details><summary>Where are model downloads saved?</summary><p>Inside <code>~/.AiFreeClipping/cache</code>. The Models page shows one-click install buttons and direct links for every local model and API service.</p></details>
+        <details><summary>Can I copy one clip's effects to all clips?</summary><p>Yes. The AI Clipper results screen has <b>Copy effects to all</b>, and each render records the hardware used with a copyable stats button.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <img src="assets/logo.svg" alt="AI Clipper Pro" />
+    <h3>Your clips. Your machine. Your rules.</h3>
+    <div class="footer-links"><a href="#download">Download</a><a href="https://github.com/Analoggeek/AiFreeClipping">GitHub</a><a href="https://github.com/Analoggeek/AiFreeClipping/blob/main/README.md">Docs</a><a href="https://github.com/Analoggeek/AiFreeClipping/issues">Support</a></div>
+    <p class="made-footer">MADE BY <b>ANALOGGEEK</b> · © 2026 · MIT LICENSE</p>
+  </footer>
+
+  <script src="site.js"></script>
+</body>
 </html>

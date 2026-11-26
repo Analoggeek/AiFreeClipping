@@ -1,40 +1,33 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Activity, CheckCircle2, Cpu, Download, ExternalLink, Gauge, HardDrive,
-  KeyRound, LoaderCircle, Package, RefreshCw, Sparkles, Zap,
+  CheckCircle2, Download, ExternalLink, KeyRound, LoaderCircle, Package, RefreshCw, Sparkles, Zap,
 } from 'lucide-react';
 import { api, pollJob } from '../api';
 import { JobTracker, Panel, Pill } from '../components/common';
-import type { Capabilities, HardwareInfo, ModelInfo } from '../types';
+import type { Capabilities, ModelInfo } from '../types';
 
 const GROUPS = ['LLM', 'ASR', 'Vision', 'TTS', 'Image', 'Cloud'];
 
 export default function ModelsPage({ notify }: { notify: (message: string) => void }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [caps, setCaps] = useState<Capabilities>({});
-  const [hardware, setHardware] = useState<HardwareInfo | null>(null);
   const [jobs, setJobs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
-      const [modelResult, capResult, hwResult] = await Promise.all([
-        api.models(), api.capabilities(), api.hardware(),
+      const [modelResult, capResult] = await Promise.all([
+        api.models(), api.capabilities(),
       ]);
       setModels(modelResult.models);
       setCaps(capResult);
-      setHardware(hwResult);
     } catch { /* offline */ }
   }, []);
-  useEffect(() => {
-    void refresh();
-    const timer = window.setInterval(() => { void api.hardware().then(setHardware).catch(() => undefined); }, 4000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
   const openLink = (url?: string) => {
     if (!url) return;
-    if (window.desktop?.openPath) void window.desktop.openPath(url);
+    if (window.desktop?.openExternal) void window.desktop.openExternal(url);
     else window.open(url, '_blank', 'noopener,noreferrer');
   };
 
@@ -72,17 +65,9 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
         action={<button className="ghost-btn" onClick={() => void refresh()}><RefreshCw size={15} /> Refresh</button>}
       >
         <div className="hardware-bar">
-          <Pill tone="green"><Cpu size={13} /> {hardware?.gpu?.name || (caps.gpu?.cuda ? 'CUDA GPU' : caps.gpu?.metal ? 'Apple Metal' : 'CPU fallback')}</Pill>
-          <Pill><Activity size={13} /> CPU {hardware?.cpu_percent ?? '—'}%</Pill>
-          <Pill><Gauge size={13} /> RAM {hardware?.ram_used_gb ?? '—'} / {hardware?.ram_total_gb ?? '—'} GB</Pill>
-          <Pill><HardDrive size={13} /> Free {hardware?.disk_free_gb ?? '—'} GB</Pill>
-          <Pill>{hardware?.workers ?? 1} parallel workers</Pill>
-          <Pill tone="violet">{installedCount}/{models.length} ready</Pill>
+          <Pill tone="green">{caps.gpu?.cuda ? 'CUDA GPU detected' : caps.gpu?.metal ? 'Apple Metal available' : 'CPU fallback'}</Pill>
+          <Pill tone="violet">{installedCount}/{models.length} models ready</Pill>
         </div>
-        <p className="hint">
-          Rendering auto-selects {hardware?.gpu?.cuda ? 'NVENC' : hardware?.gpu?.metal ? 'VideoToolbox' : 'libx264'} and uses all {hardware?.cpu_count ?? 4} cores.
-          Set <code>RENDER_WORKERS</code> to tune parallel exports.
-        </p>
       </Panel>
 
       <div className="model-groups">
@@ -110,12 +95,12 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
                         <>
                           {model.autoInstall && !model.installed && (
                             <button className="chip-btn primary" disabled={busy === model.id} onClick={() => install(model.id)}>
-                              {busy === model.id ? <LoaderCircle size={14} className="spin" /> : <Download size={14} />} 1-click install
+                              {busy === model.id ? <LoaderCircle size={14} className="spin" /> : <Download size={14} />} Download &amp; install
                             </button>
                           )}
                           {model.downloadUrl && (
-                            <button className="chip-btn" onClick={() => openLink(model.downloadUrl)}>
-                              <ExternalLink size={14} /> Download
+                            <button className="chip-btn" title="Open the official download page" onClick={() => openLink(model.downloadUrl)}>
+                              <ExternalLink size={14} /> {model.autoInstall ? 'Open page' : 'Download'}
                             </button>
                           )}
                         </>
