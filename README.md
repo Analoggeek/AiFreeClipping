@@ -22,6 +22,26 @@ cloud account, upload or subscription.
 
 ---
 
+## v4.0.0 release build
+
+The integrated Studio release is being packaged for Windows x64, macOS Apple
+Silicon/Intel and Linux. **v3.6.1 remains the published download below until the
+v4.0.0 release has all seven nonempty installer/archive assets.**
+
+New in v4.0.0: Clip Queue and selective batch presets, shared composited playback,
+Caption Studio, timeline effects/transitions, verified LUT/curves/wheels/selective
+HSL, audio processors and dialogue-driven music ducking, **50 original CC0
+editable title-scene designs** and an optional **50-image Apache-2.0 artwork
+library** with explicit one-click downloads and verified offline caching.
+Original pack ZIPs and generated artwork carry license/source records.
+
+Local regression: **698 passed, 15 skipped**. Physical speaker/display sync,
+human OS-permission acceptance and sustained target-device/GPU performance are
+**not verified**. macOS ad-hoc bundle integrity is not Apple notarization. These
+are release limitations, not passed tests. See [release notes](RELEASE_NOTES.md),
+[Studio quick start](docs/STUDIO_QUICKSTART.md) and
+[desktop QA protocol](docs/NATIVE_DESKTOP_ACCEPTANCE.md).
+
 ## Download
 
 Choose your platform. Every link below is a direct download from the official

@@ -475,7 +475,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: CLIPOS ${{ github.event.inputs.tag || github.ref_name }}
+          name: Ai clipping PRO ${{ github.event.inputs.tag || github.ref_name }}
           # The release is made public here; it exists as a draft until
           # the installers are attached, so that a half-built release is
           # never visible.
