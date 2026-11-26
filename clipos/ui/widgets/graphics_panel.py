@@ -3,6 +3,8 @@
 from copy import deepcopy
 from pathlib import Path
 
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -25,7 +27,7 @@ class GraphicsPanel(QWidget):
         self.logo_sha = ""
         layout = QVBoxLayout(self)
         label = QLabel(
-            "Original asset-based graphics · twelve original transparent compositions with editable title/subtitle/logo and fade/slide animation. Generated alpha MOV media is preserved with project references. This is a small real pack, not 50 complete motion-graphics packs."
+            "Original asset-based graphics · twenty original transparent compositions with editable title/subtitle/logo and fade/slide animation. Generated alpha MOV media is preserved with project references. This is a small real pack, not 50 complete motion-graphics packs."
         )
         label.setWordWrap(True)
         layout.addWidget(label)
@@ -33,6 +35,16 @@ class GraphicsPanel(QWidget):
         for key, spec in graphic_catalog().items():
             self.template.addItem(spec["name"], key)
         layout.addWidget(self.template)
+        self.plate_preview = QLabel()
+        self.plate_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.plate_preview.setStyleSheet("background: #303540;")
+        self.plate_preview.setToolTip(
+            "Original plate preview only. Your text/logo and animation are composited after Add, then visible in timeline playback."
+        )
+        layout.addWidget(self.plate_preview)
+        layout.addWidget(QLabel("Plate preview · text/logo appear after rendering"))
+        self.template.currentIndexChanged.connect(self.preview_plate)
+        self.preview_plate()
         self.title = QLineEdit("Your title")
         self.subtitle = QLineEdit("Your subtitle")
         layout.addWidget(self.title)
@@ -196,3 +208,21 @@ class GraphicsPanel(QWidget):
                 self.studio.status.setText("Graphic commit failed: " + str(exc))
 
         self.studio._background(job, done, "Rendering original alpha graphic…")
+
+    def preview_plate(self, *args):
+        from ...core.resources import resource_dir
+
+        plate = graphic_catalog()[self.template.currentData()]["asset"]
+        pixmap = QPixmap(str(resource_dir("templates") / "motion" / plate))
+        if pixmap.isNull():
+            self.plate_preview.clear()
+            self.plate_preview.setText("Missing graphic plate: " + plate)
+        else:
+            self.plate_preview.setPixmap(
+                pixmap.scaled(
+                    135,
+                    240,
+                    Qt.AspectRatioMode.KeepAspectRatio,
+                    Qt.TransformationMode.SmoothTransformation,
+                )
+            )

@@ -30,7 +30,7 @@ def spec(template):
 
 def test_all_original_asset_plates_render_both_animations_with_real_alpha(tmp_path):
     catalog = graphic_catalog()
-    assert len(catalog) == 12
+    assert len(catalog) == 20
     for key in catalog:
         for animation in ("fade", "slide"):
             settings = spec(key)
@@ -92,3 +92,21 @@ def test_physical_sync_stimulus_has_digital_flash_and_click(tmp_path):
         assert np.max(np.abs(audio[second * 48000 + 500 : (second + 1) * 48000])) == 0
     with pytest.raises(FileExistsError):
         create(path, 3)
+
+
+def test_asset_catalog_is_original_unique_rgba_with_valid_editable_slots():
+    import hashlib
+    from clipos.core.resources import resource_dir
+
+    catalog = graphic_catalog()
+    hashes = set()
+    for key, entry in catalog.items():
+        path = resource_dir("templates") / "motion" / entry["asset"]
+        assert path.name == key + ".png"
+        hashes.add(hashlib.sha256(path.read_bytes()).hexdigest())
+        with Image.open(path) as image:
+            assert image.mode == "RGBA" and image.size == (720, 1280)
+            for slot in ("title_box", "subtitle_box", "logo_box"):
+                x, y, w, h = entry[slot]
+                assert 0 <= x < x + w <= image.width and 0 <= y < y + h <= image.height
+    assert len(hashes) == len(catalog)

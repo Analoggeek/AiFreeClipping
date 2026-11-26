@@ -134,3 +134,23 @@ to unblock the current asset-pack revision. Run **45738604181** (4f8fa30) now ha
 Windows, macOS and Linux jobs **in progress**, not yet passed. Subsequent grading
 revision requires its own native verification. Physical device tests remain
 NOT RUN; twelve geometric templates do not complete a 50-pack asset library.
+
+
+### Illustrated asset-library increment
+
+The motion-graphics library now contains **20 original compositions**, including
+8 newly authored illustrated scenes: rocket launch, learning/book, podcast/mic,
+growth/chart, travel/mountains, kitchen/chef, gaming/controller and science/
+microscope. Each includes an original illustration, multi-part title/subtitle
+plate and replaceable local logo slot. Offline plate thumbnails in the native
+panel show actual bundled artwork; they are explicitly labeled static plate
+previews, not animated or text/logo previews. Use rendered timeline playback to
+review the complete result. All 20 assets are rendered with both fade and slide
+in actual tests; catalog tests check unique file hashes, RGBA format and editable
+slot bounds. **692 passed, 15 skipped** in the full local regression.
+
+Native status at this increment: Windows installer job for `4f8fa30` succeeded
+(run 45738604181); Linux/macOS jobs still running. `dfbcf35` native installer run
+45739066758 remains pending behind it. Neither result certifies this newer asset
+revision. Physical audio-sync/permission tests remain NOT RUN. This library is
+20 compositions, not completion of 50 full asset-rich packs.

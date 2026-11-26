@@ -129,6 +129,9 @@ def build():
             "title_color": "#FFFFFF",
             "subtitle_color": accent,
         }
+    from illustrated_graphic_assets import build_illustrated
+
+    catalog.update(build_illustrated(ROOT))
     (ROOT / "catalog.json").write_text(json.dumps(catalog, indent=2) + "\n")
 
 

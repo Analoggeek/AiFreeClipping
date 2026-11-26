@@ -15,3 +15,11 @@ diagonal banner, stacked cards and orbit end card. These use different geometric
 layouts, not merely palette variants. All support local title/subtitle/logo and
 fade/slide rendering. They remain a focused geometric asset pack, not stock
 footage, a 50-pack library, or a full layered motion-design interchange format.
+
+## Illustrated scenes
+
+Eight additional original illustrated compositions bring the library to 20.
+`create_graphic_assets.py` also calls `illustrated_graphic_assets.py` to rebuild
+the rocket, book, microphone, chart, mountains, chef hat, controller and microscope
+illustrations and their editable title/logo plates. These drawings share the
+CC0 dedication above; no third-party icons or downloaded art are used.

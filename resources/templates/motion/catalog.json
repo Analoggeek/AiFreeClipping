@@ -286,5 +286,205 @@
     ],
     "title_color": "#FFFFFF",
     "subtitle_color": "#A7F3D0"
+  },
+  "launch_rocket": {
+    "name": "Launch / rocket",
+    "asset": "launch_rocket.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD",
+    "category": "Illustrated scenes"
+  },
+  "learning_book": {
+    "name": "Learning / book",
+    "asset": "learning_book.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A",
+    "category": "Illustrated scenes"
+  },
+  "podcast_microphone": {
+    "name": "Podcast / microphone",
+    "asset": "podcast_microphone.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#F9A8D4",
+    "category": "Illustrated scenes"
+  },
+  "growth_chart": {
+    "name": "Growth / chart",
+    "asset": "growth_chart.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7",
+    "category": "Illustrated scenes"
+  },
+  "travel_mountains": {
+    "name": "Travel / mountains",
+    "asset": "travel_mountains.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#7DD3FC",
+    "category": "Illustrated scenes"
+  },
+  "kitchen_chef": {
+    "name": "Kitchen / chef",
+    "asset": "kitchen_chef.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDBA74",
+    "category": "Illustrated scenes"
+  },
+  "gaming_controller": {
+    "name": "Gaming / controller",
+    "asset": "gaming_controller.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#C4B5FD",
+    "category": "Illustrated scenes"
+  },
+  "science_microscope": {
+    "name": "Science / microscope",
+    "asset": "science_microscope.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#67E8F9",
+    "category": "Illustrated scenes"
   }
 }
