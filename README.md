@@ -44,6 +44,19 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 
 Download the right installer from the [latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest) and open it. The engine, FFmpeg and icons are bundled. Model weights install from the app's **Local Models** page.
 
+**Direct v5.1.2 downloads** (even if the GitHub **Assets** panel is collapsed, these links go straight to the files):
+
+| Platform | Direct installer |
+|---|---|
+| Windows x64 | [AI-Clipper-Pro-5.1.2-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Windows-x64.exe) |
+| Windows ARM64 | [AI-Clipper-Pro-5.1.2-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Windows-arm64.exe) |
+| macOS Intel | [AI-Clipper-Pro-5.1.2-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-x64.dmg) |
+| macOS Apple Silicon | [AI-Clipper-Pro-5.1.2-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-arm64.dmg) |
+| Linux AppImage | [AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage) |
+| Linux Debian/Ubuntu | [AI-Clipper-Pro-5.1.2-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-amd64.deb) |
+
+Verify a download with [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/SHA256SUMS.txt) (`sha256sum -c SHA256SUMS.txt`).
+
 ### 2. Run from source
 
 ```bash
