@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Cpu, ExternalLink, FolderOpen, HardDrive, KeyRound, ShieldCheck, Sparkles, Youtube } from 'lucide-react';
 import { api } from '../api';
-import { Panel, Pill } from '../components/common';
+import { Panel } from '../components/common';
 import logo from '../../brand/logo.svg';
 
 const FIELDS = [
@@ -17,10 +17,9 @@ const FIELDS = [
 export default function SettingsPage({ notify }: { notify: (message: string) => void }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [folders, setFolders] = useState<Record<string, string>>({});
-  const [caps, setCaps] = useState<Record<string, unknown>>({});
 
   useEffect(() => {
-    api.settings().then((result) => { setValues(result.values); setCaps(result.capabilities as Record<string, unknown>); }).catch(() => undefined);
+    api.settings().then((result) => setValues(result.values)).catch(() => undefined);
     api.folders().then((result) => setFolders(result.folders)).catch(() => undefined);
   }, []);
 
@@ -56,16 +55,8 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
         </div>
       </Panel>
 
-      <Panel title="Hardware & runtime" subtitle="Detected automatically at startup">
-        <div className="hardware-bar">
-          <Pill tone="green">Python {String(caps.python || '')}</Pill>
-          <Pill>{caps.ffmpeg ? `FFmpeg: ${String(caps.ffmpeg).slice(0, 50)}` : 'FFmpeg not found'}</Pill>
-          <Pill>{caps.ytDlp ? 'yt-dlp ready' : 'yt-dlp missing'}</Pill>
-          <Pill>{caps.fasterWhisper ? 'faster-whisper ready' : 'faster-whisper missing'}</Pill>
-          <Pill>{caps.opencv ? 'OpenCV ready' : 'OpenCV missing'}</Pill>
-          <Pill>{caps.ultralytics ? 'Ultralytics ready' : 'Ultralytics missing'}</Pill>
-        </div>
-        <div className="notice"><ShieldCheck size={18} /><div><strong>Privacy by design</strong><p>The local API binds to 127.0.0.1 and requires a token generated on each launch. Cloud features (Nano Banana, stock search, YouTube upload) are opt-in and only run when you supply your own key.</p></div></div>
+      <Panel title="Privacy & runtime" subtitle="Managed automatically in the sidebar hardware panel">
+        <div className="notice"><ShieldCheck size={18} /><div><strong>Privacy by design</strong><p>The local API binds to 127.0.0.1 and requires a token generated on each launch. Cloud features (Nano Banana, stock search, YouTube upload) are opt-in and only run when you supply your own key. Live CPU, RAM, disk and GPU usage is shown in the sidebar.</p></div></div>
       </Panel>
 
       <Panel title="About" subtitle="Built for creators who want speed without leaving their machine">

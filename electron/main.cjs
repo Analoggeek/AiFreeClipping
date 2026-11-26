@@ -92,6 +92,7 @@ async function startBackend() {
     ...(binary.env || {}),
     AIFREECLIP_PORT: String(port),
     AIFREECLIP_HOST: '127.0.0.1',
+    AIFREECLIP_VERSION: app.getVersion(),
     PYTHONUNBUFFERED: '1',
   };
   if (!binary.command.includes('python') && !binary.command.includes('Python')) {
@@ -139,9 +140,28 @@ async function createWindow() {
       webSecurity: true,
     },
   });
+  let reloads = 0;
+  const recover = (reason) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    console.error('[ui] recovering from', reason);
+    if (reloads >= 2) {
+      mainWindow.loadFile(path.join(root, 'dist', 'index.html'), {
+        query: { token: apiToken, api: apiBase },
+      }).catch(() => undefined);
+      reloads = 0;
+      return;
+    }
+    reloads += 1;
+    mainWindow.reload();
+  };
+  mainWindow.webContents.on('render-process-gone', (_event, details) => recover(`renderer gone: ${details.reason}`));
+  mainWindow.webContents.on('did-fail-load', (_event, code, description) => {
+    if (code !== -3) recover(`load failed: ${description}`);
+  });
+
   if (isDev) {
     await mainWindow.loadURL(
-      `http://127.0.0.1:5173?token=${encodeURIComponent(apiToken)}&api=${encodeURIComponent(apiBase)}`
+      `http://127.0.0.1:5173/app.html?token=${encodeURIComponent(apiToken)}&api=${encodeURIComponent(apiBase)}`
     );
   } else {
     await mainWindow.loadFile(path.join(root, 'dist', 'index.html'), {
@@ -169,6 +189,11 @@ app.whenReady().then(async () => {
     return result.canceled ? '' : result.filePaths[0];
   });
   ipcMain.handle('shell:open', async (_event, target) => shell.openPath(String(target)));
+  ipcMain.handle('shell:open-external', async (_event, target) => {
+    const url = String(target);
+    if (!/^https?:\/\//i.test(url)) return 'Only http(s) links are allowed';
+    return shell.openExternal(url);
+  });
   ipcMain.handle('shell:reveal', async (_event, target) => shell.showItemInFolder(String(target)));
   ipcMain.handle('app:info', async () => ({
     version: app.getVersion(),

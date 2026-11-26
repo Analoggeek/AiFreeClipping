@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..config import CACHE, HOME, env, ollama_host
+from ..db import db
 from .llm import tags
 
 OLLAMA_INSTALLER = "https://ollama.com/download"
@@ -125,6 +126,12 @@ API_ENV = {
     "pexels-api": "PEXELS_API_KEY",
     "pixabay-api": "PIXABAY_API_KEY",
 }
+API_SETTINGS = {
+    "nano-banana": "gemini_api_key",
+    "youtube-api": "youtube_client_secret",
+    "pexels-api": "pexels_api_key",
+    "pixabay-api": "pixabay_api_key",
+}
 
 
 def _path(model: dict[str, Any]) -> Path | None:
@@ -158,7 +165,10 @@ async def status() -> list[dict[str, Any]]:
         elif model["provider"] == "comfyui":
             installed = bool(list(checkpoint_dir.glob("*.safetensors"))) if checkpoint_dir.exists() else False
         elif model.get("needsApi"):
-            installed = bool(env(API_ENV.get(model["id"], "")))
+            installed = bool(
+                env(API_ENV.get(model["id"], ""))
+                or db.get_setting(API_SETTINGS.get(model["id"], ""))
+            )
         result.append({**model, "installed": installed})
     return result
 

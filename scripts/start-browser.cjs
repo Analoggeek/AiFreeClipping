@@ -73,7 +73,7 @@ function openBrowser(url) {
   console.log('Starting web studio…');
   run('npm', ['run', 'dev', '--', '--port', String(webPort)], {});
   await waitFor(() => ping(`http://127.0.0.1:${webPort}`), 'web studio');
-  const url = `http://127.0.0.1:${webPort}?token=${encodeURIComponent(token)}&api=${encodeURIComponent(apiBase)}`;
+  const url = `http://127.0.0.1:${webPort}/app.html?token=${encodeURIComponent(token)}&api=${encodeURIComponent(apiBase)}`;
   console.log('\nAI Clipper Pro is ready:\n' + url + '\n');
   openBrowser(url);
 })().catch((error) => {

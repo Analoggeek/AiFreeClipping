@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('desktop', {
   selectFiles: (filters) => ipcRenderer.invoke('dialog:files', filters),
   selectDirectory: () => ipcRenderer.invoke('dialog:directory'),
   openPath: (target) => ipcRenderer.invoke('shell:open', target),
+  openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
   revealPath: (target) => ipcRenderer.invoke('shell:reveal', target),
   appInfo: () => ipcRenderer.invoke('app:info'),
   onProgress: (callback) => {

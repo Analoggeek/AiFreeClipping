@@ -1,182 +1,132 @@
-# AI Clipper Pro
+<p align="center">
+  <img src="assets/logo.svg" alt="AI Clipper Pro" width="96" />
+</p>
 
-**Local-first AI video clipping, editing and publishing studio — made by analoggeek.**
+<h1 align="center">AI Clipper Pro</h1>
 
-Paste a link (or import a file), let local AI find the engaging moments, polish the clips in a full timeline editor, and export/upload them — without sending your footage to a cloud service.
-
-> Everything runs on your machine: Gemma via Ollama, Whisper word-level transcription, YOLOX/YOLO + ByteTrack activity tracking, FFmpeg rendering, optional local SDXL via ComfyUI, optional Piper narration. Cloud integrations (Nano Banana image generation, stock media search, YouTube upload) are opt-in and use **your own** API keys.
+<p align="center"><b>Turn any video into viral-ready clips — on your own hardware.</b></p>
 
 <p align="center">
-  <img src="brand/logo.svg" width="520" alt="AI Clipper Pro — made by analoggeek" />
+  <a href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><img src="https://img.shields.io/github/v/release/Analoggeek/AiFreeClipping?color=8b5cf6&label=latest" alt="Latest release" /></a>
+  <a href="https://github.com/Analoggeek/AiFreeClipping/actions"><img src="https://img.shields.io/github/actions/workflow/status/Analoggeek/AiFreeClipping/release.yml?branch=main&label=installers" alt="Installer build" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-22d3ee" alt="MIT license" /></a>
+  <a href="https://github.com/Analoggeek/AiFreeClipping"><img src="https://img.shields.io/badge/made%20by-analoggeek-f472b6" alt="made by analoggeek" /></a>
 </p>
 
 ---
 
-## What it does
+## Why AI Clipper Pro?
+
+Most clipping tools upload your footage to someone else's cloud, charge per clip, and give you a tiny editor at the end. AI Clipper Pro flips that:
+
+- **Everything local after the first model download** — analysis, clipping, captions, rendering and editing stay on your machine.
+- **One connected workflow** — download → analyse → clip → enhance → publish.
+- **Professional editor** — multi-track timeline, captions, stickers, sound effects, stock media and AI image generation.
+- **Hardware aware** — uses NVENC / Apple VideoToolbox when available, otherwise optimized libx264; CPU/RAM/GPU usage lives in the sidebar.
+- **One-click models** — every model card downloads and installs from inside the app; API-only services open their key page directly.
+
+> The marketing website is the repository root [`index.html`](index.html). The desktop app entry is [`app.html`](app.html).
+
+## What it can do
 
 | Stage | What you get |
 |---|---|
-| **Download** | Highest quality available video/audio via `yt-dlp`, playlist mode with item selection, subtitles, custom save folder, local file import, searchable media library |
-| **Understand** | `faster-whisper` word timestamps + optional YOLOX/YOLO11 detection with ByteTrack IDs + motion/scene energy fused into a per-second engagement timeline |
-| **Clip** | Multiple non-overlapping viral candidates from one or many videos, region locking (player/gameplay area), local Gemma reranking, hook titles and hashtags |
-| **Enhance** | Auto captions with 4 presets, procedural royalty-free SFX, stickers, music bed, vertical 9:16 reframing with blurred background, watermark, speed/color controls |
-| **Edit** | CapCut-style multi-track editor: video, captions, stickers and audio tracks; split, trim, drag-position, inspector, stock asset search, AI image generation, keyboard shortcuts |
-| **Publish** | One-click batch export at 1080p H.264/AAC with `+faststart`, downloadable files, optional resumable YouTube Data API v3 upload |
+| **Download** | Paste a YouTube/Instagram/TikTok/Twitch URL (or 1000+ yt-dlp sites), choose max quality, subtitles, and full playlists with item selection. Local file import works too. |
+| **Understand** | faster-whisper word timings, YOLOX Nano ONNX + ByteTrack-style tracking (Torch-free in packaged builds), scene changes and Gemma 2 7B reranking. |
+| **Clip** | Several non-overlapping viral candidates from one source or a batch of videos. Lock the player/gameplay region to score what matters. |
+| **Enhance** | Four caption presets, procedural royalty-free SFX, music beds, stickers, blurred-background 9:16 reframing, speed/color controls and branding. |
+| **Edit** | CapCut-style timeline with video/caption/sticker/audio tracks, split/trim/inspector, external imports, Pexels/Pixabay/Openverse search and Nano Banana / ComfyUI art. |
+| **Publish** | Parallel 1080p exports with `+faststart`, direct downloads, and optional resumable YouTube uploads with your own OAuth app. |
 
 ## Quick start
 
-### Installed app (recommended)
+### 1. Install an offline build (recommended)
 
-1. Download the installer for your machine from [GitHub Releases](https://github.com/Analoggeek/AiFreeClipping/releases):
-   - **Windows 10/11** — `AI-Clipper-Pro-*-Windows-x64.exe` or `arm64.exe`
-   - **macOS Intel** — `AI-Clipper-Pro-*-macOS-x64.dmg`
-   - **macOS Apple Silicon (M1/M2/M3/M4)** — `AI-Clipper-Pro-*-macOS-arm64.dmg`
-   - **Linux x86_64** — `AI-Clipper-Pro-*-Linux-x64.AppImage` or `.deb`
-2. Launch the app. It starts its own bundled Python engine on `127.0.0.1` with a per-launch token — nothing is exposed to your network.
-3. Open **Local Models** and install `Whisper Small`, `Gemma 2 7B` (or `Gemma 3 4B`) and `YOLO11 Nano`. First download needs internet; after that, everything is offline.
-4. Paste a URL in **Downloader**, then send the video to **AI Clipper**.
+Download the right installer from the [latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest) and open it. The engine, FFmpeg and icons are bundled. Model weights install from the app's **Local Models** page.
 
-> macOS unsigned builds need *Right click → Open* the first time. Windows SmartScreen may warn for unsigned installers; this is expected until the app is code-signed.
-
-### Run from source
+### 2. Run from source
 
 ```bash
-# 1. JavaScript UI + Electron shell
+# Node 20+ and Python 3.11+
 npm install
-npm run build
-
-# 2. Python engine
-python3 -m venv .venv
-source .venv/bin/activate            # Windows: .venv\Scripts\activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt
-python scripts/generate-icons.py
 
-# 3. Desktop dev mode (engine + Vite + Electron)
-npm start                            # browser studio — works without Electron
-npm run dev:app                      # Electron desktop window (falls back to browser if Electron is missing)
-
-# ...or run the pieces separately
-npm run dev                          # http://localhost:5173
-PYTHONPATH=backend python -m backend.app.main   # http://127.0.0.1:8787
+npm start          # browser studio — works even without Electron
+npm run dev:app    # Electron desktop window; falls back to npm start if Electron is missing
 ```
 
-Point the browser at `http://localhost:5173?token=<value in ~/.AiFreeClipping/.api_token>&api=http://127.0.0.1:8787` when running the UI without Electron.
+Open the URL printed in the terminal. The local token is read from `~/.AiFreeClipping/.api_token`.
 
-**Hindi quick start (हिंदी में):** `npm install` → `pip install -r backend/requirements.txt` → `npm start` → browser में app खोलें → **Local Models** में Whisper + YOLOX + Gemma install करें → **Downloader** में link paste करें → **AI Clipper** से clips निकालें → **Editor** में edit करें → **Publish** से export/upload करें।
+**Hindi quick start:** `npm install` → `pip install -r backend/requirements.txt` → `npm start` → **Local Models** me Whisper, YOLOX aur Gemma install karein → **Downloader** me link paste karein → **AI Clipper** se clips nikalein → **Editor** me edit karein → **Publish** se export/upload karein.
 
----
+## Models & keys
 
-## Requirements
+| Model | Provider | Install inside app | Notes |
+|---|---|---|---|
+| Gemma 2 7B / Gemma 3 4B / 12B | Ollama | 1-click pull | Install the [Ollama runtime](https://ollama.com/download) first. |
+| Whisper Small / Medium / Large v3 | faster-whisper | 1-click download | Medium is recommended for Hindi. |
+| YOLOX Nano ONNX | OpenCV DNN | 1-click download | Torch-free; used by packaged builds. |
+| YOLO11 Nano | ultralytics | 1-click download | Best in a source install. |
+| Piper Lessac | piper-tts | 1-click download | Offline narration. |
+| SDXL 1.0 | ComfyUI | direct link | Save the checkpoint under `~/.AiFreeClipping/models/checkpoints`. |
+| Nano Banana | Gemini API | Get API key | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
+| YouTube Data API | Google Cloud | Get API key | [APIs & Credentials](https://console.cloud.google.com/apis/credentials) |
+| Pexels / Pixabay | Stock APIs | Get API key | Linked from the Models page. |
 
-| Component | Minimum | Recommended |
-|---|---|---|
-| OS | Windows 10 64-bit, macOS 12, Ubuntu 20.04 / any AppImage-capable distro | Latest OS with GPU drivers |
-| CPU | 4 cores | 8+ cores / Apple Silicon |
-| RAM | 8 GB | 16–32 GB (7B LLM + Whisper Large) |
-| Disk | 6 GB for app + ~10 GB for models | 40 GB+ for model packs and media |
-| GPU | Not required (CPU fallback) | NVIDIA CUDA or Apple Metal for faster inference |
+## Hardware & performance
 
-The app never requires a GPU. `faster-whisper` uses `int8` on CPU and `float16` on CUDA/Metal where available.
+The sidebar shows live CPU, RAM, disk, GPU and worker count. Rendering automatically prefers NVIDIA NVENC or Apple VideoToolbox, then falls back to libx264.
 
----
+```bash
+export RENDER_WORKERS=8     # parallel batch exports (default: min(4, CPU cores))
+export AIFREECLIP_ENCODER=libx264   # override auto encoder
+export FORCE_SOFTWARE_ENCODER=1     # force CPU rendering
+```
 
-## Local AI stack
+Each rendered clip records the exact hardware used, and **Copy effects to all** applies one clip's settings to every candidate.
 
-| Model / engine | Role | Installed via |
-|---|---|---|
-| `gemma2:7b` (or `gemma3:4b` / `gemma3:12b`) | Viral title rewriting, hashtags, structured clip reranking | Ollama `api/pull` from the Models page |
-| `faster-whisper` small / medium / large-v3 | Word-timed transcript used for captions and scoring | Hugging Face hub snapshot |
-| YOLO11 Nano / YOLOX Nano + ByteTrack | Player and object detection, stable track IDs, activity curve | Ultralytics weights |
-| OpenCV / ffmpeg scene detection | Motion and shot-change energy (fallback when no vision weights) | Bundled |
-| ComfyUI + SDXL 1.0 | Fully offline sticker/thumbnail generation | Local checkpoint, optional |
-| Piper TTS | Offline narration / voice-over | Local ONNX voice, optional |
-| Nano Banana (`gemini-2.5-flash-image`) | Optional high-quality on-the-spot image generation | Your Gemini key in Settings |
-| Pexels / Pixabay / Openverse | Optional copyright-friendly stock search | Your free API keys (Openverse needs none) |
-
-See [docs/INSTALLATION.md](docs/INSTALLATION.md) for model-pack and offline instructions.
-
----
-
-## Repository layout
+## Project layout
 
 ```text
-AiFreeClipping/
-├── src/                    React + TypeScript UI (downloads, clipper, editor, publish, models, settings)
-├── electron/               Electron main process + secure preload, launches local engine
-├── backend/
-│   ├── app/
-│   │   ├── main.py         FastAPI routes (token-protected, loopback only)
-│   │   ├── db.py           SQLite store: media, playlists, jobs, projects, clips, analyses, settings
-│   │   ├── jobs.py         Background jobs + SSE progress
-│   │   └── services/       downloader, asr, llm, vision, tracking, scoring, render, images, assets, models, youtube, tts, sfx
-│   ├── tests/              pytest suite (scoring, rendering, tracking, API)
-│   └── requirements*.txt   Core and optional YouTube dependencies
-├── scripts/
-│   ├── release-all.sh      ONE COMMAND: checks → icons → UI → engine → installers → checksums → release
-│   ├── release-all.ps1     Windows PowerShell equivalent
-│   ├── package-backend.py  PyInstaller bundle of Python engine + ffmpeg
-│   └── dev-app.cjs         dev launcher for engine + Vite + Electron
-├── .github/workflows/      Cross-platform installer matrix (Windows x64/arm64, macOS Intel/AS, Linux x64)
-├── website/                Product website with download buttons and docs links
-├── brand/                  Vector logo + generated platform icons (made by analoggeek)
-└── docs/                   Architecture, installation, API, credits, roadmap
+.
+├── index.html              Marketing website (static, animated)
+├── site.css / site.js      Website styles and interactions
+├── assets/                 Website logo, hero art and UI previews
+├── app.html                Vite entry for the desktop app
+├── src/                    React UI, pages and design system
+├── electron/               Electron shell and native IPC
+├── backend/                FastAPI local engine, AI services and tests
+├── brand/                  Logo, 3D mark and platform icons
+├── docs/                   Architecture, installation, API, release notes
+├── scripts/                Dev launcher, packaging and release scripts
+└── .github/workflows/      Native Windows/macOS/Linux installer matrix
 ```
 
-Full design notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). API reference: [docs/API.md](docs/API.md).
+## Documentation
 
----
+- [Installation](docs/INSTALLATION.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [API reference](docs/API.md)
+- [Release notes](docs/RELEASE_NOTES.md)
+- [Roadmap](docs/ROADMAP.md)
+- [Credits](docs/CREDITS.md)
 
-## One-command release
+## Build installers
 
 ```bash
-# Installers for the current machine (Windows / macOS / Linux)
-bash scripts/release-all.sh
-
-# Every supported platform in one command, via GitHub Actions
-bash scripts/release-all.sh 5.1.0 --all
-
-# ...and publish a GitHub Release with SHA256 checksums
-bash scripts/release-all.sh 5.1.0 --all --publish
-
-# Windows PowerShell
-powershell -ExecutionPolicy Bypass -File scripts\release-all.ps1 -All -Publish
+bash scripts/release-all.sh 5.1.2 --all --publish
 ```
 
-The script runs type checks, Python tests, icon generation, UI build, PyInstaller engine bundling (including FFmpeg), `electron-builder` packaging, artifact checksums and a manifest. For `--all`, the repository's `release.yml` workflow builds on native runners for each OS/architecture and uploads installers to a GitHub Release. macOS code signing/notarization and Windows Authenticode signing require developer certificates and are not included; unsigned installers still work locally.
-
----
-
-## Privacy & offline behavior
-
-- The FastAPI engine binds to `127.0.0.1` only and requires a random token regenerated on every launch.
-- Source footage, transcripts and projects never leave the machine unless you explicitly enable a cloud feature.
-- Model weights are downloaded once into `~/.AiFreeClipping/cache` (or `HF_HOME`), then reused offline.
-- Sound effects are generated procedurally with Python's `wave` module — no sample downloads, no license issues.
-- Keys are stored in local SQLite, never in the frontend bundle.
-
----
+The script builds Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64 installers on native GitHub runners, then publishes them with `SHA256SUMS.txt`. See [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).
 
 ## Troubleshooting
 
-| Problem | Fix |
-|---|---|
-| “Engine offline” | Check the terminal output; install `backend/requirements.txt` in the venv the app uses, then restart. |
-| Downloads fail / 403 cookies needed | Add a Netscape `cookies.txt` in Settings → `cookies_file`, or update `yt-dlp` with `pip install -U yt-dlp`. |
-| No captions | Install a Whisper model in **Local Models**; the app still clips using visual/audio energy without it. |
-| “Gemma is refining titles…” is slow | Use `gemma3:4b` or disable Gemma reranking in clipper settings. |
-| ComfyUI image generation not available | Start ComfyUI at `http://127.0.0.1:8188` with an SDXL checkpoint, or add a Gemini key for Nano Banana. |
-| Render error about fonts | Install a system font (Arial/DejaVu/Georgia); ASS subtitles fall back to the system default. |
-| macOS app won’t open | Right-click → Open, or `xattr -d com.apple.quarantine /path/to/app`. |
-| Linux AppImage won’t launch | `chmod +x AI-Clipper-Pro-*.AppImage` and run it directly. |
-
----
-
-## Tech credits
-
-Built on [yt-dlp](https://github.com/yt-dlp/yt-dlp), [FFmpeg](https://ffmpeg.org/), [faster-whisper](https://github.com/SYSTRAN/faster-whisper), [Ollama](https://ollama.com/), [Ultralytics](https://github.com/ultralytics/ultralytics), [ByteTrack](https://github.com/ifzhang/ByteTrack), [ComfyUI](https://github.com/comfyanonymous/ComfyUI), [Piper](https://github.com/OHF-Voice/piper1-gpl), [FastAPI](https://fastapi.tiangolo.com/), [Electron](https://www.electronjs.org/) and [React](https://react.dev/). See [docs/CREDITS.md](docs/CREDITS.md).
+- **App shows a blank window:** the UI now has an error boundary and auto-reloads crashed renderers. Reload once; if it persists open `npm start` browser mode.
+- **Download job failed:** update yt-dlp (`pip install -U yt-dlp`) and retry. The job error is shown in the toast and job tracker.
+- **Model install failed:** open the linked official download page and check your connection; Ollama models require Ollama to be running.
+- **Electron does not launch:** run `npm start` — it starts the same studio in your browser without Electron.
 
 ## License
 
-MIT © 2026 analoggeek. Third-party models and libraries keep their own licenses; review them before commercial use of generated media. Stock assets remain under their respective provider licenses (Pexels, Pixabay, Openverse/CC).
-
-**Made by analoggeek.**
+MIT © 2026 — made by **analoggeek**.
