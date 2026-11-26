@@ -1,5 +1,13 @@
 # Roadmap
 
+## Shipped in v5.1.3
+
+- Instant splash screen and route-level lazy loading for a fast first paint
+- Fully automatic model runtime download, install, activation and settings save
+- Multiple focus regions per clip (player + gameplay layouts) fused into AI scoring
+- Icon-only timeline toolbar and synchronized playhead/playback controls
+- Cleaner macOS DMG/ZIP builds with CI copy verification
+
 ## Shipped in v5.1.2
 
 - Legacy-safe job progress updates and reliable download jobs

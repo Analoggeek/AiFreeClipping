@@ -8,8 +8,13 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import platform
 import shutil
+import subprocess
+import tarfile
+import time
 import urllib.request
+import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
@@ -18,6 +23,7 @@ from ..db import db
 from .llm import tags
 
 OLLAMA_INSTALLER = "https://ollama.com/download"
+OLLAMA_VERSION = "v0.40.18"
 HF = "https://huggingface.co"
 YOLOX_ONNX = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx"
 PIPER_VOICE = (
@@ -134,6 +140,139 @@ API_SETTINGS = {
 }
 
 
+def _installed_ids() -> set[str]:
+    try:
+        return set(json.loads(db.get_setting("installed_models", "[]") or "[]"))
+    except (TypeError, ValueError):
+        return set()
+
+
+def _activate(model: dict[str, Any]) -> None:
+    """Persist and immediately activate a model after a successful install."""
+    ids = _installed_ids()
+    ids.add(model["id"])
+    db.set_setting("installed_models", json.dumps(sorted(ids)))
+    activation = {
+        "LLM": {"active_llm": model["id"], "OLLAMA_MODEL": model["id"]},
+        "ASR": {"whisper_model": model["id"].replace("whisper-", "")},
+        "Vision": {"vision_engine": "yolox" if model["provider"] == "yolox-onnx" else "ultralytics"},
+        "TTS": {"tts_voice": model["id"].replace("piper-", "")},
+        "Image": {"image_provider": "comfyui"},
+    }.get(model["kind"], {})
+    for key, value in activation.items():
+        db.set_setting(key, value)
+        os.environ[key] = value
+
+
+def _ollama_alive() -> bool:
+    try:
+        with urllib.request.urlopen(f"{ollama_host()}/api/tags", timeout=2) as response:
+            return response.status == 200
+    except Exception:
+        return False
+
+
+def _ollama_binary() -> Path | None:
+    for candidate in (
+        CACHE / "ollama" / ("ollama.exe" if os.name == "nt" else "ollama"),
+        Path(shutil.which("ollama") or "") if shutil.which("ollama") else None,
+    ):
+        if candidate and candidate.exists():
+            return candidate
+    return None
+
+
+def _safe_extract(archive: tarfile.TarFile | zipfile.ZipFile, root: Path, members: Any) -> None:
+    root = root.resolve()
+    for member in members:
+        name = getattr(member, "filename", getattr(member, "name", ""))
+        destination = (root / name).resolve()
+        if not str(destination).startswith(str(root)):
+            continue
+        if getattr(member, "is_dir", lambda: False)():
+            destination.mkdir(parents=True, exist_ok=True)
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if isinstance(archive, zipfile.ZipFile):
+            with archive.open(member) as source, destination.open("wb") as target:
+                shutil.copyfileobj(source, target)
+        else:
+            source = archive.extractfile(member)
+            if source:
+                with source, destination.open("wb") as target:
+                    shutil.copyfileobj(source, target)
+
+
+def _ensure_ollama(progress: Callable[[float, str], None]) -> None:
+    """Download and start the local Ollama runtime with no user action required."""
+    if _ollama_alive():
+        return
+    binary = _ollama_binary()
+    if not binary:
+        system = platform.system().lower()
+        machine = platform.machine().lower()
+        root = CACHE / "ollama"
+        root.mkdir(parents=True, exist_ok=True)
+        base = f"https://github.com/ollama/ollama/releases/download/{OLLAMA_VERSION}"
+        if system == "darwin":
+            url, archive_name = f"{base}/ollama-darwin.tgz", "ollama.tgz"
+        elif system == "windows":
+            arch = "arm64" if machine in {"arm64", "aarch64"} else "amd64"
+            url, archive_name = f"{base}/ollama-windows-{arch}.zip", "ollama.zip"
+        else:
+            arch = "arm64" if machine in {"arm64", "aarch64"} else "amd64"
+            url = f"{base}/ollama-linux-{arch}.tar.zst"
+            archive_name = "ollama.tar.zst"
+            if not shutil.which("zstd"):
+                # Older builds ship a plain gzip archive; no extra tool required.
+                url = f"https://github.com/ollama/ollama/releases/download/v0.5.7/ollama-linux-{arch}.tgz"
+                archive_name = "ollama.tgz"
+        downloaded = root / archive_name
+        progress(8, "Downloading the local Ollama runtime…")
+        _download(url, downloaded, lambda pct, msg: progress(8 + pct * 0.5, msg), "Ollama runtime")
+        progress(62, "Installing the local Ollama runtime…")
+        if archive_name.endswith(".zip"):
+            with zipfile.ZipFile(downloaded) as archive:
+                _safe_extract(archive, root, archive.infolist())
+        elif archive_name.endswith(".tar.zst"):
+            plain = downloaded.with_suffix(".tar")
+            subprocess.run(["zstd", "-dc", str(downloaded), "-o", str(plain)], check=True)
+            with tarfile.open(plain) as archive:
+                _safe_extract(archive, root, archive.getmembers())
+            plain.unlink(missing_ok=True)
+        else:
+            with tarfile.open(downloaded, "r:gz") as archive:
+                _safe_extract(archive, root, archive.getmembers())
+        downloaded.unlink(missing_ok=True)
+        candidates = sorted(root.rglob("ollama.exe" if os.name == "nt" else "ollama"))
+        binary = next((item for item in candidates if item.is_file()), None)
+        if binary is None:
+            raise RuntimeError("The Ollama runtime downloaded but its executable was not found.")
+        db.set_setting("ollama_binary", str(binary))
+    if os.name != "nt":
+        try:
+            binary.chmod(0o755)
+        except OSError:
+            pass
+        # Downloaded binaries carry quarantine metadata on macOS.
+        if platform.system() == "Darwin":
+            subprocess.run(["xattr", "-c", str(binary)], capture_output=True, check=False)
+    if not _ollama_alive():
+        progress(72, "Starting the local Ollama service…")
+        log_path = CACHE / "ollama.log"
+        with log_path.open("ab") as log:
+            subprocess.Popen(
+                [str(binary), "serve"], stdout=log, stderr=subprocess.STDOUT,
+                start_new_session=True, cwd=str(binary.parent),
+            )
+        for _ in range(60):
+            if _ollama_alive():
+                break
+            time.sleep(0.5)
+        else:
+            raise RuntimeError(f"Ollama did not start. Check {log_path} for details.")
+
+
 def _path(model: dict[str, Any]) -> Path | None:
     name = model.get("file")
     if not name:
@@ -144,28 +283,34 @@ def _path(model: dict[str, Any]) -> Path | None:
     return folder / name if folder else None
 
 
+def _whisper_dir(model_id: str) -> Path:
+    return Path(env("HF_HOME", str(CACHE / "huggingface"))).expanduser() / model_id
+
+
 async def status() -> list[dict[str, Any]]:
     installed_llm = {item["name"] for item in await tags()}
-    hf_cache = Path(env("HF_HOME", str(HOME / "cache" / "huggingface"))).expanduser()
+    persisted = _installed_ids()
     checkpoint_dir = Path(env("COMFY_CHECKPOINTS", str(HOME / "models" / "checkpoints")))
     result = []
     for model in CATALOG:
-        installed = False
+        installed = model["id"] in persisted
         if model["provider"] == "Ollama":
-            installed = any(model["id"].split(":")[0] in name for name in installed_llm)
+            installed = installed or any(model["id"].split(":")[0] in name for name in installed_llm)
         elif model["provider"] == "faster-whisper":
             short = model["id"].replace("whisper-", "models--Systran--faster-whisper-")
-            installed = (
-                (hf_cache / short).exists()
-                or (hf_cache / "hub" / short).exists()
-                or (hf_cache / model["id"]).exists()
+            folder = _whisper_dir(model["id"])
+            installed = installed or (
+                folder.exists()
+                or (folder.parent / short).exists()
+                or (folder.parent / "hub" / short).exists()
             )
         elif model.get("file") and _path(model):
-            installed = bool(_path(model).exists())
+            target = _path(model)
+            installed = installed or bool(target and target.exists())
         elif model["provider"] == "comfyui":
-            installed = bool(list(checkpoint_dir.glob("*.safetensors"))) if checkpoint_dir.exists() else False
+            installed = installed or bool(list(checkpoint_dir.glob("*.safetensors"))) if checkpoint_dir.exists() else installed
         elif model.get("needsApi"):
-            installed = bool(
+            installed = installed or bool(
                 env(API_ENV.get(model["id"], ""))
                 or db.get_setting(API_SETTINGS.get(model["id"], ""))
             )
@@ -219,43 +364,64 @@ async def install(model_id: str, progress: Callable[[float, str], None]) -> dict
     def work():
         progress(5, f"Preparing {model['name']}…")
         if model["provider"] == "Ollama":
-            try:
-                _ollama_pull(model_id, progress)
-            except Exception as exc:
-                raise RuntimeError(
-                    f"Ollama is not reachable. Install it from {OLLAMA_INSTALLER}, start it, then try again. ({exc})"
-                ) from exc
+            _ensure_ollama(progress)
+            _ollama_pull(model_id, lambda pct, msg: progress(max(76, pct * 0.24), msg))
         elif model["provider"] == "faster-whisper":
             try:
                 from huggingface_hub import snapshot_download  # type: ignore
 
                 repo = f"Systran/faster-whisper-{model_id.replace('whisper-', '')}"
-                snapshot_download(repo_id=repo, local_dir=CACHE / "huggingface" / repo.split("/")[-1])
+                destination = _whisper_dir(model_id)
+                destination.mkdir(parents=True, exist_ok=True)
+                snapshot_download(repo_id=repo, local_dir=str(destination))
             except ImportError as exc:
-                raise RuntimeError("Install huggingface-hub to download Whisper weights.") from exc
+                raise RuntimeError(
+                    "huggingface-hub is required to download Whisper weights. It is included in the packaged app."
+                ) from exc
         elif _path(model):
             destination = _path(model)
             assert destination is not None
             if not destination.exists():
                 _download(str(model["downloadUrl"]), destination, progress, model["name"])
             if model["provider"] == "piper":
-                config = Path(str(model["downloadUrl"]).split("?")[0] + ".json")
+                config_url = str(model["downloadUrl"]).split("?")[0] + ".json"
+                config = destination.with_name(destination.name.replace(".onnx", ".json"))
                 if not config.exists():
                     try:
-                        _download(str(config), config, progress, "voice config")
+                        _download(config_url, config, progress, "voice config")
                     except Exception:
                         pass
         elif model["provider"] == "comfyui":
-            raise RuntimeError(
-                f"Download the SDXL checkpoint from {model['downloadUrl']} and save it to "
-                f"{HOME / 'models' / 'checkpoints'}. ComfyUI can then use it locally."
-            )
+            destination = Path(env("COMFY_CHECKPOINTS", str(HOME / "models" / "checkpoints")))
+            destination.mkdir(parents=True, exist_ok=True)
+            checkpoint = destination / "sd_xl_base_1.0.safetensors"
+            if not checkpoint.exists():
+                _download(str(model["downloadUrl"]), checkpoint, progress, model["name"])
         else:
             raise RuntimeError(f"Use the download link for {model['name']} to complete setup.")
-        progress(100, "Installed — ready to use offline")
-        return {"model_id": model_id, "installed": True}
+        _activate(model)
+        progress(100, "Installed, activated and saved")
+        return {"model_id": model_id, "installed": True, "activated": True}
 
     return await asyncio.to_thread(work)
+
+
+async def install_recommended(progress: Callable[[float, str], None]) -> dict[str, Any]:
+    """One-click setup for the models the whole offline pipeline needs."""
+    installed = await status()
+    pending = [item for item in installed if item.get("recommended") and item.get("autoInstall") and not item["installed"]]
+    done: list[str] = []
+    for index, item in enumerate(pending):
+        offset = index / max(len(pending), 1) * 100
+        span = 100 / max(len(pending), 1)
+
+        def scoped(pct: float, message: str, item=item, offset=offset, span=span) -> None:
+            progress(min(99, offset + pct / 100 * span), f"{item['name']}: {message}")
+
+        await install(item["id"], scoped)
+        done.append(item["id"])
+    progress(100, "Recommended models are installed and active")
+    return {"installed": done, "count": len(done)}
 
 
 async def uninstall(model_id: str) -> dict[str, Any]:
@@ -278,4 +444,7 @@ async def uninstall(model_id: str) -> dict[str, Any]:
             path.unlink()
     else:
         raise RuntimeError("Remove this model's files from the Models folder in your data directory.")
+    remaining = _installed_ids()
+    remaining.discard(model_id)
+    db.set_setting("installed_models", json.dumps(sorted(remaining)))
     return {"model_id": model_id, "installed": False}

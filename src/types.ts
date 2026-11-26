@@ -34,6 +34,8 @@ export type Candidate = {
   hashtags: string[];
   transcript: string;
   region?: { x: number; y: number; w: number; h: number } | null;
+  regions?: Array<{ x: number; y: number; w: number; h: number }>;
+  region_layout?: string | null;
   id?: string;
   output?: string | null;
   effects?: Record<string, unknown>;

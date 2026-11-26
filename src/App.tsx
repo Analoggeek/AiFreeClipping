@@ -1,21 +1,22 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import {
   Clapperboard, CloudDownload, Download, FolderOpen, LayoutDashboard, Library,
-  ListVideo, MonitorPlay, Package, PlugZap, Settings, Sparkles, UploadCloud, WifiOff,
+  ListVideo, LoaderCircle, MonitorPlay, Package, PlugZap, Settings, Sparkles, UploadCloud, WifiOff,
 } from 'lucide-react';
 import logo from '../brand/logo-mark-3d.svg';
 import { api, apiBase } from './api';
 import type { HardwareInfo } from './types';
 import { Toast, useJobs } from './components/common';
 import ErrorBoundary from './components/ErrorBoundary';
-import Clipper from './pages/Clipper';
-import Downloads from './pages/Downloads';
-import Editor from './pages/Editor';
-import ModelsPage from './pages/ModelsPage';
-import Overview from './pages/Overview';
-import Playlists from './pages/Playlists';
-import Publish from './pages/Publish';
-import SettingsPage from './pages/SettingsPage';
+// Route-level splitting keeps the first paint fast while the engine starts.
+const Clipper = lazy(() => import('./pages/Clipper'));
+const Downloads = lazy(() => import('./pages/Downloads'));
+const Editor = lazy(() => import('./pages/Editor'));
+const ModelsPage = lazy(() => import('./pages/ModelsPage'));
+const Overview = lazy(() => import('./pages/Overview'));
+const Playlists = lazy(() => import('./pages/Playlists'));
+const Publish = lazy(() => import('./pages/Publish'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
 export type PageId = 'overview' | 'downloads' | 'playlists' | 'clipper' | 'editor' | 'publish' | 'models' | 'settings';
 
@@ -34,7 +35,7 @@ export default function App() {
   const [page, setPage] = useState<PageId>('overview');
   const [toast, setToast] = useState('');
   const [online, setOnline] = useState(false);
-  const [version, setVersion] = useState('5.1.2');
+  const [version, setVersion] = useState('5.1.3');
   const [mediaSelection, setMediaSelection] = useState<string[]>([]);
   const [clipSelection, setClipSelection] = useState<string[]>([]);
   const [folder, setFolder] = useState('');
@@ -131,7 +132,7 @@ export default function App() {
             <div className="avatar"><Sparkles size={16} /></div>
           </div>
         </header>
-        <main className="page"><ErrorBoundary>{content}</ErrorBoundary></main>
+        <main className="page"><ErrorBoundary><Suspense fallback={<div className="page-loading"><LoaderCircle size={22} className="spin" /> Loading workspace…</div>}>{content}</Suspense></ErrorBoundary></main>
       </div>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
     </div>

@@ -72,6 +72,7 @@ export const api = {
 
   models: () => request<{ models: ModelInfo[] }>('/api/models'),
   installModel: (model_id: string) => post<{ job_id: string }>('/api/models/install', { model_id }),
+  installRecommendedModels: () => post<{ job_id: string }>('/api/models/install-recommended', {}),
 
   youtubeStatus: () => request<{ authorized: boolean; available: boolean; clientSecretConfigured: boolean }>('/api/youtube/status'),
   youtubeAuthorize: () => post<{ job_id: string }>('/api/youtube/authorize'),

@@ -51,6 +51,8 @@ class RegionSelection(BaseModel):
     media_id: str
     kind: Literal["full", "player", "gameplay", "custom"] = "full"
     box: dict[str, float] | None = None  # normalized x, y, w, h
+    boxes: list[dict[str, float]] = Field(default_factory=list)
+    layout: str | None = None
 
 
 class ClipProposalRequest(BaseModel):
