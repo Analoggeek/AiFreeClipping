@@ -140,3 +140,50 @@ def download_asset(asset_id, directory, *, cancelled=None, progress=None):
     if progress:
         progress(100, "Verified local asset ready")
     return str(target)
+
+
+def cached_asset(asset_id, directory):
+    """Return verified cached media only; never access the network from preview."""
+    entries = {a["id"]: a for a in asset_catalog()}
+    if asset_id not in entries:
+        raise ValueError("Unknown free-library asset")
+    entry = entries[asset_id]
+    path = Path(directory) / (entry["blob_sha"] + ".png")
+    if not path.exists():
+        return None
+    with path.open("rb") as stream:
+        data = stream.read(entry["size"] + 1)
+    if len(data) != entry["size"] or blob_hash(data) != entry["blob_sha"]:
+        raise ValueError("Cached artwork failed integrity check")
+    return str(path)
+
+
+def download_library(directory, *, cancelled=None, progress=None):
+    """Explicit full-library download with per-file failure isolation and retry.
+
+    Valid cached assets are reverified without network. A retry resumes naturally
+    by reusing them. Never claim all ready when any file failed.
+    """
+    entries = asset_catalog()
+    ready = []
+    failures = []
+    for index, entry in enumerate(entries):
+        if cancelled and cancelled():
+            raise RuntimeError(
+                f"Library download cancelled; {len(ready)} verified files retained for retry"
+            )
+        try:
+            path = download_asset(entry["id"], directory, cancelled=cancelled)
+            ready.append({"id": entry["id"], "path": path})
+        except Exception as exc:
+            if cancelled and cancelled():
+                raise RuntimeError(
+                    f"Library download cancelled; {len(ready)} verified files retained for retry"
+                ) from exc
+            failures.append({"id": entry["id"], "error": str(exc)})
+        if progress:
+            progress(
+                100 * (index + 1) / len(entries),
+                f"{index + 1}/{len(entries)} checked; {len(ready)} ready, {len(failures)} failed",
+            )
+    return {"ready": ready, "failures": failures, "total": len(entries)}

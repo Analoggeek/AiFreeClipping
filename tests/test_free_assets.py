@@ -71,3 +71,34 @@ def test_catalog_fifty_pinned_assets_and_bundled_license():
         and a["source"].startswith("https://github.com/googlefonts/noto-emoji/blob/")
         for a in entries
     )
+
+
+def test_batch_download_counts_failure_isolation_retry_and_offline_preview(tmp_path):
+    from clipos.video.free_assets import cached_asset, download_library
+
+    entry, data, payload = fixture()
+    second = dict(entry, id="other", blob_sha="0" * 40)
+    events = []
+    with (
+        patch("clipos.video.free_assets.asset_catalog", return_value=[entry, second]),
+        patch("urllib.request.urlopen", return_value=io.BytesIO(payload)),
+    ):
+        # First is valid; second is isolated as a verification failure.
+        result = download_library(
+            tmp_path, progress=lambda pct, text: events.append(pct)
+        )
+        assert (
+            len(result["ready"]) == 1
+            and len(result["failures"]) == 1
+            and result["total"] == 2
+        )
+        assert events == [50, 100]
+    with (
+        patch("clipos.video.free_assets.asset_catalog", return_value=[entry]),
+        patch("urllib.request.urlopen", side_effect=AssertionError("No network")),
+    ):
+        assert cached_asset(entry["id"], tmp_path)
+        assert len(download_library(tmp_path)["ready"]) == 1
+        assert cached_asset(entry["id"], tmp_path / "missing") is None
+    with pytest.raises(RuntimeError, match="cancelled"):
+        download_library(tmp_path, cancelled=lambda: True)

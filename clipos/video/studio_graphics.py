@@ -188,4 +188,38 @@ def render_graphic(spec, output_dir, *, cancelled=None, progress=None):
         except Exception:
             output.unlink(missing_ok=True)
             raise
+    # Carry freely licensed artwork provenance into the generated derivative.
+    from .free_assets import asset_catalog, blob_hash
+
+    provenance = {
+        "original_template": spec["template"],
+        "template_license": "CC0-1.0",
+        "modifications": "Composited editable text/logo; resized and animated.",
+        "third_party_artwork": None,
+    }
+    if spec["logo_path"]:
+        raw = Path(spec["logo_path"]).read_bytes()
+        identity = blob_hash(raw)
+        artwork = next(
+            (entry for entry in asset_catalog() if entry["blob_sha"] == identity), None
+        )
+        if artwork:
+            provenance["third_party_artwork"] = artwork
+    metadata = output.with_suffix(".source.json")
+    license_path = output.with_suffix(".LICENSE.txt")
+    try:
+        metadata.write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+        if provenance["third_party_artwork"]:
+            license_path.write_text(
+                "Noto Emoji artwork: Copyright Google LLC. Composited, resized and animated.\n"
+                + (
+                    resource_dir("templates") / "free_library/Noto-Apache-2.0.txt"
+                ).read_text(),
+                encoding="utf-8",
+            )
+    except Exception:
+        output.unlink(missing_ok=True)
+        metadata.unlink(missing_ok=True)
+        license_path.unlink(missing_ok=True)
+        raise
     return output

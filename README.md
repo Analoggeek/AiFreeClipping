@@ -419,3 +419,28 @@ At last inspection native run 45738604181 (`4f8fa30`) had successful Windows and
 Linux jobs, with macOS still running. Newer commits need their own native results.
 Physical speaker/display sync and human permission-dialog QA remain **NOT RUN**;
 they require actual devices and cannot be fixed by claiming a simulated pass.
+
+
+### Full-library offline download and artwork provenance
+
+Motion graphics includes **Download / verify all 50 illustrations for offline use**.
+This is an explicit opt-in download, not a startup network request. Progress
+reports checked/ready/failed counts; per-file failures do not mark the library
+successful. Retry reuses verified cached files. Cancellation retains completed
+files. The selected-art preview only reads integrity-checked local cache and
+never triggers a network fetch. Full-library verification was actually executed:
+**50 ready, 0 failures** (reusing already downloaded, verified files).
+
+Generated alpha MOV graphics now carry adjacent `.source.json` records and,
+when recognized Noto artwork is used, `.LICENSE.txt` including copyright,
+Apache-2.0 license and modification notice. Preserve these records when sharing
+generated assets/projects; this is not a promise that flattened downstream exports
+automatically package every third-party license. A real downloaded-art derivative
+was rendered and its source/license records inspected. Local regression:
+**696 passed, 15 skipped**.
+
+Native installer run **45738604181** for `4f8fa30` is now **SUCCESS**, covering
+Windows/Linux/macOS jobs. This verifies that revision only. Run 45740805406
+(`42956c9`) is still in progress; later library revisions await their own native
+results. Physical device audio-sync/permission QA remains NOT RUN. The count is
+still 20 original compositions plus 50 licensed illustrations, not 50 packs.

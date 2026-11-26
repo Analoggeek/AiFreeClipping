@@ -77,6 +77,16 @@ class GraphicsPanel(QWidget):
             lambda: self.studio.editing.run(self.download_library_art)
         )
         layout.addWidget(download)
+        self.library_preview = QLabel("Not downloaded · no automatic network requests")
+        self.library_preview.setWordWrap(True)
+        layout.addWidget(self.library_preview)
+        self.free_asset.currentIndexChanged.connect(self.preview_library_art)
+        batch = QPushButton("Download / verify all 50 illustrations for offline use")
+        batch.clicked.connect(
+            lambda: self.studio.editing.run(self.download_full_library)
+        )
+        layout.addWidget(batch)
+        self.preview_library_art()
         self.logo = QLabel("No logo selected.")
         self.logo.setWordWrap(True)
         layout.addWidget(self.logo)
@@ -264,10 +274,56 @@ class GraphicsPanel(QWidget):
         def done(result):
             self.logo_path, self.logo_sha = result
             self.logo.setText(self.logo_path)
+            self.preview_library_art()
             self.studio.status.setText(
                 "Verified Apache-2.0 artwork selected as graphic logo. License/source stored alongside cached PNG. Add or rebuild graphic to apply."
             )
 
         self.studio._background(
             job, done, "Downloading and verifying selected licensed artwork…"
+        )
+
+    def preview_library_art(self, *args):
+        from ...core.config import PATHS
+        from ...video.free_assets import cached_asset
+
+        try:
+            path = cached_asset(
+                self.free_asset.currentData(), PATHS.media / "free-library"
+            )
+            self.library_preview.clear()
+            if path:
+                self.library_preview.setPixmap(QPixmap(path))
+            else:
+                self.library_preview.setText(
+                    "Not downloaded · click Download to fetch this artwork"
+                )
+        except Exception as exc:
+            self.library_preview.clear()
+            self.library_preview.setText(str(exc))
+
+    def download_full_library(self):
+        from ...core.config import PATHS
+        from ...video.free_assets import download_library
+
+        def job(worker):
+            return download_library(
+                PATHS.media / "free-library",
+                cancelled=worker.cancelled.is_set,
+                progress=lambda pct, message: worker.progress.emit(pct, message),
+            )
+
+        def done(result):
+            self.preview_library_art()
+            failures = result["failures"]
+            details = "; ".join(f["id"] + ": " + f["error"] for f in failures)
+            self.studio.status.setText(
+                f"Library checked: {len(result['ready'])}/{result['total']} verified, {len(failures)} failed. Retry reuses verified local files. "
+                + details
+            )
+
+        self.studio._background(
+            job,
+            done,
+            "Downloading licensed illustration library (verified files remain offline)…",
         )
