@@ -129,14 +129,60 @@ def _tool_version(binary: str, flag: str) -> str | None:
 
 
 def _gpu_info() -> dict[str, Any]:
-    info: dict[str, Any] = {"cuda": False, "metal": False, "note": "CPU fallback available"}
+    info: dict[str, Any] = {
+        "cuda": False, "metal": False, "note": "CPU fallback available", "name": "CPU",
+    }
+    try:
+        nvidia = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=4,
+        )
+        if nvidia.returncode == 0 and nvidia.stdout.strip():
+            info["cuda"] = True
+            info["name"] = nvidia.stdout.strip().splitlines()[0]
+            info["note"] = "NVIDIA GPU available for NVENC / Whisper CUDA"
+    except Exception:
+        pass
     try:
         import torch  # type: ignore
 
-        info["cuda"] = bool(torch.cuda.is_available())
+        info["cuda"] = info["cuda"] or bool(torch.cuda.is_available())
         info["metal"] = bool(getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
     except Exception:
         import platform
 
         info["metal"] = platform.system() == "Darwin"
+    if info["metal"] and not info["cuda"]:
+        info["name"] = "Apple Silicon / Metal"
+        info["note"] = "Metal available for VideoToolbox encoding"
+    return info
+
+
+def hardware_info() -> dict[str, Any]:
+    """Live hardware usage snapshot for the app's performance HUD."""
+    import platform
+
+    info: dict[str, Any] = {
+        "cpu_count": os.cpu_count() or 4,
+        "platform": platform.system(),
+        "gpu": _gpu_info(),
+        "workers": max(1, min(8, int(env("RENDER_WORKERS") or min(4, os.cpu_count() or 4)))),
+        "encoder": env("AIFREECLIP_ENCODER", "auto"),
+    }
+    try:
+        import psutil  # type: ignore
+
+        memory = psutil.virtual_memory()
+        info.update({
+            "cpu_percent": round(float(psutil.cpu_percent(interval=0.15)), 1),
+            "ram_percent": round(float(memory.percent), 1),
+            "ram_used_gb": round(memory.used / (1024 ** 3), 2),
+            "ram_total_gb": round(memory.total / (1024 ** 3), 2),
+            "disk_free_gb": round(psutil.disk_usage(str(HOME)).free / (1024 ** 3), 1),
+        })
+    except Exception:
+        info.update({
+            "cpu_percent": None, "ram_percent": None, "ram_used_gb": None,
+            "ram_total_gb": None, "disk_free_gb": None,
+        })
     return info

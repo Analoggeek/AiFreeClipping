@@ -96,6 +96,10 @@ def _encoder() -> str:
     global _ENCODER
     if _ENCODER:
         return _ENCODER
+    forced = os.getenv("AIFREECLIP_ENCODER")
+    if forced and forced != "auto":
+        _ENCODER = forced
+        return _ENCODER
     if os.getenv("FORCE_SOFTWARE_ENCODER") == "1":
         _ENCODER = "libx264"
         return _ENCODER
@@ -111,15 +115,19 @@ def _encoder() -> str:
     if platform.system() == "Darwin":
         preferred.append("h264_videotoolbox")
     try:
-        import torch  # type: ignore
-
-        if torch.cuda.is_available():
+        if subprocess.run(["nvidia-smi"], capture_output=True, timeout=4).returncode == 0:
             preferred.append("h264_nvenc")
     except Exception:
         pass
     preferred.append("libx264")
     _ENCODER = next((name for name in preferred if name in available), "libx264")
     return _ENCODER
+
+
+def _thread_args() -> list[str]:
+    """Use all available cores for software filters without oversubscribing."""
+    workers = max(1, min(8, int(os.getenv("RENDER_WORKERS") or (os.cpu_count() or 4))))
+    return ["-threads", str(workers), "-filter_threads", str(workers)]
 
 
 async def encode(args: list[str], duration: float, on_progress=None) -> Path:
@@ -278,7 +286,7 @@ def build_clip_args(
     codec_args = ["-c:v", _encoder(), "-preset", "veryfast", "-crf", "18", "-b:v", "0"] if _encoder() == "libx264" else ["-c:v", _encoder()]
     args += [
         "-filter_complex", ";".join(video_parts + audio_parts),
-        "-map", "[vout]", "-map", "[aout]", *codec_args,
+        "-map", "[vout]", "-map", "[aout]", *_thread_args(), *codec_args,
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
         "-t", f"{duration / speed:.3f}", "-progress", "pipe:1", "-nostats", output,
     ]
@@ -393,7 +401,7 @@ async def render_timeline(
     filters.append(f"[{current}]format=yuv420p[vout]")
     args += [
         "-filter_complex", ";".join(filters), "-map", "[vout]", "-map", "[aout]",
-        "-c:v", _encoder(), "-preset", "veryfast", "-crf", "18",
+        *_thread_args(), "-c:v", _encoder(), "-preset", "veryfast", "-crf", "18",
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
         "-t", f"{total:.3f}", "-progress", "pipe:1", "-nostats", output,
     ]

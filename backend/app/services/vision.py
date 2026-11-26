@@ -12,7 +12,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from ..config import ffmpeg_binary
+from ..config import CACHE, ffmpeg_binary
 from .tracking import ByteTrackLite
 from .utils import run_command
 
@@ -62,19 +62,73 @@ def _frame_sampler(path: str, fps: float, region: dict[str, float] | None, max_f
             if previous is not None:
                 motion = float(cv2.absdiff(gray, previous).mean()) / 255.0
             previous = gray
-            yield index / source_fps, small, motion
+            yield index / source_fps, small, motion, crop
         index += 1
     capture.release()
+
+
+def _onnx_detector():
+    """YOLOX Nano ONNX detector — no Torch needed, works inside packaged builds."""
+    weights = CACHE / "yolo" / "yolox_nano.onnx"
+    if not weights.exists():
+        return None
+    try:
+        import cv2  # type: ignore
+    except ImportError:
+        return None
+    net = cv2.dnn.readNetFromONNX(str(weights))
+    if hasattr(net, "setPreferableBackend"):
+        net.setPreferableBackend(cv2.dnn.DNN_BACKEND_OPENCV)
+
+    def detect(frame):
+        height, width = frame.shape[:2]
+        size = 416
+        blob = cv2.dnn.blobFromImage(frame, 1 / 255.0, (size, size), swapRB=True, crop=False)
+        net.setInput(blob)
+        output = net.forward()
+        features = output[0] if output.ndim == 3 else output
+        boxes: list[tuple[list[float], float]] = []
+        classes = [0, 1, 2, 3, 5, 7]
+        for row in features:
+            confidence = float(row[4])
+            if confidence < 0.3:
+                continue
+            class_scores = row[5:]
+            class_id = int(class_scores.argmax())
+            if class_id not in classes:
+                continue
+            score = confidence * float(class_scores[class_id])
+            if score < 0.3:
+                continue
+            cx, cy, bw, bh = (float(value) for value in row[:4])
+            x1 = (cx - bw / 2) / size * width
+            y1 = (cy - bh / 2) / size * height
+            x2 = (cx + bw / 2) / size * width
+            y2 = (cy + bh / 2) / size * height
+            boxes.append(([x1, y1, x2, y2], score))
+        if not boxes:
+            return []
+        kept = cv2.dnn.NMSBoxes([b for b, _ in boxes], [s for _, s in boxes], 0.3, 0.45)
+        indices = [int(i) for i in kept.flatten()] if hasattr(kept, "flatten") else []
+        return [boxes[i] for i in indices]
+
+    return detect
 
 
 def _detector(engine: str):
     """Return a callable(frame) -> [(box, confidence)] using local weights."""
     if engine == "motion":
         return None
+    if engine != "ultralytics":
+        onnx = _onnx_detector()
+        if onnx:
+            return onnx
+    if engine == "yolox":
+        return None
     try:
         from ultralytics import YOLO  # type: ignore
 
-        name = "yolox_nano.pt" if engine == "yolox" else "yolo11n.pt"
+        name = "yolo11n.pt"
         model = YOLO(name)
         classes = [0, 1, 2, 3, 5, 7]  # person, bicycle, car, motorcycle, bus, truck
 
@@ -108,9 +162,12 @@ def analyze_sync(
         on_progress(10, "Sampling frames…")
 
     if sampler is not None:
-        used_engine = "ultralytics/yolox + ByteTrack" if detect else "opencv-motion"
-        for t, frame, motion in sampler:
-            detections = detect(frame) if detect else []
+        if detect:
+            used_engine = "yolox-onnx + ByteTrack" if (CACHE / "yolo" / "yolox_nano.onnx").exists() else "ultralytics + ByteTrack"
+        else:
+            used_engine = "opencv-motion + ByteTrack"
+        for t, frame, motion, full_frame in sampler:
+            detections = detect(full_frame) if detect else []
             tracks = tracker.update(detections) if detections else []
             samples.append(
                 {

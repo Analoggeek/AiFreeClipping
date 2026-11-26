@@ -1,5 +1,16 @@
 # Release notes
 
+## v5.1.0 — 3D studio, one-click model setup & hardware awareness
+
+- **One-click model setup:** every local model card now has a real download URL and a one-click installer that saves weights into `~/.AiFreeClipping/cache`. Cloud models show a direct **Get API key** button (Gemini/Nano Banana, YouTube, Pexels, Pixabay).
+- **YOLOX without Torch:** the packaged app downloads the 4 MB YOLOX Nano ONNX model and runs it with OpenCV DNN + the built-in ByteTrack-style tracker. Gemma/Whisper/YOLOX all work offline after the first download.
+- **Hardware HUD:** the dashboard and Models page show live CPU, RAM, disk, GPU/encoder and parallel-worker counts. Per-clip render results record the exact hardware used and can be copied with one click.
+- **Copy effects to all:** tune one clip, then press **Copy effects to all** to apply the same captions, SFX, speed, color, aspect and reframing settings to every candidate in one request.
+- **Fully optimized exports:** batch renders now run in parallel (configurable with `RENDER_WORKERS`), ffmpeg uses all available threads, and NVENC / VideoToolbox is selected automatically when available.
+- **New 3D identity:** redesigned neon 3D clapperboard logo across the desktop app, packaging icons and website.
+- **Animated responsive website:** a fully static, animated marketing site with live release download links, model/API links and interface screenshots.
+- **App polish:** motion, 3D hover depth, focus states, model cards and mobile/desktop responsive layouts throughout.
+
 ## v5.0.0 — complete local AI studio
 
 The first full release of **AI Clipper Pro — made by analoggeek**.

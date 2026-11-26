@@ -3,7 +3,7 @@ import {
   Clapperboard, CloudDownload, Download, FolderOpen, LayoutDashboard, Library,
   ListVideo, MonitorPlay, Package, PlugZap, Settings, Sparkles, UploadCloud, WifiOff,
 } from 'lucide-react';
-import logo from '../brand/logo.svg';
+import logo from '../brand/logo-3d.png';
 import { api, apiBase } from './api';
 import { Toast, useJobs } from './components/common';
 import Clipper from './pages/Clipper';

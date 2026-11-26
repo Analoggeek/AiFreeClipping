@@ -19,11 +19,12 @@ from pydantic import BaseModel
 from . import __version__
 from .config import (
     ASSETS, CLIPS, CACHE, DOWNLOADS, EXPORTS, SECRET_PATH, capabilities, ffmpeg_binary,
+    hardware_info,
 )
 from .db import db, dumps, now, uid
 from .jobs import jobs
 from .schemas import (
-    AssetDownloadRequest, AssetSearchRequest, ClipProposalRequest, DownloadRequest,
+    ApplyEffectsRequest, AssetDownloadRequest, AssetSearchRequest, ClipProposalRequest, DownloadRequest,
     ExportAllRequest, ExportRequest, ImageRequest, ImportRequest, ModelInstallRequest,
     ProjectCreate, ProjectUpdate, RegionSelection, RenderRequest, SettingsPatch,
     TranscribeRequest, VisionRequest, YouTubeUploadRequest,
@@ -124,6 +125,11 @@ def health():
 @app.get("/api/system/capabilities")
 def system_capabilities():
     return ok(**capabilities())
+
+
+@app.get("/api/system/hardware")
+def system_hardware():
+    return ok(**hardware_info())
 
 
 @app.get("/api/jobs")
@@ -358,6 +364,21 @@ def patch_clip(clip_id: str, payload: ClipPatch):
     return ok(clip=db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata"))
 
 
+@app.post("/api/clips/apply-effects")
+def apply_effects(payload: ApplyEffectsRequest):
+    """Copy one clip's effect settings to every selected clip in one click."""
+    changed = 0
+    for clip_id in payload.clip_ids:
+        row = db.one("SELECT * FROM clips WHERE id=?", (clip_id,))
+        if not row:
+            continue
+        document = db.loads(row, "metadata")
+        document["effects"] = payload.effects
+        db.update("clips", "id", clip_id, {"metadata": dumps(document)})
+        changed += 1
+    return ok(changed=changed, effects=payload.effects)
+
+
 @app.delete("/api/clips/{clip_id}")
 def delete_clip(clip_id: str):
     db.delete("clips", "id", clip_id)
@@ -386,8 +407,18 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
             media["path"], float(clip["start"]), float(clip["end"]), output, options,
             on_progress=lambda pct, msg: jobs.update(job_id, progress=pct, message=msg),
         )
-        db.update("clips", "id", clip_id, {"status": "rendered", "output": output})
-        return {"output": output, "url": "/media/file?path=" + output, "clip_id": clip_id}
+        document = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata") or {}
+        document["effects"] = {k: v for k, v in options.items() if k in {
+            "aspect", "resolution", "caption_style", "sfx", "speed", "brightness", "contrast", "saturation", "blur_background", "watermark"
+        }}
+        document["hardware"] = hardware_info()
+        db.update("clips", "id", clip_id, {
+            "status": "rendered", "output": output, "metadata": dumps(document),
+        })
+        return {
+            "output": output, "url": "/media/file?path=" + output, "clip_id": clip_id,
+            "hardware": document["hardware"], "effects": document["effects"],
+        }
 
     return ok(job_id=jobs.run("render", work, payload.model_dump()))
 
@@ -396,29 +427,52 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
 async def export_batch(payload: ExportAllRequest):
     async def work(job_id: str, p: dict[str, Any]):
         req = ExportAllRequest(**(p or {}))
-        outputs = []
         total = max(len(req.clip_ids), 1)
-        for index, clip_id in enumerate(req.clip_ids):
-            clip = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
-            if not clip:
-                continue
-            media = media_row(clip["media_id"])
-            output = render.export_path(f"{clip.get('title', clip_id)}_{index+1}")
-            options = {
-                "aspect": req.aspect, "resolution": req.resolution,
-                "caption_style": {"preset": "hype"}, "captions": [],
-                "watermark_path": brand_asset("icon.png"), "sfx": ["whoosh", "pop"],
-            }
-            jobs.update(job_id, progress=index / total * 100, message=f"Exporting {index+1}/{total}")
-            await render.render_clip(
-                media["path"], float(clip["start"]), float(clip["end"]), output, options,
-                on_progress=lambda pct, msg: jobs.update(
-                    job_id, progress=(index + pct / 100) / total * 100, message=msg
-                ),
-            )
-            db.update("clips", "id", clip_id, {"status": "rendered", "output": output})
-            outputs.append({"clip_id": clip_id, "output": output})
-        return {"outputs": outputs}
+        progress = [0.0] * total
+        workers = hardware_info()["workers"]
+        semaphore = asyncio.Semaphore(workers)
+        jobs.update(job_id, progress=1, message=f"Exporting {total} clip(s) with {workers} parallel worker(s)")
+
+        async def one(index: int, clip_id: str) -> dict[str, str] | None:
+            async with semaphore:
+                clip = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
+                if not clip:
+                    progress[index] = 1.0
+                    return None
+                media = media_row(clip["media_id"])
+                output = render.export_path(f"{clip.get('title', clip_id)}_{index+1}")
+                effects = clip.get("effects") or {}
+                options = {
+                    "aspect": effects.get("aspect", req.aspect),
+                    "resolution": effects.get("resolution", req.resolution),
+                    "caption_style": effects.get("caption_style", {"preset": "hype"}),
+                    "captions": [],
+                    "watermark_path": brand_asset("icon.png"),
+                    "sfx": effects.get("sfx", ["whoosh", "pop"]),
+                    "speed": effects.get("speed", 1),
+                    "brightness": effects.get("brightness", 0),
+                    "contrast": effects.get("contrast", 0),
+                    "saturation": effects.get("saturation", 1),
+                    "blur_background": effects.get("blur_background", True),
+                }
+                await render.render_clip(
+                    media["path"], float(clip["start"]), float(clip["end"]), output, options,
+                    on_progress=lambda pct, msg, i=index: (
+                        progress.__setitem__(i, pct / 100),
+                        jobs.update(
+                            job_id,
+                            progress=round(sum(progress) / total * 100, 1),
+                            message=f"Clip {i+1}/{total}: {msg}",
+                        ),
+                    ),
+                )
+                db.update("clips", "id", clip_id, {"status": "rendered", "output": output})
+                progress[index] = 1.0
+                return {"clip_id": clip_id, "output": output}
+
+        results = await asyncio.gather(*(one(i, cid) for i, cid in enumerate(req.clip_ids)))
+        jobs.update(job_id, progress=100, message="Batch export complete")
+        return {"outputs": [item for item in results if item], "hardware": hardware_info()}
 
     return ok(job_id=jobs.run("batch", work, payload.model_dump()))
 

@@ -1,4 +1,4 @@
-import type { Capabilities, Candidate, Job, Media, ModelInfo, Project, Timeline } from './types';
+import type { Capabilities, Candidate, HardwareInfo, Job, Media, ModelInfo, Project, Timeline } from './types';
 
 const query = new URLSearchParams(window.location.search);
 const token = window.desktop?.token?.() || query.get('token') || localStorage.getItem('aifreeclip.token') || '';
@@ -30,6 +30,7 @@ const post = <T>(path: string, body: unknown = {}) =>
 export const api = {
   health: () => request<{ ok: boolean; version: string }>('/api/health'),
   capabilities: () => request<{ ok: boolean } & Capabilities>('/api/system/capabilities'),
+  hardware: () => request<{ ok: boolean } & HardwareInfo>('/api/system/hardware'),
   jobs: () => request<{ jobs: Job[] }>('/api/jobs'),
   job: (id: string) => request<Job>(`/api/jobs/${id}`),
   folders: () => request<{ folders: Record<string, string> }>('/api/folders'),
@@ -47,6 +48,8 @@ export const api = {
   propose: (payload: Record<string, unknown>) => post<{ job_id: string }>('/api/clips/propose', payload),
   clips: () => request<{ clips: Candidate[] }>('/api/clips'),
   patchClip: (id: string, patch: Partial<Candidate>) => request<{ clip: Candidate }>(`/api/clips/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  applyEffects: (clip_ids: string[], effects: Record<string, unknown>) =>
+    post<{ ok: boolean; changed: number }>('/api/clips/apply-effects', { clip_ids, effects }),
   deleteClip: (id: string) => request<{ ok: boolean }>(`/api/clips/${id}`, { method: 'DELETE' }),
   renderClip: (id: string, payload: Record<string, unknown>) => post<{ job_id: string }>(`/api/clips/${id}/render`, payload),
   exportBatch: (clip_ids: string[]) => post<{ job_id: string }>('/api/exports/batch', { clip_ids }),
