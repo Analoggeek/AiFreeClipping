@@ -122,7 +122,7 @@ jobs:
           VERSION="${{ inputs.version || github.ref_name }}"
           VERSION="${VERSION#v}"
           mkdir -p release/installers
-          find release -mindepth 2 -type f -name 'AI-Clipper-Pro-*' -exec cp -f {} release/installers/ \;
+          find release -mindepth 2 -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -exec cp -f {} release/installers/ \;
           cd release/installers
           find . -maxdepth 1 -type f -name 'AI-Clipper-Pro-*' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
           printf '{"product":"AI Clipper Pro","author":"analoggeek","version":"%s","installers":%s}\n' \
@@ -169,9 +169,11 @@ jobs:
             gh run download "$id" -D "release/.run-$id" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           done
           mkdir -p release/installers
-          find release/.run-* -type f -name 'AI-Clipper-Pro-*' -exec cp -f {} release/installers/ \;
+          find release/.run-* -mindepth 2 -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -exec cp -f {} release/installers/ \;
           find release -mindepth 1 -type d -name '.run-*' -exec rm -rf {} +
           ls -lh release/installers | tee -a "$GITHUB_STEP_SUMMARY"
+          BODY="$(find release/installers -maxdepth 1 -type f -printf '%f %s bytes\n' | sort)"
+          gh issue create --title "v5 release asset diagnostics (temporary)" --body "$BODY" >/dev/null || true
       - name: Checksums and manifest
         shell: bash
         run: |
