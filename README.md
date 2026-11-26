@@ -348,3 +348,23 @@ recording. Physical speaker/display QA remains **NOT RUN** in this sandbox.
 At inspection, commit `a404987` passed macOS packaging-integrity and website checks;
 installer run `45736934646` was pending with no jobs yet. Packaging-integrity is
 not native runtime/installer acceptance. New pack native results are also pending.
+
+
+### Selective HSL grading and native verification queue
+
+The Color panel now switches between global HSL and six secondary hue ranges
+(red/yellow/green/cyan/blue/magenta). Overlapping triangular masks span 60 degrees
+on either side of each hue center, use original hue to avoid order-dependent
+selection, and suppress changes to neutral gray. These are hue qualifiers, not
+spatial/power-window masks. Settings persist and apply through the existing
+selective color-grade preset category and shared preview/export LUT graph.
+Actual tests verify red desaturation with blue/gray protection, encoded and
+streamed gray pixels, round-trip settings and atomic invalid-input rejection.
+Local regression: **691 passed, 15 skipped**.
+
+Superseded installer run 45736063073 (92a0291) had completed Windows/Linux but
+was still building Intel macOS, blocking the newer run. Cancellation was requested
+to unblock the current asset-pack revision. Run **45738604181** (4f8fa30) now has
+Windows, macOS and Linux jobs **in progress**, not yet passed. Subsequent grading
+revision requires its own native verification. Physical device tests remain
+NOT RUN; twelve geometric templates do not complete a 50-pack asset library.

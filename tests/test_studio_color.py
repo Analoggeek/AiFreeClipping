@@ -114,3 +114,42 @@ def test_legacy_grade_accepts_optional_curves_and_global_hsl_reaches_pixels(
         validate_curves({"master": [[0.0, 0.0], [0.5, 0.4], [0.5, 0.9], [1.0, 1.0]]})
     with pytest.raises(ValueError):
         validate_curves({"red": [[0.0, 0.0], [1.0, float("nan")]]})
+
+
+def test_secondary_hsl_selective_pixels_persistence_and_atomic_validation(
+    media, tmp_path
+):
+    from clipos.video.studio_color import adjust_hsl
+
+    secondary = {"red": {"hue": 0.0, "saturation": -1.0, "lightness": 0.0}}
+    assert adjust_hsl((1.0, 0.0, 0.0), {}, secondary) == (0.5, 0.5, 0.5)
+    assert adjust_hsl((0.0, 0.0, 1.0), {}, secondary) == (0.0, 0.0, 1.0)
+    assert adjust_hsl((0.5, 0.5, 0.5), {}, secondary) == (0.5, 0.5, 0.5)
+    p = MultitrackProject(width=160, height=90, fps=10)
+    mid = p.import_media(media[0])
+    grade = deepcopy(GRADE_DEFAULTS)
+    grade["secondary"] = secondary
+    preset = EditingPreset("Red desaturation", {"color_grade": {"color_grade": grade}})
+    apply_editing_preset(p, preset, {mid})
+    output = tmp_path / "secondary.mp4"
+    export_project(p, output, tmp_path / "work", encoder="cpu")
+    pixel = decode(output)[5, 5]
+    assert int(max(pixel)) - int(min(pixel)) < 15
+    stream = stream_frames(p, max_size=160)
+    try:
+        rgb = next(data for kind, _, data in stream if kind == "video")
+        pixel = rgb[5, 5]
+        assert int(max(pixel)) - int(min(pixel)) < 15
+    finally:
+        stream.close()
+    saved = tmp_path / "secondary.json"
+    p.save(saved)
+    assert MultitrackProject.load(saved).to_dict() == p.to_dict()
+    before = p.to_dict()
+    bad = deepcopy(grade)
+    bad["secondary"]["red"]["hue"] = float("nan")
+    with pytest.raises(ValueError):
+        apply_editing_preset(
+            p, EditingPreset("Bad", {"color_grade": {"color_grade": bad}}), {mid}
+        )
+    assert p.to_dict() == before

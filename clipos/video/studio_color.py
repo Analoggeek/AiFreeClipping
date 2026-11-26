@@ -23,7 +23,7 @@ GRADE_DEFAULTS = {
 
 
 LEGACY_GRADE_KEYS = set(GRADE_DEFAULTS)
-GRADE_DEFAULTS.update(curves={}, hsl={})
+GRADE_DEFAULTS.update(curves={}, hsl={}, secondary={})
 
 
 def validate_curves(curves):
@@ -72,26 +72,68 @@ def validate_hsl(hsl):
     return hsl
 
 
-def hsl_filter(hsl, work_dir):
+HUE_CENTERS = {
+    "red": 0.0,
+    "yellow": 60.0,
+    "green": 120.0,
+    "cyan": 180.0,
+    "blue": 240.0,
+    "magenta": 300.0,
+}
+
+
+def validate_secondary(secondary):
+    if not isinstance(secondary, dict) or not set(secondary) <= set(HUE_CENTERS):
+        raise ValueError(
+            "Secondary HSL requires named red/yellow/green/cyan/blue/magenta ranges"
+        )
+    for controls in secondary.values():
+        validate_hsl(controls)
+        if not controls:
+            raise ValueError("Secondary HSL controls cannot be empty")
+    return secondary
+
+
+def adjust_hsl(rgb, hsl, secondary):
     import colorsys
+
+    h, l, s = colorsys.rgb_to_hls(*rgb)
+    hue_shift = sat_shift = light_shift = 0.0
+    # Overlapping triangular masks use the original hue; all are zero on gray.
+    for name, controls in secondary.items():
+        distance = abs((h * 360 - HUE_CENTERS[name] + 180) % 360 - 180)
+        weight = max(0.0, 1 - distance / 60) * min(1.0, s / 0.1)
+        hue_shift += weight * controls["hue"]
+        sat_shift += weight * controls["saturation"]
+        light_shift += weight * controls["lightness"]
+    return colorsys.hls_to_rgb(
+        (h + (hsl.get("hue", 0) + hue_shift) / 360) % 1,
+        max(0.0, min(1.0, l + hsl.get("lightness", 0) + light_shift)),
+        max(0.0, min(1.0, s * (1 + hsl.get("saturation", 0)) * (1 + sat_shift))),
+    )
+
+
+def hsl_filter(hsl, work_dir, secondary=None):
 
     if work_dir is None:
         raise ValueError("HSL rendering requires an isolated work directory")
+    secondary = secondary or {}
     size = 33
-    signature = hashlib.sha256(repr(sorted(hsl.items())).encode()).hexdigest()
+    import json
+
+    signature = hashlib.sha256(
+        json.dumps([hsl, secondary], sort_keys=True).encode()
+    ).hexdigest()
     path = Path(work_dir) / ("hsl-" + signature + ".cube")
     if not path.exists():
         lines = [f"LUT_3D_SIZE {size}"]
         for blue in range(size):
             for green in range(size):
                 for red in range(size):
-                    h, l, s = colorsys.rgb_to_hls(
-                        red / (size - 1), green / (size - 1), blue / (size - 1)
-                    )
-                    rgb = colorsys.hls_to_rgb(
-                        (h + hsl["hue"] / 360) % 1,
-                        max(0, min(1, l + hsl["lightness"])),
-                        max(0, min(1, s * (1 + hsl["saturation"]))),
+                    rgb = adjust_hsl(
+                        (red / (size - 1), green / (size - 1), blue / (size - 1)),
+                        hsl,
+                        secondary,
                     )
                     lines.append(" ".join(f"{v:.9f}" for v in rgb))
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -158,6 +200,7 @@ def validate_grade(grade):
         raise ValueError("Incomplete or unsupported color grading parameters")
     validate_curves(grade.get("curves", {}))
     validate_hsl(grade.get("hsl", {}))
+    validate_secondary(grade.get("secondary", {}))
     for key in LEGACY_GRADE_KEYS:
         if key in ("lut_path", "lut_sha256"):
             continue
@@ -222,8 +265,10 @@ def grade_filters(grade, work_dir=None):
                 channel + "='" + " ".join(f"{x:.8f}/{y:.8f}" for x, y in points) + "'"
             )
         filters.append("curves=" + ":".join(definitions))
-    if grade.get("hsl"):
-        filters.append(hsl_filter(grade["hsl"], work_dir))
+    if grade.get("hsl") or grade.get("secondary"):
+        filters.append(
+            hsl_filter(grade.get("hsl", {}), work_dir, grade.get("secondary", {}))
+        )
     if grade["lut_path"]:
         if work_dir is None:
             raise ValueError("LUT rendering requires an isolated work directory")

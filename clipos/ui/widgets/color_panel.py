@@ -26,7 +26,7 @@ class ColorPanel(QWidget):
         self.curves = {}
         layout = QVBoxLayout(self)
         info = QLabel(
-            "Color grading · exposure, gamma and RGB shadows/midtones/highlights. Verified normalized 3D .cube LUTs support strength mixing. RGB/master curves, tonal wheels and global HSL share the same export/preview graph. Global HSL is not a secondary hue-range qualifier."
+            "Color grading · exposure, gamma and RGB shadows/midtones/highlights. Verified normalized 3D .cube LUTs support strength mixing. RGB/master curves, tonal wheels and global HSL share the same export/preview graph. Six overlapping hue-range HSL qualifiers use original hue with gray protection."
         )
         info.setWordWrap(True)
         layout.addWidget(info)
@@ -88,6 +88,13 @@ class ColorPanel(QWidget):
             column.addWidget(wheel)
             wheel_row.addLayout(column)
         layout.addLayout(wheel_row)
+        self.secondary = {}
+        self.hue_range = QComboBox()
+        self.hue_range.addItems(
+            ["Global", "red", "yellow", "green", "cyan", "blue", "magenta"]
+        )
+        layout.addWidget(self.hue_range)
+        self.active_hue_range = "Global"
         self.hsl_fields = {}
         hsl_form = QFormLayout()
         for key in ("hue", "saturation", "lightness"):
@@ -96,8 +103,9 @@ class ColorPanel(QWidget):
             field.setDecimals(3)
             field.setSingleStep(1 if key == "hue" else 0.05)
             self.hsl_fields[key] = field
-            hsl_form.addRow("Global HSL " + key, field)
+            hsl_form.addRow("HSL " + key, field)
         layout.addLayout(hsl_form)
+        self.hue_range.currentTextChanged.connect(self.switch_hue_range)
         self.channel = QComboBox()
         self.channel.addItems(["master", "red", "green", "blue"])
         layout.addWidget(self.channel)
@@ -138,11 +146,17 @@ class ColorPanel(QWidget):
 
     def load(self):
         grade = {key: field.value() for key, field in self.fields.items()}
-        hsl = {key: field.value() for key, field in self.hsl_fields.items()}
+        self.store_hue_range()
+        hsl = self.secondary.get("Global", {})
         grade.update(
             lut_path=self.lut_path,
             lut_sha256=self.lut_sha,
             curves=deepcopy(self.curves),
+            secondary={
+                k: deepcopy(v)
+                for k, v in self.secondary.items()
+                if k != "Global" and any(v.values())
+            },
             hsl=hsl if any(hsl.values()) else {},
         )
         self.populate(grade)
@@ -159,8 +173,10 @@ class ColorPanel(QWidget):
             field.setValue(grade[key])
         self.curves = deepcopy(grade.get("curves", {}))
         self.show_curve()
-        for key, field in self.hsl_fields.items():
-            field.setValue(grade.get("hsl", {}).get(key, 0.0))
+        self.secondary = deepcopy(grade.get("secondary", {}))
+        self.secondary["Global"] = deepcopy(grade.get("hsl", {}))
+        self.active_hue_range = self.hue_range.currentText()
+        self.restore_hue_range()
         self.sync_wheels()
         self.lut_path = grade["lut_path"]
         self.lut_sha = grade["lut_sha256"]
@@ -214,3 +230,18 @@ class ColorPanel(QWidget):
     def reset_curve(self):
         self.curves.pop(self.channel.currentText(), None)
         self.show_curve()
+
+    def store_hue_range(self):
+        self.secondary[self.active_hue_range] = {
+            key: field.value() for key, field in self.hsl_fields.items()
+        }
+
+    def restore_hue_range(self):
+        values = self.secondary.get(self.active_hue_range, {})
+        for key, field in self.hsl_fields.items():
+            field.setValue(values.get(key, 0.0))
+
+    def switch_hue_range(self, name):
+        self.store_hue_range()
+        self.active_hue_range = name
+        self.restore_hue_range()
