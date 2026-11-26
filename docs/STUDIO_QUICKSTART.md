@@ -210,3 +210,31 @@ Windows/Linux/macOS jobs. This verifies that revision only. Run 45740805406
 (`42956c9`) is still in progress; later library revisions await their own native
 results. Physical device audio-sync/permission QA remains NOT RUN. The count is
 still 20 original compositions plus 50 licensed illustrations, not 50 packs.
+
+
+### Fifty original offline title-scene designs
+
+The Motion graphics catalog now contains **50 original compositions**: 20 prior
+designs plus 30 new authored illustrations (film, laptop, phone, satellite, robot,
+battery, shield, lock, key, compass, globe, clock, calendar, trophy, dumbbell,
+football, basketball, music, piano, headphones, palette, bulb, umbrella, anchor,
+sailboat, train, gift, diamond, leaf and butterfly). These are distinct drawings,
+not 30 palette-only variants. The new scenes include separate illustration and
+panel PNG assets as well as the composed RGBA plate.
+
+Every design has a CC0 offline `.pack.json` describing title/subtitle/logo slots,
+defaults and fade/slide animations. **Export selected original offline pack ZIP**
+in the native panel exports the actual plate/components, editable recipe, license
+and usage note, refusing to overwrite an existing file. Installed fonts, user
+logos and third-party library illustrations are not redistributed inside these
+original-design ZIPs. The 50 Apache-2.0 downloaded illustrations remain a separate
+optional library, not part of the original-pack count.
+
+Actual tests render all **50 designs with both animations**, inspect alpha and
+frame count, validate all editable slot bounds, verify all 50 ZIP archives and
+manifests, reconstruct the 30 component-based plates, and test no-overwrite.
+Full local regression: **698 passed, 15 skipped**. These are complete editable
+**title-scene design packs**, not stock-video/music bundles or arbitrarily layered
+After Effects-style projects. Full professional-editor acceptance, physical
+speaker/display/permission QA and exact-revision native release remain separate
+gates; no stable-complete release claim is made by this increment.

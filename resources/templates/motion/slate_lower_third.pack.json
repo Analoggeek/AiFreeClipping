@@ -1,0 +1,43 @@
+{
+  "id": "slate_lower_third",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Slate lower third",
+    "asset": "slate_lower_third.png",
+    "title_box": [
+      84,
+      962,
+      440,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      1044,
+      440,
+      70
+    ],
+    "logo_box": [
+      548,
+      968,
+      88,
+      88
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#818CF8"
+  },
+  "defaults": {
+    "title": "Slate lower third",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

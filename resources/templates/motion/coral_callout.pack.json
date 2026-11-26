@@ -1,0 +1,43 @@
+{
+  "id": "coral_callout",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Coral callout",
+    "asset": "coral_callout.png",
+    "title_box": [
+      84,
+      222,
+      440,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      304,
+      440,
+      70
+    ],
+    "logo_box": [
+      548,
+      228,
+      88,
+      88
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#FB7185"
+  },
+  "defaults": {
+    "title": "Coral callout",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

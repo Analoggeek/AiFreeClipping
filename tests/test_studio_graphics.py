@@ -30,7 +30,7 @@ def spec(template):
 
 def test_all_original_asset_plates_render_both_animations_with_real_alpha(tmp_path):
     catalog = graphic_catalog()
-    assert len(catalog) == 20
+    assert len(catalog) == 50
     for key in catalog:
         for animation in ("fade", "slide"):
             settings = spec(key)
@@ -110,3 +110,49 @@ def test_asset_catalog_is_original_unique_rgba_with_valid_editable_slots():
                 x, y, w, h = entry[slot]
                 assert 0 <= x < x + w <= image.width and 0 <= y < y + h <= image.height
     assert len(hashes) == len(catalog)
+
+
+def test_fifty_pack_manifests_and_separate_scene_artwork():
+    import json
+    from clipos.core.resources import resource_dir
+
+    root = resource_dir("templates") / "motion"
+    for key, entry in graphic_catalog().items():
+        pack = json.loads((root / (key + ".pack.json")).read_text())
+        assert pack["id"] == key and pack["design"] == entry
+        assert pack["license"] == "CC0-1.0"
+        assert pack["editable"] == ["title", "subtitle", "logo"]
+        if key.startswith("scene_"):
+            with (
+                Image.open(root / entry["artwork"]) as art,
+                Image.open(root / entry["panel"]) as panel,
+                Image.open(root / entry["asset"]) as plate,
+            ):
+                composed = Image.alpha_composite(panel, art)
+                assert composed.tobytes() == plate.tobytes()
+
+
+def test_all_fifty_original_design_packs_export_with_recipe_license_and_no_overwrite(
+    tmp_path,
+):
+    import json, zipfile
+    from clipos.video.studio_graphics import export_graphic_pack
+
+    for key, entry in graphic_catalog().items():
+        path = tmp_path / (key + ".zip")
+        export_graphic_pack(key, path)
+        with zipfile.ZipFile(path) as archive:
+            assert archive.testzip() is None
+            manifest = json.loads(archive.read("pack.json"))
+            assert manifest["id"] == key and manifest["design"] == entry
+            assert entry["asset"] in archive.namelist()
+            assert "CC0-1.0" in archive.read("LICENSE.txt").decode()
+            if key.startswith("scene_"):
+                assert (
+                    entry["artwork"] in archive.namelist()
+                    and entry["panel"] in archive.namelist()
+                )
+        before = path.read_bytes()
+        with pytest.raises(FileExistsError):
+            export_graphic_pack(key, path)
+        assert path.read_bytes() == before

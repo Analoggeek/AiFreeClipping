@@ -27,7 +27,7 @@ class GraphicsPanel(QWidget):
         self.logo_sha = ""
         layout = QVBoxLayout(self)
         label = QLabel(
-            "Original asset-based graphics · twenty original transparent compositions with editable title/subtitle/logo and fade/slide animation. Generated alpha MOV media is preserved with project references. This is a small real pack, not 50 complete motion-graphics packs."
+            "Original asset-based graphics · fifty original transparent compositions with editable title/subtitle/logo and fade/slide animation. Generated alpha MOV media is preserved with project references. Each has editable title/subtitle/logo and an offline CC0 design manifest. These are title-scene packs, not stock-footage or arbitrary layered motion-design projects."
         )
         label.setWordWrap(True)
         layout.addWidget(label)
@@ -91,6 +91,7 @@ class GraphicsPanel(QWidget):
         self.logo.setWordWrap(True)
         layout.addWidget(self.logo)
         for title, fn in [
+            ("Export selected original offline pack ZIP…", self.export_pack),
             ("Choose local logo…", self.choose_logo),
             ("Clear logo", self.clear_logo),
             ("Add graphic at timeline cursor", self.add),
@@ -326,4 +327,26 @@ class GraphicsPanel(QWidget):
             job,
             done,
             "Downloading licensed illustration library (verified files remain offline)…",
+        )
+
+    def export_pack(self):
+        from ...video.studio_graphics import export_graphic_pack
+
+        key = self.template.currentData()
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export original offline design pack",
+            key + ".zip",
+            "ZIP design pack (*.zip)",
+        )
+        if not path:
+            return
+
+        def done(result):
+            self.studio.status.setText("Original design pack exported: " + result)
+
+        self.studio._background(
+            lambda worker: export_graphic_pack(key, path),
+            done,
+            "Packaging original offline assets…",
         )

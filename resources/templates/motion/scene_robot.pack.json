@@ -1,0 +1,46 @@
+{
+  "id": "scene_robot",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Robot lab",
+    "asset": "scene_robot.png",
+    "artwork": "scene_robot.art.png",
+    "panel": "scene_robot.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "defaults": {
+    "title": "Robot lab",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

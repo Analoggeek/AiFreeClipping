@@ -1,0 +1,46 @@
+{
+  "id": "scene_football",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Football match",
+    "asset": "scene_football.png",
+    "artwork": "scene_football.art.png",
+    "panel": "scene_football.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "defaults": {
+    "title": "Football match",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

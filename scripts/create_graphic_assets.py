@@ -132,6 +132,24 @@ def build():
     from illustrated_graphic_assets import build_illustrated
 
     catalog.update(build_illustrated(ROOT))
+    from scene_graphic_assets import build_scenes
+
+    catalog.update(build_scenes(ROOT))
+    for key, entry in catalog.items():
+        pack = {
+            "id": key,
+            "license": "CC0-1.0",
+            "design": entry,
+            "defaults": {
+                "title": entry["name"],
+                "subtitle": "Your subtitle",
+                "animation": "fade",
+                "duration": 3.0,
+            },
+            "editable": ["title", "subtitle", "logo"],
+            "animations": ["fade", "slide"],
+        }
+        (ROOT / (key + ".pack.json")).write_text(json.dumps(pack, indent=2) + "\n")
     (ROOT / "catalog.json").write_text(json.dumps(catalog, indent=2) + "\n")
 
 

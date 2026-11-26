@@ -1,0 +1,43 @@
+{
+  "id": "split_interview",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Split interview",
+    "asset": "split_interview.png",
+    "title_box": [
+      84,
+      936,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      1042,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      954,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#38BDF8"
+  },
+  "defaults": {
+    "title": "Split interview",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

@@ -486,5 +486,815 @@
     "title_color": "#F1F5F9",
     "subtitle_color": "#67E8F9",
     "category": "Illustrated scenes"
+  },
+  "scene_film": {
+    "name": "Film premiere",
+    "asset": "scene_film.png",
+    "artwork": "scene_film.art.png",
+    "panel": "scene_film.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_laptop": {
+    "name": "Digital workspace",
+    "asset": "scene_laptop.png",
+    "artwork": "scene_laptop.art.png",
+    "panel": "scene_laptop.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_phone": {
+    "name": "Mobile story",
+    "asset": "scene_phone.png",
+    "artwork": "scene_phone.art.png",
+    "panel": "scene_phone.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_satellite": {
+    "name": "Satellite signal",
+    "asset": "scene_satellite.png",
+    "artwork": "scene_satellite.art.png",
+    "panel": "scene_satellite.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_robot": {
+    "name": "Robot lab",
+    "asset": "scene_robot.png",
+    "artwork": "scene_robot.art.png",
+    "panel": "scene_robot.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_battery": {
+    "name": "Energy update",
+    "asset": "scene_battery.png",
+    "artwork": "scene_battery.art.png",
+    "panel": "scene_battery.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_shield": {
+    "name": "Safety notice",
+    "asset": "scene_shield.png",
+    "artwork": "scene_shield.art.png",
+    "panel": "scene_shield.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_lock": {
+    "name": "Privacy matters",
+    "asset": "scene_lock.png",
+    "artwork": "scene_lock.art.png",
+    "panel": "scene_lock.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_key": {
+    "name": "Access unlocked",
+    "asset": "scene_key.png",
+    "artwork": "scene_key.art.png",
+    "panel": "scene_key.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_compass": {
+    "name": "Explore direction",
+    "asset": "scene_compass.png",
+    "artwork": "scene_compass.art.png",
+    "panel": "scene_compass.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_globe": {
+    "name": "World briefing",
+    "asset": "scene_globe.png",
+    "artwork": "scene_globe.art.png",
+    "panel": "scene_globe.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_clock": {
+    "name": "Time reminder",
+    "asset": "scene_clock.png",
+    "artwork": "scene_clock.art.png",
+    "panel": "scene_clock.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_calendar": {
+    "name": "Event calendar",
+    "asset": "scene_calendar.png",
+    "artwork": "scene_calendar.art.png",
+    "panel": "scene_calendar.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_trophy": {
+    "name": "Winner spotlight",
+    "asset": "scene_trophy.png",
+    "artwork": "scene_trophy.art.png",
+    "panel": "scene_trophy.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_dumbbell": {
+    "name": "Fitness session",
+    "asset": "scene_dumbbell.png",
+    "artwork": "scene_dumbbell.art.png",
+    "panel": "scene_dumbbell.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_football": {
+    "name": "Football match",
+    "asset": "scene_football.png",
+    "artwork": "scene_football.art.png",
+    "panel": "scene_football.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_basketball": {
+    "name": "Basketball court",
+    "asset": "scene_basketball.png",
+    "artwork": "scene_basketball.art.png",
+    "panel": "scene_basketball.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_music": {
+    "name": "Music release",
+    "asset": "scene_music.png",
+    "artwork": "scene_music.art.png",
+    "panel": "scene_music.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_piano": {
+    "name": "Piano lesson",
+    "asset": "scene_piano.png",
+    "artwork": "scene_piano.art.png",
+    "panel": "scene_piano.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_headphones": {
+    "name": "Listening room",
+    "asset": "scene_headphones.png",
+    "artwork": "scene_headphones.art.png",
+    "panel": "scene_headphones.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_palette": {
+    "name": "Creative studio",
+    "asset": "scene_palette.png",
+    "artwork": "scene_palette.art.png",
+    "panel": "scene_palette.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_bulb": {
+    "name": "Bright idea",
+    "asset": "scene_bulb.png",
+    "artwork": "scene_bulb.art.png",
+    "panel": "scene_bulb.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_umbrella": {
+    "name": "Weather update",
+    "asset": "scene_umbrella.png",
+    "artwork": "scene_umbrella.art.png",
+    "panel": "scene_umbrella.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_anchor": {
+    "name": "Harbor story",
+    "asset": "scene_anchor.png",
+    "artwork": "scene_anchor.art.png",
+    "panel": "scene_anchor.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_sailboat": {
+    "name": "Ocean journey",
+    "asset": "scene_sailboat.png",
+    "artwork": "scene_sailboat.art.png",
+    "panel": "scene_sailboat.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_train": {
+    "name": "Rail travel",
+    "asset": "scene_train.png",
+    "artwork": "scene_train.art.png",
+    "panel": "scene_train.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_gift": {
+    "name": "Gift announcement",
+    "asset": "scene_gift.png",
+    "artwork": "scene_gift.art.png",
+    "panel": "scene_gift.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "scene_diamond": {
+    "name": "Premium highlight",
+    "asset": "scene_diamond.png",
+    "artwork": "scene_diamond.art.png",
+    "panel": "scene_diamond.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      900,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1018,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      894,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#93C5FD"
+  },
+  "scene_leaf": {
+    "name": "Nature note",
+    "asset": "scene_leaf.png",
+    "artwork": "scene_leaf.art.png",
+    "panel": "scene_leaf.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      810,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      928,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      804,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#6EE7B7"
+  },
+  "scene_butterfly": {
+    "name": "Fresh beginning",
+    "asset": "scene_butterfly.png",
+    "artwork": "scene_butterfly.art.png",
+    "panel": "scene_butterfly.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
   }
 }

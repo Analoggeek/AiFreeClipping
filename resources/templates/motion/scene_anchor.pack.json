@@ -1,0 +1,46 @@
+{
+  "id": "scene_anchor",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Harbor story",
+    "asset": "scene_anchor.png",
+    "artwork": "scene_anchor.art.png",
+    "panel": "scene_anchor.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "defaults": {
+    "title": "Harbor story",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

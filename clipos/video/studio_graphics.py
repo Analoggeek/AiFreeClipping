@@ -223,3 +223,48 @@ def render_graphic(spec, output_dir, *, cancelled=None, progress=None):
         license_path.unlink(missing_ok=True)
         raise
     return output
+
+
+def export_graphic_pack(template_id, output):
+    """Package an original offline design and editable recipe without overwriting."""
+    import os
+    import zipfile
+
+    catalog = graphic_catalog()
+    if template_id not in catalog:
+        raise ValueError("Unknown graphic template")
+    root = resource_dir("templates") / "motion"
+    design = catalog[template_id]
+    manifest = json.loads((root / (template_id + ".pack.json")).read_text())
+    if manifest["design"] != design or manifest["license"] != "CC0-1.0":
+        raise ValueError("Invalid original pack manifest")
+    files = [design["asset"]] + [
+        design[key] for key in ("artwork", "panel") if key in design
+    ]
+    output = Path(output)
+    if output.suffix.lower() != ".zip":
+        raise ValueError("Choose a new .zip output")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp = tempfile.mkstemp(
+        prefix=".graphic-pack-", suffix=".zip", dir=output.parent
+    )
+    os.close(fd)
+    try:
+        with zipfile.ZipFile(temp, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+            for name in files:
+                if Path(name).name != name or not name.endswith(".png"):
+                    raise ValueError("Invalid pack asset path")
+                archive.write(root / name, name)
+            archive.writestr("pack.json", json.dumps(manifest, indent=2) + "\n")
+            archive.writestr(
+                "LICENSE.txt",
+                "Original artwork dedicated under CC0-1.0 to the extent permitted by law. No third-party art, user logos or fonts included.\nhttps://creativecommons.org/publicdomain/zero/1.0/\n",
+            )
+            archive.writestr(
+                "README.txt",
+                "Original offline title-scene design. pack.json records editable title/subtitle/logo slots, default timing and supported fade/slide animations. PNG art uses a 720x1280 transparent canvas. Render through Ai clipping PRO Motion graphics; ZIP is a design handoff, not an arbitrary third-party motion-project format. User logo and installed fonts are not redistributed.\n",
+            )
+        os.link(temp, output)
+    finally:
+        Path(temp).unlink(missing_ok=True)
+    return str(output)
