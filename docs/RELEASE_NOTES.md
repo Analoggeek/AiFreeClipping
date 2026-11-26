@@ -13,8 +13,9 @@ GitHub keeps binaries in the collapsible **Assets** section at the bottom of thi
 - **Linux AppImage:** [AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage) (441 MB)
 - **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.1.2-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-amd64.deb) (387 MB)
 - **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/manifest.json)
+- **macOS ZIP fallback:** [Intel](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-x64.zip) · [Apple Silicon](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-arm64.zip). Use the ZIP if Finder reports **Error code -36** while copying from the DMG.
 
-Each installer includes the Electron UI, Python engine, FFmpeg and icons. AI model weights are downloaded from inside the app on first use.
+Each installer includes the Electron UI, Python engine, FFmpeg and icons. AI model weights are downloaded from inside the app on first use. macOS images are built without signing, stripped of AppleDouble/extended-attribute metadata, and verified in CI by mounting the DMG and copying the `.app` with `ditto` before upload.
 
 ### Changes
 

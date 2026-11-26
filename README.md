@@ -55,7 +55,9 @@ Download the right installer from the [latest release](https://github.com/Analog
 | Linux AppImage | [AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage) |
 | Linux Debian/Ubuntu | [AI-Clipper-Pro-5.1.2-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-amd64.deb) |
 
-Verify a download with [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/SHA256SUMS.txt) (`sha256sum -c SHA256SUMS.txt`).
+A `.zip` build is published alongside each `.dmg` — if Finder ever reports **Error code -36** while copying the app out of the disk image, download the `.zip` instead, unzip it, and drag `AI Clipper Pro.app` to Applications.
+
+Verify a download with [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/SHA256SUMS.txt) (`sha256sum -c SHA256SUMS.txt`). If you still want to use the DMG, run `dot_clean /Volumes/AI\ Clipper\ Pro\ 5.1.2` in Terminal and retry the copy. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"`.
 
 ### 2. Run from source
 
