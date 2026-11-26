@@ -2,6 +2,22 @@
 
 ## v5.1.2 — stable downloads, compact HUD and root-level site
 
+### Download the installers
+
+GitHub keeps binaries in the collapsible **Assets** section at the bottom of this release. Use these direct links if you don't see it:
+
+- **Windows x64:** [AI-Clipper-Pro-5.1.2-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Windows-x64.exe) (299 MB)
+- **Windows ARM64:** [AI-Clipper-Pro-5.1.2-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Windows-arm64.exe) (305 MB)
+- **macOS Intel:** [AI-Clipper-Pro-5.1.2-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-x64.dmg) (285 MB)
+- **macOS Apple Silicon:** [AI-Clipper-Pro-5.1.2-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-arm64.dmg) (281 MB)
+- **Linux AppImage:** [AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage) (441 MB)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.1.2-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-amd64.deb) (387 MB)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/manifest.json)
+
+Each installer includes the Electron UI, Python engine, FFmpeg and icons. AI model weights are downloaded from inside the app on first use.
+
+### Changes
+
 - **Downloader fixed:** `JobManager.update()` now accepts positional progress/message arguments, so any legacy progress callback works. Download jobs no longer fail mid-run.
 - **Model downloads fixed:** the primary card button now downloads **and** installs directly in the app; external links use Electron's proper `openExternal` handler. API-key status reflects keys saved in Settings.
 - **Blank-screen guard:** React error boundary plus Electron renderer recovery reloads a crashed view instead of leaving an empty window.

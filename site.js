@@ -102,7 +102,7 @@
       const tag = release.tag_name || 'v5.1.0';
       const versionLine = document.getElementById('version-line');
       if (versionLine) {
-        versionLine.textContent = `Latest release ${tag} · installers include the app, Python engine and FFmpeg. Models install from inside the app.`;
+        versionLine.textContent = `Latest release ${tag} — direct installer links below (GitHub keeps binaries in the collapsible Assets panel). Includes the app, Python engine and FFmpeg; models install inside the app.`;
       }
       document.querySelectorAll('.platform-card[data-file]').forEach((card) => {
         const suffix = card.dataset.file;
@@ -114,7 +114,7 @@
         }
       });
     } catch (_) {
-      // Static fallback links already point to /releases/latest.
+      // Static fallback links already point straight to the v5.1.2 installer files.
     }
   })();
 })();
