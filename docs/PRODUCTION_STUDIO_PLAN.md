@@ -492,3 +492,15 @@ Full local regression: **698 passed, 15 skipped**. These are complete editable
 After Effects-style projects. Full professional-editor acceptance, physical
 speaker/display/permission QA and exact-revision native release remain separate
 gates; no stable-complete release claim is made by this increment.
+
+
+## v4.0.0 publication verified
+
+Release https://github.com/Analoggeek/AiFreeClipping/releases/tag/v4.0.0 is public
+(not draft/prerelease). Run 45747828123 succeeded for Windows, macOS Apple Silicon,
+macOS Intel and Linux, including native editing/E2E/frozen-bundle checks. The
+publication gate verified all seven versioned installer/archive assets. Release
+source is f0f1e2cca211b8df6774464c9b96eb7466578e16. Subsequent documentation-only
+changes promote published links; they do not change the binaries. Physical
+speaker/display sync, human permission-dialog QA and sustained device/GPU
+performance remain NOT RUN, as disclosed in the public release notes.

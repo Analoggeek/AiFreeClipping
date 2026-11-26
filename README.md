@@ -11,22 +11,23 @@ shape your captions, edit real timelines and export local files—without a mand
 cloud account, upload or subscription.
 
 **[Explore the website ↗](https://analoggeek.github.io/AiFreeClipping/)** ·
-**[Download v3.6.1 ↓](#download)** ·
+**[Download v4.0.0 ↓](#download)** ·
 **[Quick start](#quick-start)** ·
 **[What works](#features)** ·
 **[Support](https://github.com/Analoggeek/AiFreeClipping/issues)**
 
-**LATEST RELEASE: v3.6.1** · Windows · Apple Silicon · Intel Mac · Linux
+**LATEST RELEASE: v4.0.0** · Windows · Apple Silicon · Intel Mac · Linux
 
 </div>
 
 ---
 
-## v4.0.0 release build
+## v4.0.0 — published Studio release
 
-The integrated Studio release is being packaged for Windows x64, macOS Apple
-Silicon/Intel and Linux. **v3.6.1 remains the published download below until the
-v4.0.0 release has all seven nonempty installer/archive assets.**
+The integrated Studio release is published for Windows x64, macOS Apple
+Silicon/Intel and Linux. All four native build jobs and the seven-asset publication
+gate passed in [release run 45747828123](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45747828123).
+All seven installer/archive downloads below are published and nonempty.
 
 New in v4.0.0: Clip Queue and selective batch presets, shared composited playback,
 Caption Studio, timeline effects/transitions, verified LUT/curves/wheels/selective
@@ -45,16 +46,16 @@ are release limitations, not passed tests. See [release notes](RELEASE_NOTES.md)
 ## Download
 
 Choose your platform. Every link below is a direct download from the official
-**v3.6.1** release—no download manager or account required.
+**v4.0.0** release—no download manager or account required.
 
 | Your system | Installer | Alternative |
 | :--- | :--- | :--- |
-| **Windows 10 / 11 · x64** | [**Download EXE ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-Setup.exe) | — |
-| **macOS · Apple Silicon** | [**Download ARM64 DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-arm64.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-arm64.app.tar.gz) |
-| **macOS · Intel x86_64** | [**Download Intel DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-intel.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-intel.app.tar.gz) |
-| **Linux · Debian / Ubuntu amd64** | [**Download DEB ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS_3.6.1_amd64.deb) | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-linux-x86_64.zip) |
+| **Windows 10 / 11 · x64** | [**Download EXE ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-Setup.exe) | — |
+| **macOS · Apple Silicon** | [**Download ARM64 DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-4.0.0-arm64.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-arm64.app.tar.gz) |
+| **macOS · Intel x86_64** | [**Download Intel DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-4.0.0-intel.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-intel.app.tar.gz) |
+| **Linux · Debian / Ubuntu amd64** | [**Download DEB ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS_4.0.0_amd64.deb) | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-4.0.0-linux-x86_64.zip) |
 
-[Release notes & all seven assets ↗](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.6.1)
+[Release notes & all seven assets ↗](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v4.0.0)
 
 > **Which Mac build?** Open **Apple menu → About This Mac**. “Chip: Apple M…” means
 > Apple Silicon; “Processor: Intel…” means the Intel build. Asset/executable names
@@ -69,7 +70,7 @@ Choose your platform. Every link below is a direct download from the official
 - **Debian / Ubuntu:** open the DEB in your package manager, or use:
 
   ```bash
-  sudo apt install ./CLIPOS_3.6.1_amd64.deb
+  sudo apt install ./CLIPOS_4.0.0_amd64.deb
   ```
 
 Download only from the official release. Native signature integrity checks are
@@ -82,7 +83,7 @@ Follow official OS security guidance; do not disable security protections.
 
 [![Actual Ai clipping PRO reference-aligned Create clips dashboard](docs/assets/home.webp)](https://analoggeek.github.io/AiFreeClipping/#studio)
 
-*Actual v3.6.1 application capture. The empty recent-project list and model availability are genuine—not seeded demo data.*
+*Actual v4.0.0 application capture. The empty recent-project list and model availability are genuine—not seeded demo data.*
 
 ## Features
 
@@ -130,7 +131,7 @@ falls back to cue-level motion rather than fabricated synchronization.
 
 ![Actual multitrack validation project with caption, effect and dissolve lanes](docs/assets/editor.webp)
 
-Actual v3.6.1 application capture using generated red/blue validation footage—not
+Actual v4.0.0 application capture using generated red/blue validation footage—not
 user recordings. The purple blend is a real cross-dissolve, with ASS captions over
 video and a timed color-effect lane. The decoded preview is best-effort.
 
@@ -274,7 +275,7 @@ their own LGPL/GPL terms.
 **Local intelligence. Creative independence.**
 
 [Website](https://analoggeek.github.io/AiFreeClipping/) ·
-[Download](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.6.1) ·
+[Download](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v4.0.0) ·
 [Report an issue](https://github.com/Analoggeek/AiFreeClipping/issues)
 
 **Ai clipping PRO · by Analoggeek**
