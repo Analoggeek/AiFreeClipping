@@ -141,22 +141,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Create release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          mkdir -p release
+          gh release create "v$VERSION" --notes-file docs/RELEASE_NOTES.md --title "AI Clipper Pro v$VERSION" || true
+          gh release edit "v$VERSION" --notes-file docs/RELEASE_NOTES.md --title "AI Clipper Pro v$VERSION"
       - name: Download artifacts from selected runs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
+          set -o pipefail
           mkdir -p release
           IFS=',' read -ra RUNS <<< "${{ inputs.publish_from_runs }}"
           for raw in "${RUNS[@]}"; do
             id="$(echo "$raw" | tr -d '[:space:]')"
             [ -z "$id" ] && continue
-            echo "Downloading artifacts from run $id"
-            gh run download "$id" -D "release/.run-$id"
+            echo "Downloading artifacts from run $id" | tee -a "$GITHUB_STEP_SUMMARY"
+            gh run download "$id" -D "release/.run-$id" 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
           done
           find release -mindepth 2 -type f -exec cp -f {} release/ \;
           find release -mindepth 1 -type d -name '.run-*' -exec rm -rf {} +
-          ls -lh release
+          ls -lh release | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Checksums and manifest
         shell: bash
         run: |
@@ -166,12 +177,21 @@ jobs:
           find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
           printf '{"product":"AI Clipper Pro","author":"analoggeek","version":"%s","installers":%s}\n' \
             "$VERSION" "$(find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -printf '"%f",' | sed 's/,$//' | awk '{print "["$0"]"}')" > manifest.json
-      - name: Create release
+      - name: Upload release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           VERSION="${{ inputs.version }}"
           VERSION="${VERSION#v}"
-          gh release create "v$VERSION" release/* --generate-notes --title "AI Clipper Pro v$VERSION" || \
-            gh release upload "v$VERSION" release/* --clobber
+          for asset in release/*; do
+            echo "Uploading $(basename "$asset")" | tee -a "$GITHUB_STEP_SUMMARY"
+            for attempt in 1 2 3; do
+              if gh release upload "v$VERSION" "$asset" --clobber 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"; then
+                break
+              fi
+              [ "$attempt" = 3 ] && exit 1
+              sleep 10
+            done
+          done
+          gh release view "v$VERSION" --json assets --jq '.assets[].name' | tee -a "$GITHUB_STEP_SUMMARY"
