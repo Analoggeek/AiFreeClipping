@@ -96,7 +96,36 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
+
+      - name: Verify macOS DMG and ZIP
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          DMG="$(find release -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -n "$DMG"
+          echo "Verifying image: $DMG"
+          hdiutil verify "$DMG"
+          MOUNT="$(mktemp -d /tmp/aifreeclip-dmg.XXXXXX)"
+          COPY="$(mktemp -d /tmp/aifreeclip-copy.XXXXXX)"
+          cleanup() { hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true; rm -rf "$MOUNT" "$COPY"; }
+          trap cleanup EXIT
+          hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT"
+          APP="$(find "$MOUNT" -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "$APP"
+          # A failing ditto here is the exact failure that produces Finder error -36.
+          ditto "$APP" "$COPY/$(basename "$APP")"
+          test -n "$(find "$COPY" -path '*/Contents/MacOS/*' -type f -perm -u+x -print -quit)"
+          if find "$COPY" -name '._*' -o -name '.DS_Store' | grep -q .; then
+            echo "Unexpected AppleDouble metadata inside verified copy" >&2
+            exit 1
+          fi
+          ZIP="$(find release -maxdepth 1 -type f -name '*.zip' -print -quit)"
+          test -n "$ZIP"
+          unzip -tq "$ZIP"
+          echo "macOS artifacts verified: DMG mounts, .app copies cleanly, ZIP is intact."
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

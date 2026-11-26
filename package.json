@@ -42,6 +42,7 @@
       "output": "release",
       "buildResources": "brand"
     },
+    "afterPack": "scripts/after-pack-mac.cjs",
     "files": [
       "dist/**/*",
       "electron/**/*",
@@ -95,13 +96,30 @@
           "arch": [
             "arm64"
           ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64"
+          ]
         }
       ],
       "icon": "brand/icon.icns",
       "category": "public.app-category.video",
+      "identity": null,
       "hardenedRuntime": false,
       "gatekeeperAssess": false,
       "artifactName": "AI-Clipper-Pro-${version}-macOS-${arch}.${ext}"
+    },
+    "dmg": {
+      "sign": false,
+      "format": "UDZO"
     },
     "linux": {
       "target": [
