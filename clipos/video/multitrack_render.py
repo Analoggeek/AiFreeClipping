@@ -18,8 +18,14 @@ def graph(project,work_dir=None,window=None):
     duration=project.duration
     if not 0<duration<=21600:raise ValueError('Export duration must be within 0–6 hours')
     media={source.id:source for source in project.media}
-    active=[(lane,item) for lane in project.lanes if lane.enabled for item in lane.items
-            if window is None or (item.at < window[0]+window[1] and item.at+item.duration > window[0])]
+    enabled=[(lane,item) for lane in project.lanes if lane.enabled for item in lane.items]
+    duck_history=window is not None and any(lane.kind=='audio' and item.audio_role=='music' and item.ducking
+        and item.at<window[0]+window[1] and item.at+item.duration>window[0] for lane,item in enabled)
+    # Prior dialogue can still affect a music compressor's release envelope.
+    # Keep driver history for seek/window parity rather than resetting ducking.
+    active=[(lane,item) for lane,item in enabled if window is None or
+        (item.at < window[0]+window[1] and item.at+item.duration > window[0]) or
+        (duck_history and lane.kind=='audio' and item.audio_role=='dialogue' and item.at<window[0]+window[1])]
     if len(active)>64:raise ValueError('Current export supports at most 64 active items')
     for source_id in {item.media_id for lane,item in active if lane.kind in ('video','audio')}:
         source=media[source_id]
@@ -30,7 +36,7 @@ def graph(project,work_dir=None,window=None):
     inputs=[]
     parts=[f'color=c=black:s={project.width}x{project.height}:r={project.fps}:d={duration:.6f}[canvas]',
            f'anullsrc=r=48000:cl=stereo,atrim=duration={duration:.6f}[silence]']
-    base='[canvas]';audio=['[silence]'];input_index=0
+    base='[canvas]';audio=['[silence]'];input_index=0;audio_entries=[]
     for index,(lane,item) in enumerate(active):
         if lane.kind=='transition':continue
         if lane.kind=='effect':
@@ -65,7 +71,10 @@ def graph(project,work_dir=None,window=None):
             parts.append(f'[{stream}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},'
                 f'aresample=48000,aformat=channel_layouts=stereo,' + audio_filters(item.audio_effects) + audio_gain(item) +
                 f'atrim=duration={item.duration:.6f},' + audio_envelope(item) + f'adelay={delay}|{delay}[audio{index}]')
-            audio.append(f'[audio{index}]')
+            audio_entries.append((f'[audio{index}]',item.audio_role,item.ducking))
+    from .studio_audio import ducking_graph
+    duck_parts,processed_audio=ducking_graph(audio_entries,duration,dialogue_available=any(i.audio_role=='dialogue' for l in project.lanes if l.enabled and l.kind=='audio' for i in l.items))
+    parts.extend(duck_parts);audio.extend(processed_audio)
     # Compensate amix averaging; limit peaks without auto loudness boosting.
     parts.append(''.join(audio)+f'amix=inputs={len(audio)}:duration=first:dropout_transition=0,'
         f'volume={len(audio)},alimiter=limit=0.95:level=0[aout]')
@@ -140,7 +149,7 @@ def audio_preview_command(project,start):
     sources={source.id:source for source in project.media}
     inputs=[];labels=['[silence]']
     parts=[f'anullsrc=r=48000:cl=stereo,atrim=duration={duration:.6f}[silence]']
-    index=0
+    index=0;audio_entries=[]
     for lane in project.lanes:
         if not lane.enabled or lane.kind!='audio':continue
         for item in lane.items:
@@ -154,8 +163,11 @@ def audio_preview_command(project,start):
             inputs+=['-threads','2','-ss',f'{source_in:.6f}','-t',f'{length:.6f}','-i',source.path]
             parts.append(f'[{index}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},aresample=48000,'
                 f'aformat=channel_layouts=stereo,' + audio_filters(item.audio_effects) + audio_gain(item,offset) + audio_envelope(item,offset) + f'adelay={delay}|{delay}[p{index}]')
-            labels.append(f'[p{index}]');index+=1
+            audio_entries.append((f'[p{index}]',item.audio_role,item.ducking));index+=1
     if index>64:raise ValueError('Audio preview supports at most 64 items')
+    from .studio_audio import ducking_graph
+    duck_parts,processed_audio=ducking_graph(audio_entries,duration,dialogue_available=any(i.audio_role=='dialogue' for l in project.lanes if l.enabled and l.kind=='audio' for i in l.items))
+    parts.extend(duck_parts);labels.extend(processed_audio)
     parts.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0,'
         f'volume={len(labels)},alimiter=limit=0.95:level=0[pcm]')
     return [require_ffmpeg(),'-hide_banner','-nostdin','-v','error','-filter_complex_threads','2',*inputs,

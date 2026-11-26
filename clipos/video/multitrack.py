@@ -60,6 +60,8 @@ class Item:
     transition_mode: str = "dissolve_linear"
     audio_effects: list = field(default_factory=list)
     color_grade: dict = field(default_factory=dict)
+    audio_role: str = "dialogue"
+    ducking: dict = field(default_factory=dict)
     incoming_id: str = ""
     outgoing_id: str = ""
 
@@ -150,6 +152,9 @@ class MultitrackProject:
                 from .studio_color import validate_grade
                 validate_grade(item.color_grade)
                 if lane.kind!='video' and item.color_grade:raise ValueError('Color grading requires video items')
+                from .studio_audio import validate_ducking
+                validate_ducking(item.audio_role,item.ducking)
+                if lane.kind!='audio' and (item.audio_role!='dialogue' or item.ducking):raise ValueError('Audio roles/ducking require audio items')
                 from .studio_audio import validate_audio_effects
                 validate_audio_effects(item.audio_effects)
                 if lane.kind!='audio' and item.audio_effects:raise ValueError('Audio processors require an audio lane')
@@ -301,7 +306,7 @@ class MultitrackProject:
         return targets
 
     def change_item(self,lane_id,item_id,*,linked=False,**values):
-        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options','caption_words','effects','audio_effects','color_grade'}
+        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options','caption_words','effects','audio_effects','color_grade','audio_role','ducking'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)

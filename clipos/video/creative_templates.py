@@ -14,6 +14,9 @@ def templates():
     for family_index, (family, name, *_) in enumerate(FAMILIES):
         for variant, (treatment, title, *_) in enumerate(TREATMENTS):
             categories = deepcopy(DEFAULTS)
+            categories.pop(
+                "audio_routing", None
+            )  # Never relabel background music as dialogue through a visual recipe.
             # Restrained, deterministic looks; retain canvas-filling geometry.
             categories["color"].update(
                 brightness=[0.0, 0.015, 0.025, -0.01, 0.005][variant],

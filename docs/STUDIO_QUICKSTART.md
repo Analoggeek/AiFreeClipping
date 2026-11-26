@@ -64,3 +64,18 @@ recognition review. See [phase status](PRODUCTION_STUDIO_PLAN.md).
 - The current fixed-band controls are not a full parametric EQ UI, automatic
   voice reconstruction, automatic music ducking or a full color-wheels/curves
   grading suite. Review outputs before delivering them.
+
+## Automatic music ducking
+
+1. Identify source/dialogue audio items that should drive music attenuation.
+   Existing ordinary audio defaults to dialogue. Use Audio Routing to mark game
+   audio or sound effects **neutral**, and background music **music**.
+2. In Audio, choose music role and enable automatic ducking. Set threshold, ratio,
+   attack and release; Load audio role/ducking into inspector.
+3. Select current/selected/all/group targets carefully and Apply. Do not apply the
+   music role to your dialogue driver. Routing is its own checked category.
+4. Listen through composite playback or render a snapshot/export. Actual dialogue
+   signal controls music; the feature does not infer who is speaking.
+5. An enabled dialogue track is required. Silence between phrases releases the
+   attenuation. Read the saved project roles when troubleshooting; do not expect
+   a neutral track to drive ducking. Physical-device QA remains separate.

@@ -306,3 +306,10 @@ and independent background-audio import. These use the same selective preset and
 preview/export graph. Native macOS/Linux builds passed at `60350e0`; Windows found
 a non-seekable-pipe bug, now fixed locally and awaiting its native rerun. Physical
 audio-device sync and full motion-graphics asset packs are not certified/complete.
+
+Automatic music ducking is now implemented with explicit dialogue/music/neutral
+routing, measured dialogue sidechain control and adjustable threshold/ratio/
+attack/release. It is offline and separate from speaker detection. Native Windows,
+macOS and Linux builds passed at `8ccc387`; the newer ducking revision still needs
+its own native CI result. Physical speaker sync/performance and human permission
+UX remain unrun gates: [desktop acceptance checklist](docs/NATIVE_DESKTOP_ACCEPTANCE.md).

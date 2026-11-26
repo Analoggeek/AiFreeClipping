@@ -17,6 +17,7 @@ FIELDS = {
     "color": {"brightness", "contrast", "saturation"},
     "effects": {"effects"},
     "audio_effects": {"audio_effects"},
+    "audio_routing": {"audio_role", "ducking"},
     "color_grade": {"color_grade"},
     "transform": {"x", "y", "w", "h", "opacity", "rotation"},
     "audio": {"gain", "fade_in_fraction", "fade_out_fraction"},
@@ -26,6 +27,7 @@ DEFAULTS = {
     "color": {"brightness": 0.0, "contrast": 1.0, "saturation": 1.0},
     "effects": {"effects": []},
     "audio_effects": {"audio_effects": []},
+    "audio_routing": {"audio_role": "dialogue", "ducking": {}},
     "color_grade": {"color_grade": {}},
     "transform": {
         "x": 0.0,
@@ -82,9 +84,10 @@ class EditingPreset:
                         or not lo <= value <= hi
                     ):
                         raise ValueError("Invalid preset parameter: " + key)
-            if category == 'color_grade':
+            if category == "color_grade":
                 from .studio_color import validate_grade
-                validate_grade(values['color_grade'])
+
+                validate_grade(values["color_grade"])
             if category == "audio_effects":
                 from .studio_audio import validate_audio_effects
 
@@ -185,7 +188,10 @@ def apply_editing_preset(project, preset, media_ids):
                             and lane.kind == "video"
                         ):
                             updates.update(values)
-                        elif category == "audio_effects" and lane.kind == "audio":
+                        elif (
+                            category in ("audio_effects", "audio_routing")
+                            and lane.kind == "audio"
+                        ):
                             updates.update(values)
                         elif category == "audio" and lane.kind == "audio":
                             updates.update(

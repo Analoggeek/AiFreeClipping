@@ -296,3 +296,40 @@ exposure/balance, roundtripped saved grades, and drove native audio/LUT controls
 Physical speakers, long-session audio drift, GPU throughput, real human OS
 permission dialogs and full asset-based motion graphics remain unverified or
 unimplemented; none are claimed passed by this increment.
+
+## Explicit dialogue-driven automatic music ducking
+
+Native build run `45720086014` at `8ccc387` PASSED for Windows, Linux and macOS
+(the macOS job builds Intel and Apple Silicon). Thus the Windows non-seekable
+pipe fix passed its native streaming tests and installer build, not just Linux
+regression. This does not certify a physical audio output device or OS dialog.
+
+The Audio tab now assigns **dialogue**, **music** or **neutral** roles explicitly.
+Imported background audio defaults to music with ducking OFF. Generated/ordinary
+audio retains dialogue compatibility defaults; mark game/SFX as neutral if they
+must not drive a music compressor. This is signal routing, not speaker detection.
+
+For music, enable automatic ducking and set threshold dB, ratio, attack and release.
+Load Audio Routing into the inspector, choose targets and Apply. Dialogue signals
+are split into audible output plus a summed control bus; only that control bus
+attenuates enabled music. Neutral/game signals do not drive it. No duplicated
+voice is added to the audible mix. Missing enabled dialogue is an explicit error,
+not a fabricated successful ducking result. Voice-silent intervals leave music
+unattenuated, and seeks/windows retain prior driver history so compressor release
+is not silently reset. All processing uses the shared graph for streaming/export;
+legacy raw-audio preview has matching routing. Visual recipes never relabel music.
+
+Audio routing is a separate selective preset category, validates atomically,
+persists in assemblies, and supports undo. Threshold/ratio/time values are finite
+and bounded. No external service/model is involved.
+
+Full local regression: **686 passed, 15 skipped**, 57.31 seconds. Actual mixed PCM
+tests isolate the 1 kHz music tone from a 400 Hz dialogue driver and verify >50%
+attenuation during dialogue, >90% recovery in voice-silent intervals, and seek
+release-envelope parity. Window exports, saved routing, UI configuration and
+undo are covered. These are digital signal tests, NOT speaker-loopback tests.
+New native builds for this ducking revision are pending until CI reports them.
+
+Still unfinished: complete asset-based motion-graphics packs, full curves/wheels/
+HSL grading controls, physical audio latency/drift/throughput QA and human OS
+permission-dialog acceptance. Do not mark these complete based on build success.

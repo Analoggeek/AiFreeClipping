@@ -500,3 +500,37 @@ def test_native_audio_import_processing_and_color_lut_controls(native, tmp_path)
     page.audio_studio.load()
     page.editing.apply()
     assert page.project.lanes[-1].items[0].audio_effects[0]["kind"] == "bass"
+
+
+def test_native_explicit_music_role_and_ducking_configuration(native, tmp_path):
+    from clipos.video.multitrack import MultitrackProject, Media, Lane, Item
+
+    app, db, window, paths = native
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(
+        width=160,
+        height=90,
+        fps=10,
+        media=[Media("music", str(tmp_path / "music.wav"), 2, False, True)],
+        lanes=[
+            Lane(
+                "musiclane",
+                "Music",
+                "audio",
+                [Item("musicitem", "music", 0, 0, 2, audio_role="music")],
+            )
+        ],
+    )
+    page.draw_timeline()
+    page.timeline.setCurrentItem(page.timeline.topLevelItem(0).child(0))
+    audio = page.audio_studio
+    audio.role.setCurrentIndex(audio.role.findData("music"))
+    audio.duck_enabled.setChecked(True)
+    audio.load_routing()
+    page.editing.apply()
+    item = page.project.lanes[0].items[0]
+    assert item.audio_role == "music" and item.ducking["ratio"] == 6
+    assert page.editing.checks["audio_routing"].isChecked()
+    assert not page.editing.checks["audio_effects"].isChecked()
+    assert page.project.undo() and page.project.lanes[0].items[0].ducking == {}

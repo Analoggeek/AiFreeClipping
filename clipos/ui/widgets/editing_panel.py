@@ -59,9 +59,15 @@ class EditingPanel(QWidget):
             for key, value in values.items():
                 if key == "caption_options":
                     continue
-                if key in ("effects", "audio_effects", "color_grade"):
-                    field = QLineEdit("{}" if key == "color_grade" else "[]")
+                if key in ("effects", "audio_effects", "color_grade", "ducking"):
+                    field = QLineEdit(
+                        "{}" if key in ("color_grade", "ducking") else "[]"
+                    )
                     field.setPlaceholderText("Validated processing configuration JSON")
+                elif key == "audio_role":
+                    field = QComboBox()
+                    for role in ("dialogue", "music", "neutral"):
+                        field.addItem(role, role)
                 elif key == "caption_style":
                     field = QComboBox()
                     for style in CAPTION_STYLES.values():
@@ -123,9 +129,9 @@ class EditingPanel(QWidget):
             for key in defaults:
                 if key == "caption_options":
                     values[key] = deepcopy(self.caption_options)
-                elif key in ("effects", "audio_effects", "color_grade"):
+                elif key in ("effects", "audio_effects", "color_grade", "ducking"):
                     values[key] = json.loads(self.fields[key].text())
-                elif key == "caption_style":
+                elif key in ("caption_style", "audio_role"):
                     values[key] = self.fields[key].currentData()
                 else:
                     values[key] = self.fields[key].value()
@@ -181,20 +187,20 @@ class EditingPanel(QWidget):
         lane, item = self.studio.project.find(*target)
         category = {
             "video": ("color", "transform", "effects", "color_grade"),
-            "audio": ("audio", "audio_effects"),
+            "audio": ("audio", "audio_effects", "audio_routing"),
             "caption": ("captions",),
         }.get(lane.kind, ())
         if not category:
             raise ValueError("Select video, audio or caption item")
         for name in category:
             for key in DEFAULTS[name]:
-                if key in ("effects", "audio_effects", "color_grade"):
+                if key in ("effects", "audio_effects", "color_grade", "ducking"):
                     self.fields[key].setText(json.dumps(getattr(item, key)))
                 elif key == "caption_options":
                     self.caption_options = deepcopy(item.caption_options)
-                elif key == "caption_style":
+                elif key in ("caption_style", "audio_role"):
                     self.fields[key].setCurrentIndex(
-                        self.fields[key].findData(item.caption_style)
+                        self.fields[key].findData(getattr(item, key))
                     )
                 elif key.endswith("_fraction"):
                     self.fields[key].setValue(
@@ -261,11 +267,11 @@ class EditingPanel(QWidget):
             check.setChecked(category in preset.categories)
         for category, values in preset.categories.items():
             for key, value in values.items():
-                if key in ("effects", "audio_effects", "color_grade"):
+                if key in ("effects", "audio_effects", "color_grade", "ducking"):
                     self.fields[key].setText(json.dumps(value))
                 elif key == "caption_options":
                     self.caption_options = deepcopy(value)
-                elif key == "caption_style":
+                elif key in ("caption_style", "audio_role"):
                     self.fields[key].setCurrentIndex(self.fields[key].findData(value))
                 else:
                     self.fields[key].setValue(value)

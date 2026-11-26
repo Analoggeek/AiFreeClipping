@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QPushButton,
     QFileDialog,
+    QCheckBox,
+    QFormLayout,
 )
 from ...video.studio_audio import AUDIO_EFFECTS
 from ...video.multitrack import MultitrackProject
@@ -21,10 +23,39 @@ class AudioPanel(QWidget):
         self.studio = studio
         layout = QVBoxLayout(self)
         label = QLabel(
-            "Audio processing · fixed-band EQ, FFT noise reduction, compressor, limiter, echo and rumble filter. Load processors into Batch inspector, review targets and Apply. This is not AI voice reconstruction or automatic music ducking."
+            "Audio processing · fixed-band EQ, FFT noise reduction, compressor, limiter, echo and rumble filter. Load processors into Batch inspector, review targets and Apply. Music ducking follows explicitly marked dialogue signals, not inferred speakers. This is not AI voice reconstruction."
         )
         label.setWordWrap(True)
         layout.addWidget(label)
+        self.role = QComboBox()
+        for role in ("dialogue", "music", "neutral"):
+            self.role.addItem(role, role)
+        layout.addWidget(self.role)
+        self.duck_enabled = QCheckBox(
+            "Automatically duck this music from enabled dialogue tracks"
+        )
+        layout.addWidget(self.duck_enabled)
+        from ...video.studio_audio import DUCK_DEFAULTS
+
+        self.duck_fields = {}
+        form = QFormLayout()
+        limits = {
+            "threshold_db": (-60.0, 0.0),
+            "ratio": (1.0, 20.0),
+            "attack_ms": (1.0, 2000.0),
+            "release_ms": (10.0, 5000.0),
+        }
+        for key, value in DUCK_DEFAULTS.items():
+            field = QDoubleSpinBox()
+            field.setRange(*limits[key])
+            field.setDecimals(2)
+            field.setValue(value)
+            self.duck_fields[key] = field
+            form.addRow(key, field)
+        layout.addLayout(form)
+        routing_button = QPushButton("Load audio role / ducking into inspector")
+        routing_button.clicked.connect(lambda: studio.editing.run(self.load_routing))
+        layout.addWidget(routing_button)
         self.processor = QComboBox()
         for key, (name, *_) in AUDIO_EFFECTS.items():
             self.processor.addItem(name, key)
@@ -102,6 +133,11 @@ class AudioPanel(QWidget):
                     and any(item.media_id == media_id for item in lane.items)
                 )
             ]
+            for lane in draft.lanes:
+                if lane.kind == "audio":
+                    for item in lane.items:
+                        if item.media_id == media_id:
+                            item.audio_role = "music"
             draft.validate()
             return draft.to_dict()
 
@@ -123,3 +159,24 @@ class AudioPanel(QWidget):
                 self.studio.status.setText("Audio import failed: " + str(exc))
 
         self.studio._background(job, done, "Inspecting local background audio…")
+
+    def load_routing(self):
+        from ...video.studio_audio import validate_ducking
+
+        role = self.role.currentData()
+        settings = (
+            {key: field.value() for key, field in self.duck_fields.items()}
+            if self.duck_enabled.isChecked()
+            else {}
+        )
+        validate_ducking(role, settings)
+        panel = self.studio.editing
+        for key, check in panel.checks.items():
+            check.setChecked(key == "audio_routing")
+        panel.fields["audio_role"].setCurrentIndex(
+            panel.fields["audio_role"].findData(role)
+        )
+        panel.fields["ducking"].setText(json.dumps(settings))
+        self.studio.status.setText(
+            "Only Audio Routing checked. Select music targets and Apply. Enabled dialogue tracks drive real signal-based ducking; neutral audio does not."
+        )

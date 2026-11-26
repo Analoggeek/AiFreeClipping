@@ -15,6 +15,7 @@ def validate_overlay(lane, item, number):
     validate_audio_effects(item.audio_effects)
     from .studio_color import validate_grade
     validate_grade(item.color_grade)
+    if item.audio_role!='dialogue' or item.ducking:raise ValueError('Ducking requires audio items')
     if item.color_grade:raise ValueError('Color grading requires video items')
     if item.audio_effects:raise ValueError('Audio processors require audio items')
     if item.effects:raise ValueError('Layer effects require video items')
