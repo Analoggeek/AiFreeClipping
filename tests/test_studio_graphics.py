@@ -30,7 +30,7 @@ def spec(template):
 
 def test_all_original_asset_plates_render_both_animations_with_real_alpha(tmp_path):
     catalog = graphic_catalog()
-    assert len(catalog) == 3
+    assert len(catalog) == 12
     for key in catalog:
         for animation in ("fade", "slide"):
             settings = spec(key)
@@ -72,3 +72,23 @@ def test_logo_replacement_graphic_project_and_final_composite(media, tmp_path):
     with pytest.raises(ValueError, match="changed"):
         render_graphic(settings, tmp_path)
     assert graphic.is_file()
+
+
+def test_physical_sync_stimulus_has_digital_flash_and_click(tmp_path):
+    from scripts.create_av_sync_fixture import create
+
+    path = create(tmp_path / "sync.mov", 3)
+    with av.open(str(path)) as container:
+        frames = [f.to_ndarray(format="rgb24") for f in container.decode(video=0)]
+    assert len(frames) == 180
+    for n in range(180):
+        assert (frames[n].mean() > 240) == (n % 60 == 0)
+    with av.open(str(path)) as container:
+        audio = np.concatenate(
+            [f.to_ndarray().reshape(-1) for f in container.decode(audio=0)]
+        )
+    for second in range(3):
+        assert np.max(np.abs(audio[second * 48000 : second * 48000 + 480])) > 1000
+        assert np.max(np.abs(audio[second * 48000 + 500 : (second + 1) * 48000])) == 0
+    with pytest.raises(FileExistsError):
+        create(path, 3)

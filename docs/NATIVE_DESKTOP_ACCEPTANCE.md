@@ -20,3 +20,36 @@ Do not fill this table with simulated passes. Add device/OS/build revision,
 procedure, measured values, logs and explicit pass/fail when someone actually
 performs each gate. Full asset-based motion graphics and complete curves/wheels/
 HSL functionality are development requirements, not manual tests to be marked off.
+
+## Reproducible physical A/V sync protocol
+
+Generate the stimulus outside Git with the app environment:
+
+```sh
+python scripts/create_av_sync_fixture.py /absolute/local/path/av-sync.mov --seconds 300
+```
+
+The 60 FPS video flashes white for one frame at every integer second; PCM audio
+starts a 10 ms / 1 kHz click at that same source time. The adjacent JSON describes
+nominal events and explicitly marks physical QA NOT RUN. The generator refuses
+existing outputs. Automated tests verify all 180 frames and PCM intervals of a
+three-second fixture; this establishes stimulus integrity only.
+
+On each actual Windows/macOS machine:
+1. Record OS, CPU/GPU, build SHA, display refresh, audio output/device and sample
+   rate. Use the same display/audio route for calibration and app playback.
+2. Import the fixture, play composited preview, and capture display plus speaker
+   output with an external high-frame-rate camera/microphone or calibrated
+   photodiode/audio interface. Screen recording alone misses physical latency.
+3. Measure `audio click onset - visual flash onset` at seconds 5, 150 and 295.
+   Report raw and capture-path-corrected offsets in ms, measurement uncertainty,
+   and drift `offset(295)-offset(5)`. Do not assume capture latency is zero.
+4. Repeat after seeking to 140 seconds and after pause/resume. Export through
+   CPU and available GPU profiles and repeat playback of the exports separately.
+5. Suggested product acceptance gate: corrected absolute offset <= 50 ms and
+   drift <= 20 ms over five minutes, with no audible gaps. This is a proposed
+   gate, not a measured result or blanket certification.
+
+| Build / OS / device | Route / capture calibration | Start / middle / end ms | Seek / resume ms | Drift ms | Evidence | Result |
+| --- | --- | --- | --- | --- | --- | --- |
+| Not measured | Not measured | Not measured | Not measured | Not measured | None | NOT RUN |

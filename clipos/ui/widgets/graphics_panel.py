@@ -25,7 +25,7 @@ class GraphicsPanel(QWidget):
         self.logo_sha = ""
         layout = QVBoxLayout(self)
         label = QLabel(
-            "Original asset-based graphics · three transparent plates with editable title/subtitle/logo and fade/slide animation. Generated alpha MOV media is preserved with project references. This is a small real pack, not 50 complete motion-graphics packs."
+            "Original asset-based graphics · twelve original transparent compositions with editable title/subtitle/logo and fade/slide animation. Generated alpha MOV media is preserved with project references. This is a small real pack, not 50 complete motion-graphics packs."
         )
         label.setWordWrap(True)
         layout.addWidget(label)

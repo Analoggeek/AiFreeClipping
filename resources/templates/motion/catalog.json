@@ -70,5 +70,221 @@
     ],
     "title_color": "#FFFFFF",
     "subtitle_color": "#6EE7B7"
+  },
+  "split_interview": {
+    "name": "Split interview",
+    "asset": "split_interview.png",
+    "title_box": [
+      84,
+      936,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      1042,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      954,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#38BDF8"
+  },
+  "ribbon_headline": {
+    "name": "Ribbon headline",
+    "asset": "ribbon_headline.png",
+    "title_box": [
+      84,
+      186,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      292,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      204,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#FBBF24"
+  },
+  "bracket_quote": {
+    "name": "Bracket quote",
+    "asset": "bracket_quote.png",
+    "title_box": [
+      84,
+      456,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      562,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      474,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#C4B5FD"
+  },
+  "double_pill": {
+    "name": "Double pill",
+    "asset": "double_pill.png",
+    "title_box": [
+      84,
+      966,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      1072,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      984,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#5EEAD4"
+  },
+  "corner_frame": {
+    "name": "Corner frame",
+    "asset": "corner_frame.png",
+    "title_box": [
+      84,
+      216,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      322,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      234,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#F9A8D4"
+  },
+  "ticket_announcement": {
+    "name": "Ticket announcement",
+    "asset": "ticket_announcement.png",
+    "title_box": [
+      84,
+      516,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      622,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      534,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#FDE68A"
+  },
+  "diagonal_banner": {
+    "name": "Diagonal banner",
+    "asset": "diagonal_banner.png",
+    "title_box": [
+      84,
+      896,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      1002,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      914,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#7DD3FC"
+  },
+  "stacked_cards": {
+    "name": "Stacked cards",
+    "asset": "stacked_cards.png",
+    "title_box": [
+      84,
+      486,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      592,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      504,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#F0ABFC"
+  },
+  "orbit_end_card": {
+    "name": "Orbit end card",
+    "asset": "orbit_end_card.png",
+    "title_box": [
+      84,
+      856,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      962,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      874,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#A7F3D0"
   }
 }

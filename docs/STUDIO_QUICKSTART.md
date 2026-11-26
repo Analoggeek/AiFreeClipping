@@ -97,3 +97,20 @@ recognition review. See [phase status](PRODUCTION_STUDIO_PLAN.md).
 - Local regression: **689 passed, 15 skipped**. Native builds for this increment
   and physical speaker/desktop acceptance are not yet verified. This small pack
   does not fulfill the remaining request for complete asset-rich template packs.
+
+
+### Original graphics pack and sync QA tooling update
+
+Motion graphics now includes **12 original asset-backed compositions** (nine new
+geometric layouts), each with replaceable title, subtitle and verified local logo.
+All twelve are actually rendered with fade and slide in automated alpha tests.
+This is not a claim of 50 complete asset-rich packs.
+
+`python scripts/create_av_sync_fixture.py /local/path/sync.mov --seconds 300`
+creates a real 60 FPS flash / 48 kHz PCM click stimulus without overwriting media.
+See `docs/NATIVE_DESKTOP_ACCEPTANCE.md` for calibrated device measurement and result
+recording. Physical speaker/display QA remains **NOT RUN** in this sandbox.
+
+At inspection, commit `a404987` passed macOS packaging-integrity and website checks;
+installer run `45736934646` was pending with no jobs yet. Packaging-integrity is
+not native runtime/installer acceptance. New pack native results are also pending.

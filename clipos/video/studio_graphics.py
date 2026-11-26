@@ -34,7 +34,10 @@ def validate_graphic(spec):
         "fps",
     }:
         raise ValueError("Unsupported graphic configuration")
-    if spec["template"] not in ("slate_lower_third", "coral_callout", "mint_end_card"):
+    if (
+        not isinstance(spec["template"], str)
+        or spec["template"] not in graphic_catalog()
+    ):
         raise ValueError("Unknown graphic template")
     for key in ("title", "subtitle"):
         if not isinstance(spec[key], str) or len(spec[key]) > 200 or "\n" in spec[key]:
