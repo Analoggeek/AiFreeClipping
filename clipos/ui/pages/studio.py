@@ -271,6 +271,10 @@ class StudioPage(BasePage):
 
         self.color_studio = ColorPanel(self)
         self.tools.addTab(self.color_studio, "Color")
+        from ..widgets.graphics_panel import GraphicsPanel
+
+        self.graphics = GraphicsPanel(self)
+        self.tools.addTab(self.graphics, "Motion graphics")
         from ..widgets.transitions_panel import TransitionsPanel
 
         self.transitions = TransitionsPanel(self)

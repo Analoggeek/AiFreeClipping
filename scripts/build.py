@@ -335,6 +335,7 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
         ("resources/models", "resources/models"),
         ("resources/icons", "resources/icons"),
         ("resources/sounds", "resources/sounds"),
+        ("resources/templates", "resources/templates"),
     ]
     args = [
         venv_python(), "-m", "PyInstaller",

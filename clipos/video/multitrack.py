@@ -27,6 +27,7 @@ class Media:
     has_video: bool
     has_audio: bool
     queue_clip_id: int | None = None
+    graphic: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -121,6 +122,8 @@ class MultitrackProject:
             if type(media.has_video) is not bool or type(media.has_audio) is not bool:raise ValueError('Invalid source type')
             if media.queue_clip_id is not None and (type(media.queue_clip_id) is not int or media.queue_clip_id <= 0):
                 raise ValueError('Invalid generated clip reference')
+            from .studio_graphics import validate_graphic
+            validate_graphic(media.graphic)
             sources[media.id]=media
         groups={}
         for lane in self.lanes:

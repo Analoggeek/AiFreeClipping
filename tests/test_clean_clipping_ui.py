@@ -32,6 +32,7 @@ def native(tmp_path, monkeypatch):
 
     paths = AppPaths(tmp_path / "data")
     paths.ensure()
+    monkeypatch.setattr(config, "PATHS", paths)
     # Existing modules share this object in production. Override module references
     # in tests so decoding/exports never touch the developer's real library.
     for module in (

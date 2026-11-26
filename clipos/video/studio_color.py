@@ -22,6 +22,85 @@ GRADE_DEFAULTS = {
 }
 
 
+LEGACY_GRADE_KEYS = set(GRADE_DEFAULTS)
+GRADE_DEFAULTS.update(curves={}, hsl={})
+
+
+def validate_curves(curves):
+    if not isinstance(curves, dict) or not set(curves) <= {
+        "master",
+        "red",
+        "green",
+        "blue",
+    }:
+        raise ValueError("Choose master/red/green/blue curves")
+    for points in curves.values():
+        if not isinstance(points, list) or not 2 <= len(points) <= 16:
+            raise ValueError("Curves require 2–16 normalized points")
+        previous = -1.0
+        for point in points:
+            if not isinstance(point, (list, tuple)) or len(point) != 2:
+                raise ValueError("Invalid curve point")
+            if any(
+                type(v) not in (int, float) or not math.isfinite(v) or not 0 <= v <= 1
+                for v in point
+            ):
+                raise ValueError("Curve points must be finite and normalized")
+            if point[0] - previous < 0.000001:
+                raise ValueError("Curve input coordinates must increase")
+            previous = point[0]
+        if points[0][0] != 0 or points[-1][0] != 1:
+            raise ValueError("Curves must include input endpoints 0 and 1")
+    return curves
+
+
+def validate_hsl(hsl):
+    if not isinstance(hsl, dict):
+        raise ValueError("Global HSL must be an object")
+    if not hsl:
+        return hsl
+    if set(hsl) != {"hue", "saturation", "lightness"}:
+        raise ValueError("Incomplete global HSL controls")
+    for key, value in hsl.items():
+        bound = 180 if key == "hue" else 1
+        if (
+            type(value) not in (int, float)
+            or not math.isfinite(value)
+            or not -bound <= value <= bound
+        ):
+            raise ValueError("HSL out of range: " + key)
+    return hsl
+
+
+def hsl_filter(hsl, work_dir):
+    import colorsys
+
+    if work_dir is None:
+        raise ValueError("HSL rendering requires an isolated work directory")
+    size = 33
+    signature = hashlib.sha256(repr(sorted(hsl.items())).encode()).hexdigest()
+    path = Path(work_dir) / ("hsl-" + signature + ".cube")
+    if not path.exists():
+        lines = [f"LUT_3D_SIZE {size}"]
+        for blue in range(size):
+            for green in range(size):
+                for red in range(size):
+                    h, l, s = colorsys.rgb_to_hls(
+                        red / (size - 1), green / (size - 1), blue / (size - 1)
+                    )
+                    rgb = colorsys.hls_to_rgb(
+                        (h + hsl["hue"] / 360) % 1,
+                        max(0, min(1, l + hsl["lightness"])),
+                        max(0, min(1, s * (1 + hsl["saturation"]))),
+                    )
+                    lines.append(" ".join(f"{v:.9f}" for v in rgb))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    from .renderer import _escape_ass_path
+
+    return f"lut3d=file='{_escape_ass_path(path)}':interp=tetrahedral"
+
+
 def read_cube(path):
     path = Path(path).expanduser().resolve()
     if path.suffix.lower() != ".cube" or not path.is_file():
@@ -75,9 +154,11 @@ def validate_grade(grade):
         raise ValueError("Color grade must be an object")
     if not grade:
         return grade
-    if set(grade) != set(GRADE_DEFAULTS):
+    if not LEGACY_GRADE_KEYS <= set(grade) or not set(grade) <= set(GRADE_DEFAULTS):
         raise ValueError("Incomplete or unsupported color grading parameters")
-    for key in GRADE_DEFAULTS:
+    validate_curves(grade.get("curves", {}))
+    validate_hsl(grade.get("hsl", {}))
+    for key in LEGACY_GRADE_KEYS:
         if key in ("lut_path", "lut_sha256"):
             continue
         value = grade[key]
@@ -133,6 +214,16 @@ def grade_filters(grade, work_dir=None):
     ]
     if balances:
         filters.append("colorbalance=" + ":".join(balances))
+    curves = grade.get("curves", {})
+    if curves:
+        definitions = []
+        for channel, points in curves.items():
+            definitions.append(
+                channel + "='" + " ".join(f"{x:.8f}/{y:.8f}" for x, y in points) + "'"
+            )
+        filters.append("curves=" + ":".join(definitions))
+    if grade.get("hsl"):
+        filters.append(hsl_filter(grade["hsl"], work_dir))
     if grade["lut_path"]:
         if work_dir is None:
             raise ValueError("LUT rendering requires an isolated work directory")

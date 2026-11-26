@@ -80,3 +80,37 @@ def test_exposure_balance_and_grade_roundtrip(media, tmp_path):
     bad.write_text("LUT_3D_SIZE 2\n0 0 0\n")
     with pytest.raises(ValueError):
         read_cube(bad)
+
+
+def test_legacy_grade_accepts_optional_curves_and_global_hsl_reaches_pixels(
+    media, tmp_path
+):
+    from clipos.video.studio_color import LEGACY_GRADE_KEYS, validate_curves
+
+    legacy = {key: deepcopy(GRADE_DEFAULTS[key]) for key in LEGACY_GRADE_KEYS}
+    validate_grade(legacy)
+    p = MultitrackProject(width=160, height=90, fps=10)
+    mid = p.import_media(media[0])
+    grade = deepcopy(GRADE_DEFAULTS)
+    grade["curves"] = {"master": [[0.0, 0.0], [0.5, 0.75], [1.0, 1.0]]}
+    grade["hsl"] = {"hue": 120.0, "saturation": 0.0, "lightness": 0.0}
+    apply_editing_preset(
+        p, EditingPreset("Green curve", {"color_grade": {"color_grade": grade}}), {mid}
+    )
+    output = tmp_path / "curve-hsl.mp4"
+    export_project(p, output, tmp_path / "work", encoder="cpu")
+    pixel = decode(output)[5, 5]
+    assert pixel[1] > pixel[2] + 100 and pixel[1] > pixel[0] + 100
+    stream = stream_frames(p, max_size=160)
+    try:
+        rgb = next(data for kind, _, data in stream if kind == "video")
+        assert rgb[5, 5, 1] > rgb[5, 5, 0] + 100
+    finally:
+        stream.close()
+    saved = tmp_path / "curves.json"
+    p.save(saved)
+    assert MultitrackProject.load(saved).to_dict() == p.to_dict()
+    with pytest.raises(ValueError):
+        validate_curves({"master": [[0.0, 0.0], [0.5, 0.4], [0.5, 0.9], [1.0, 1.0]]})
+    with pytest.raises(ValueError):
+        validate_curves({"red": [[0.0, 0.0], [1.0, float("nan")]]})

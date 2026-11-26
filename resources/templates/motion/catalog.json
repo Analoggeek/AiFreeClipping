@@ -1,0 +1,74 @@
+{
+  "slate_lower_third": {
+    "name": "Slate lower third",
+    "asset": "slate_lower_third.png",
+    "title_box": [
+      84,
+      962,
+      440,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      1044,
+      440,
+      70
+    ],
+    "logo_box": [
+      548,
+      968,
+      88,
+      88
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#818CF8"
+  },
+  "coral_callout": {
+    "name": "Coral callout",
+    "asset": "coral_callout.png",
+    "title_box": [
+      84,
+      222,
+      440,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      304,
+      440,
+      70
+    ],
+    "logo_box": [
+      548,
+      228,
+      88,
+      88
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#FB7185"
+  },
+  "mint_end_card": {
+    "name": "Mint end card",
+    "asset": "mint_end_card.png",
+    "title_box": [
+      84,
+      492,
+      440,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      574,
+      440,
+      70
+    ],
+    "logo_box": [
+      548,
+      498,
+      88,
+      88
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#6EE7B7"
+  }
+}

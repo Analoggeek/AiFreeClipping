@@ -333,3 +333,21 @@ New native builds for this ducking revision are pending until CI reports them.
 Still unfinished: complete asset-based motion-graphics packs, full curves/wheels/
 HSL grading controls, physical audio latency/drift/throughput QA and human OS
 permission-dialog acceptance. Do not mark these complete based on build success.
+
+
+### Curves, wheels and original asset graphics (development branch)
+
+- Color panel now exposes draggable master/R/G/B natural-cubic curves,
+  linked shadows/midtones/highlights wheels and **global** HSL. Global HSL
+  is not selective hue-range grading. Legacy saved grades remain accepted.
+- Motion graphics panel adds three original transparent geometric plates with
+  editable title/subtitle and verified local raster logo. Fade/slide animations
+  render to real alpha MOV media; the shared compositor handles final export.
+  Select a generated graphic to reload/rebuild its settings. Older files remain
+  available for undo; keep generated media alongside project references.
+- Actual tests render all three plates with both animations, inspect alpha,
+  composite over source video, check logo-change rejection and saved settings;
+  curves/HSL tests inspect encoded and streaming pixels.
+- Local regression: **689 passed, 15 skipped**. Native builds for this increment
+  and physical speaker/desktop acceptance are not yet verified. This small pack
+  does not fulfill the remaining request for complete asset-rich template packs.
