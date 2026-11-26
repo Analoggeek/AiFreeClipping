@@ -1,0 +1,27 @@
+name: Diagnose Windows artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: List Windows installer files
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          for run_id in 45780158225; do
+            gh run download "$run_id" -D /tmp/artifacts --name aifreeclip-win-x64 --name aifreeclip-win-arm64 || true
+          done
+          {
+            echo '### Windows artifact files'
+            find /tmp/artifacts -maxdepth 2 -type f \( -name '*.exe' -o -name '*.yml' \) -printf '%p %s bytes\n' | sort
+          } > /tmp/artifact-report.md 2>&1
+          gh pr comment 176 --body-file /tmp/artifact-report.md || true
