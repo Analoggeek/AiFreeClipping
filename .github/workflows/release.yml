@@ -17,6 +17,10 @@ on:
           - win
           - mac
           - linux
+      publish_from_runs:
+        description: 'Comma-separated run IDs to publish (skips builds, e.g. 123,456)'
+        required: false
+        default: ''
   push:
     tags:
       - 'v*'
@@ -27,6 +31,7 @@ permissions:
 jobs:
   prepare:
     name: Resolve build matrix
+    if: ${{ inputs.publish_from_runs == '' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -45,6 +50,7 @@ jobs:
   build:
     name: ${{ matrix.platform }}-${{ matrix.arch }}
     needs: prepare
+    if: ${{ inputs.publish_from_runs == '' }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -102,7 +108,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs: build
-    if: ${{ inputs.only_platform == '' || inputs.only_platform == 'all' }}
+    if: ${{ (inputs.only_platform == '' || inputs.only_platform == 'all') && inputs.publish_from_runs == '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -125,6 +131,47 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          gh release create "v$VERSION" release/* --generate-notes --title "AI Clipper Pro v$VERSION" || \
+            gh release upload "v$VERSION" release/* --clobber
+
+  publish_existing:
+    name: Publish from existing runs
+    if: ${{ inputs.publish_from_runs != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download artifacts from selected runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          mkdir -p release
+          IFS=',' read -ra RUNS <<< "${{ inputs.publish_from_runs }}"
+          for raw in "${RUNS[@]}"; do
+            id="$(echo "$raw" | tr -d '[:space:]')"
+            [ -z "$id" ] && continue
+            echo "Downloading artifacts from run $id"
+            gh run download "$id" -D "release/.run-$id"
+          done
+          find release -mindepth 2 -type f -exec cp -f {} release/ \;
+          find release -mindepth 1 -type d -name '.run-*' -exec rm -rf {} +
+          ls -lh release
+      - name: Checksums and manifest
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          cd release
+          find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
+          printf '{"product":"AI Clipper Pro","author":"analoggeek","version":"%s","installers":%s}\n' \
+            "$VERSION" "$(find . -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -printf '"%f",' | sed 's/,$//' | awk '{print "["$0"]"}')" > manifest.json
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
           VERSION="${VERSION#v}"
           gh release create "v$VERSION" release/* --generate-notes --title "AI Clipper Pro v$VERSION" || \
             gh release upload "v$VERSION" release/* --clobber
