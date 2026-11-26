@@ -159,6 +159,8 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       sfx: settings.sound_effects ? ['whoosh', 'pop'] : [],
       speed: 1, brightness: 0, contrast: 0, saturation: 1,
       blur_background: true, watermark: true,
+      region: preview ? regions[preview.id]?.boxes?.[0]?.box || null : null,
+      regions: preview ? (regions[preview.id]?.boxes || []).map((item) => item.box) : [],
     };
   };
 

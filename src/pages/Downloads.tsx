@@ -20,6 +20,11 @@ export default function Downloads({ notify, openClipper }: PageProps) {
     api.media().then((result) => setMedia(result.media)).catch(() => undefined);
   }, []);
   useEffect(refresh, [refresh]);
+  useEffect(() => {
+    api.folders().then((result) => {
+      if (result.folders?.downloads) setFolder(result.folders.downloads);
+    }).catch(() => undefined);
+  }, []);
 
   const inspect = async () => {
     if (!url.trim()) return;
@@ -45,7 +50,10 @@ export default function Downloads({ notify, openClipper }: PageProps) {
   const pickFolder = async () => {
     if (!window.desktop) { notify('Folder picker is available in the desktop app.'); return; }
     const selected = await window.desktop.selectDirectory();
-    if (selected) setFolder(selected);
+    if (selected) {
+      setFolder(selected);
+      try { await api.setFolder('downloads', selected); notify('Download folder saved.'); } catch { /* keep working */ }
+    }
   };
 
   useEffect(() => {
@@ -90,7 +98,7 @@ export default function Downloads({ notify, openClipper }: PageProps) {
         {info && (
           <div className="info-card">
             <strong>{String(info.title || 'Resolved media')}</strong>
-            <div>{Object.entries(info).filter(([, value]) => typeof value !== 'object').slice(0, 6).map(([key, value]) => <Pill key={key}>{key}: {String(value)}</Pill>)}</div>
+            <div>{Object.entries(info || {}).filter(([, value]) => typeof value !== 'object').slice(0, 6).map(([key, value]) => <Pill key={key}>{key}: {String(value)}</Pill>)}</div>
           </div>
         )}
         <div className="panel-actions">

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Clapperboard, CloudDownload, Download, FolderOpen, LayoutDashboard, Library,
   ListVideo, LoaderCircle, MonitorPlay, Package, PlugZap, Settings, Sparkles, UploadCloud, WifiOff,
@@ -6,7 +6,7 @@ import {
 import logo from '../brand/logo-mark-3d.svg';
 import { api, apiBase } from './api';
 import type { HardwareInfo } from './types';
-import { Toast, useJobs } from './components/common';
+import { JobProgressList, Toast, useJobs } from './components/common';
 import ErrorBoundary from './components/ErrorBoundary';
 // Route-level splitting keeps the first paint fast while the engine starts.
 const Clipper = lazy(() => import('./pages/Clipper'));
@@ -35,11 +35,12 @@ export default function App() {
   const [page, setPage] = useState<PageId>('overview');
   const [toast, setToast] = useState('');
   const [online, setOnline] = useState(false);
-  const [version, setVersion] = useState('5.1.3');
+  const [version, setVersion] = useState('5.1.4');
   const [mediaSelection, setMediaSelection] = useState<string[]>([]);
   const [clipSelection, setClipSelection] = useState<string[]>([]);
   const [folder, setFolder] = useState('');
   const [hardware, setHardware] = useState<HardwareInfo | null>(null);
+  const autoSetupStarted = useRef(false);
   const { jobs } = useJobs();
   const notify = useCallback((message: string) => setToast(message), []);
 
@@ -54,6 +55,19 @@ export default function App() {
     const timer = window.setInterval(loadHardware, 4000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    if (!online || autoSetupStarted.current) return;
+    autoSetupStarted.current = true;
+    void api.settings().then((result) => {
+      if (result.values?.auto_setup_complete === '1') return;
+      void api.autoSetupModels()
+        .then((result) => {
+          if (result.job_id) notify('Hardware detected — downloading and activating your offline model pack in the background.');
+        })
+        .catch(() => undefined);
+    }).catch(() => undefined);
+  }, [online, notify]);
 
   const openClipper = (ids: string[]) => {
     setMediaSelection(ids);
@@ -105,12 +119,14 @@ export default function App() {
             </div>
           ))}
         </nav>
+        <JobProgressList jobs={jobs} />
         <div className="sidebar-hardware">
           <span className="nav-label">Hardware</span>
           <strong>{hardware?.gpu?.name || 'Detecting…'}</strong>
           <div className="mini-meter"><i style={{ width: `${hardware?.cpu_percent ?? 0}%` }} /><small>CPU {hardware?.cpu_percent ?? '—'}%</small></div>
           <div className="mini-meter"><i style={{ width: `${hardware?.ram_percent ?? 0}%` }} /><small>RAM {hardware?.ram_percent ?? '—'}%</small></div>
           <small className="hardware-foot">{hardware?.workers ?? 1} workers · {hardware?.disk_free_gb ?? '—'} GB free</small>
+          <small className="hardware-foot">App data: {hardware?.app_usage_gb ?? '—'} GB used</small>
         </div>
         <div className="sidebar-foot">
           <PlugZap size={15} className={online ? 'ok' : 'bad'} />

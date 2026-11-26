@@ -46,10 +46,20 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
 
       <Panel title="Local folders" subtitle="All media, projects and models live on this machine">
         <div className="folder-grid">
-          {Object.entries(folders).map(([key, value]) => (
+          {Object.entries(folders || {}).map(([key, value]) => (
             <div className="folder-card" key={key}>
               <FolderOpen size={17} /><div><strong>{key}</strong><small>{value}</small></div>
               <button className="chip-btn" onClick={() => window.desktop?.openPath(value)}>Open</button>
+              <button
+                className="chip-btn"
+                onClick={async () => {
+                  if (!window.desktop?.selectDirectory) { notify('Folder picker works in the desktop app.'); return; }
+                  const selected = await window.desktop.selectDirectory();
+                  if (!selected) return;
+                  try { await api.setFolder(key, selected); setFolders((await api.folders()).folders); notify(`${key} folder saved.`); }
+                  catch (error) { notify(String(error)); }
+                }}
+              >Change</button>
             </div>
           ))}
         </div>

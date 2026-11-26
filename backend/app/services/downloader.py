@@ -122,7 +122,8 @@ def register_file(path: Path, source_url: str = "", playlist_id: str | None = No
 async def download(request, job_id: str | None = None) -> dict[str, Any]:
     """Download one or many videos; returns inserted media rows."""
     yt_dlp = _require_ytdlp()
-    folder = Path(request.folder).expanduser() if request.folder else DOWNLOADS
+    configured = db.get_setting("download_folder", "")
+    folder = Path(request.folder or configured).expanduser() if (request.folder or configured) else DOWNLOADS
     folder.mkdir(parents=True, exist_ok=True)
     opts = _ydl_options(request, folder, job_id)
     if job_id:

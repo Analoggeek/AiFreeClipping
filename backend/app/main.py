@@ -8,6 +8,7 @@ import secrets
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -24,9 +25,9 @@ from .config import (
 from .db import db, dumps, now, uid
 from .jobs import jobs
 from .schemas import (
-    ApplyEffectsRequest, AssetDownloadRequest, AssetSearchRequest, ClipProposalRequest, DownloadRequest,
-    ExportAllRequest, ExportRequest, ImageRequest, ImportRequest, ModelInstallRequest,
-    ProjectCreate, ProjectUpdate, RegionSelection, RenderRequest, SettingsPatch,
+    ApplyEffectsRequest, AssetDownloadRequest, AssetSearchRequest, AutoEditRequest, ClipProposalRequest,
+    DownloadRequest, ExportAllRequest, ExportRequest, FolderPatch, ImageRequest, ImportRequest,
+    ModelInstallRequest, ProjectCreate, ProjectUpdate, RegionSelection, RenderRequest, SettingsPatch,
     TranscribeRequest, VisionRequest, YouTubeUploadRequest,
 )
 from .services import assets, downloader, images, llm, models, render, scoring, sfx, vision, youtube
@@ -408,6 +409,10 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
             raise RuntimeError("Clip not found")
         media = media_row(clip["media_id"])
         options = req.model_dump()
+        document = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata") or {}
+        focus = (document.get("regions") or [document.get("region")] or [None])[0]
+        if focus and not options.get("region"):
+            options["region"] = focus
         if req.captions is None:
             words: list[dict[str, Any]] = []
             for segment in last_analysis(clip["media_id"], "transcript").get("segments", []):
@@ -435,6 +440,67 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
         }
 
     return ok(job_id=jobs.run("render", work, payload.model_dump()))
+
+
+@app.post("/api/auto-edit")
+async def auto_edit(payload: AutoEditRequest):
+    """Apply the full local enhancement stack and render finished clips in one job."""
+    async def work(job_id: str, p: dict[str, Any]):
+        req = AutoEditRequest(**(p or {}))
+        total = max(len(req.clip_ids), 1)
+        outputs: list[dict[str, Any]] = []
+        for index, clip_id in enumerate(req.clip_ids):
+            row = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
+            if not row:
+                jobs.update(job_id, progress=round((index + 1) / total * 100, 1), message=f"Clip {index + 1}: not found")
+                continue
+            media = media_row(row["media_id"])
+            metadata = row.get("metadata") or {}
+            analysis = last_analysis(row["media_id"], "transcript") or {}
+            captions = []
+            for segment in analysis.get("segments", []):
+                for word in segment.get("words") or []:
+                    if row["start"] <= float(word.get("start", 0)) <= row["end"]:
+                        captions.append(word)
+            if not captions:
+                captions = [
+                    segment for segment in analysis.get("segments", [])
+                    if segment.get("start", 0) <= row["end"] and segment.get("end", 0) >= row["start"]
+                ]
+            focus = (metadata.get("regions") or [metadata.get("region")] or [None])[0]
+            options = {
+                "aspect": req.aspect, "resolution": "1080p",
+                "caption_style": {"preset": req.style, "position": "bottom"},
+                "captions": captions[:140],
+                "sfx": ["whoosh", "pop"],
+                "sticker": metadata.get("sticker"),
+                "speed": 1.04, "brightness": 0.02, "contrast": 0.05, "saturation": 1.08,
+                "blur_background": req.aspect == "9:16", "watermark": True,
+                "watermark_path": brand_asset("icon.png"),
+                "region": focus,
+                "source_width": media.get("width") or 1080,
+                "source_height": media.get("height") or 1920,
+            }
+            output = render.export_path(f"{row.get('title') or clip_id}_auto_edited")
+            jobs.update(job_id, progress=round(index / total * 100, 1), message=f"Auto-editing clip {index + 1}/{total}…")
+            await render.render_clip(
+                media["path"], float(row["start"]), float(row["end"]), output, options,
+                on_progress=lambda pct, msg, i=index: jobs.update(
+                    job_id,
+                    progress=round((i + (pct or 0) / 100) / total * 100, 1),
+                    message=f"Clip {i + 1}/{total}: {msg}",
+                ),
+            )
+            document = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata") or {}
+            document.update({
+                "status": "auto_edited", "output": output, "effects": options,
+                "hardware": hardware_info(), "auto_edited": True,
+            })
+            db.update("clips", "id", clip_id, {"status": "auto_edited", "output": output, "metadata": dumps(document)})
+            outputs.append({"clip_id": clip_id, "output": output})
+        return {"outputs": outputs, "count": len(outputs), "hardware": hardware_info()}
+
+    return ok(job_id=jobs.run("auto-edit", work, payload.model_dump()))
 
 
 @app.post("/api/exports/batch")
@@ -468,6 +534,7 @@ async def export_batch(payload: ExportAllRequest):
                     "contrast": effects.get("contrast", 0),
                     "saturation": effects.get("saturation", 1),
                     "blur_background": effects.get("blur_background", True),
+                    "region": (clip.get("regions") or [clip.get("region")] or [None])[0],
                 }
                 await render.render_clip(
                     media["path"], float(clip["start"]), float(clip["end"]), output, options,
@@ -636,6 +703,21 @@ async def install_recommended_models():
     return ok(job_id=jobs.run("model-install", work, {}))
 
 
+@app.post("/api/models/auto-setup")
+async def auto_setup_models():
+    last = float(db.get_setting("auto_setup_last_attempt", "0") or 0)
+    if time.time() - last < 6 * 3600 and db.get_setting("auto_setup_complete", "") != "1":
+        return ok(job_id="", skipped=True, message="Offline setup already attempted recently")
+    db.set_setting("auto_setup_last_attempt", str(time.time()))
+
+    async def work(job_id: str, _payload: dict[str, Any]):
+        return await models.auto_setup(
+            lambda pct, msg: jobs.update(job_id, progress=pct, message=msg)
+        )
+
+    return ok(job_id=jobs.run("model-install", work, {}))
+
+
 @app.delete("/api/models/{model_id}")
 async def remove_model(model_id: str):
     return ok(result=await models.uninstall(model_id))
@@ -683,12 +765,39 @@ def put_settings(payload: SettingsPatch):
     return ok(values=db.all_settings())
 
 
+def folder_map() -> dict[str, str]:
+    """Resolve the effective app folders, including user-chosen overrides."""
+    resolved = {
+        "downloads": str(DOWNLOADS), "exports": str(EXPORTS), "assets": str(ASSETS),
+        "cache": str(CACHE), "clips": str(CLIPS), "models": str(CACHE),
+    }
+    for key in ("downloads", "exports", "models", "clips"):
+        custom = db.get_setting(f"{key}_folder", "")
+        if custom:
+            resolved[key] = custom
+    return resolved
+
+
 @app.get("/api/folders")
 def folders():
-    return ok(
-        downloads=str(DOWNLOADS), exports=str(EXPORTS), assets=str(ASSETS),
-        cache=str(CACHE), clips=str(CLIPS),
-    )
+    return ok(folders=folder_map())
+
+
+@app.put("/api/folders")
+def set_folder(payload: FolderPatch):
+    from pathlib import Path as _Path
+
+    mapping = {
+        "downloads": "download_folder", "exports": "exports_folder",
+        "models": "models_folder", "clips": "clips_folder",
+    }
+    key = mapping.get(payload.key)
+    if not key:
+        raise ValueError(f"Unknown folder: {payload.key}")
+    target = _Path(payload.path).expanduser()
+    target.mkdir(parents=True, exist_ok=True)
+    db.set_setting(key, str(target))
+    return ok(folders=folder_map())
 
 
 def main() -> None:
