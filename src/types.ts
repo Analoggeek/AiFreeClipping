@@ -67,6 +67,7 @@ export type HardwareInfo = {
   ram_used_gb: number | null;
   ram_total_gb: number | null;
   disk_free_gb: number | null;
+  app_usage_gb?: number;
   gpu: { cuda: boolean; metal: boolean; name?: string; note?: string };
   workers: number;
   encoder: string;

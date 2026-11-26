@@ -23,7 +23,9 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 - **One connected workflow** — download → analyse → clip → enhance → publish.
 - **Professional editor** — multi-track timeline, captions, stickers, sound effects, stock media and AI image generation.
 - **Hardware aware** — uses NVENC / Apple VideoToolbox when available, otherwise optimized libx264; CPU/RAM/GPU usage lives in the sidebar.
-- **Automatic models** — one click downloads, installs, activates and saves a model (including the Ollama runtime); API-only services open their key page directly.
+- **Automatic models** — on first launch the app detects your RAM/GPU and downloads, activates and saves the best offline model pack; API-only services open their key page directly.
+- **Your folders, your rules** — choose where models, downloaded videos and rendered clips go; every download uses the bundled CA store, so certificate errors do not stop setup.
+- **Automatic edit** — cut clips appear in the editor and can be auto-enhanced (captions, focus crops, motion, SFX, stickers) and rendered in one job.
 
 > The marketing website is the repository root [`index.html`](index.html). The desktop app entry is [`app.html`](app.html).
 
@@ -35,7 +37,7 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 | **Understand** | faster-whisper word timings, YOLOX Nano ONNX + ByteTrack-style tracking (Torch-free in packaged builds), scene changes and Gemma 2 7B reranking. |
 | **Clip** | Several non-overlapping viral candidates from one source or a batch of videos. Mark multiple regions in one clip — gameplay above/player below, square player over full gameplay, side-by-side — and the AI scores all of them. |
 | **Enhance** | Four caption presets, procedural royalty-free SFX, music beds, stickers, blurred-background 9:16 reframing, speed/color controls and branding. |
-| **Edit** | CapCut-style timeline with video/caption/sticker/audio tracks, split/trim/inspector, external imports, Pexels/Pixabay/Openverse search and Nano Banana / ComfyUI art. |
+| **Edit** | CapCut-style timeline with video/caption/sticker/audio tracks, split/trim/inspector, external imports, Pexels/Pixabay/Openverse search, Nano Banana / SDXL art and an always-available offline art fallback. |
 | **Publish** | Parallel 1080p exports with `+faststart`, direct downloads, and optional resumable YouTube uploads with your own OAuth app. |
 
 ## Quick start
@@ -44,20 +46,20 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 
 Download the right installer from the [latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest) and open it. The engine, FFmpeg and icons are bundled. Model weights install from the app's **Local Models** page.
 
-**Direct v5.1.3 downloads** (even if the GitHub **Assets** panel is collapsed, these links go straight to the files):
+**Direct v5.1.4 downloads** (even if the GitHub **Assets** panel is collapsed, these links go straight to the files):
 
 | Platform | Direct installer |
 |---|---|
-| Windows x64 | [AI-Clipper-Pro-5.1.3-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-Windows-x64.exe) |
-| Windows ARM64 | [AI-Clipper-Pro-5.1.3-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-Windows-arm64.exe) |
-| macOS Intel | [AI-Clipper-Pro-5.1.3-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-macOS-x64.dmg) |
-| macOS Apple Silicon | [AI-Clipper-Pro-5.1.3-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-macOS-arm64.dmg) |
-| Linux AppImage | [AI-Clipper-Pro-5.1.3-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-Linux-x86_64.AppImage) |
-| Linux Debian/Ubuntu | [AI-Clipper-Pro-5.1.3-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-Linux-amd64.deb) |
+| Windows x64 | [AI-Clipper-Pro-5.1.4-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Windows-x64.exe) |
+| Windows ARM64 | [AI-Clipper-Pro-5.1.4-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Windows-arm64.exe) |
+| macOS Intel | [AI-Clipper-Pro-5.1.4-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-macOS-x64.dmg) |
+| macOS Apple Silicon | [AI-Clipper-Pro-5.1.4-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-macOS-arm64.dmg) |
+| Linux AppImage | [AI-Clipper-Pro-5.1.4-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Linux-x86_64.AppImage) |
+| Linux Debian/Ubuntu | [AI-Clipper-Pro-5.1.4-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Linux-amd64.deb) |
 
 A `.zip` build is published alongside each `.dmg` — if Finder ever reports **Error code -36** while copying the app out of the disk image, download the `.zip` instead, unzip it, and drag `AI Clipper Pro.app` to Applications.
 
-Verify a download with [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/SHA256SUMS.txt) (`sha256sum -c SHA256SUMS.txt`). If you still want to use the DMG, run `dot_clean /Volumes/AI\ Clipper\ Pro\ 5.1.3` in Terminal and retry the copy. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"`.
+Verify a download with [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/SHA256SUMS.txt) (`sha256sum -c SHA256SUMS.txt`). If you still want to use the DMG, run `dot_clean /Volumes/AI\ Clipper\ Pro\ 5.1.4` in Terminal and retry the copy. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"`.
 
 ### 2. Run from source
 
@@ -130,7 +132,7 @@ Each rendered clip records the exact hardware used, and **Copy effects to all** 
 ## Build installers
 
 ```bash
-bash scripts/release-all.sh 5.1.3 --all --publish
+bash scripts/release-all.sh 5.1.4 --all --publish
 ```
 
 The script builds Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64 installers on native GitHub runners, then publishes them with `SHA256SUMS.txt`. See [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).

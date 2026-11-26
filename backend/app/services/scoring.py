@@ -157,17 +157,20 @@ def propose(
             visual = [min(1.0, value * 1.12) for value in visual]
         seen: list[tuple[float, float]] = []
         lengths = sorted(
-            {min_duration, (min_duration + max_duration) / 2, max_duration, 30.0}
+            {min_duration, (min_duration + max_duration) / 3, (min_duration + max_duration) / 2,
+             (min_duration + max_duration) * 2 / 3, max_duration, 30.0}
         )
         lengths = [length for length in lengths if min_duration <= length <= max_duration and length <= duration]
+        fallback_scores: list[tuple[float, int, int, list[str], str]] = []
         for length in lengths:
             width = max(1, int(length / step))
             scored = []
             has_signals = any(speech) or any(keywords) or any(visual)
-            for start in range(0, max(1, len(speech) - width + 1), 2):
+            for start in range(0, max(1, len(speech) - width + 1)):
                 end = start + width
                 score, reasons = window_score(speech, keywords, visual, start, end)
-                if has_signals and score < 25:
+                fallback_scores.append((score, start, end, reasons, media_id))
+                if has_signals and score < 18:
                     continue
                 if any(not (start * step >= stop + 2 or end * step <= begin - 2) for begin, stop in seen):
                     continue
@@ -206,6 +209,35 @@ def propose(
                 if len(candidates) >= count * 4:
                     break
             if len(candidates) >= count * 4:
+                break
+    if len(candidates) < count:
+        claimed = [(item.start, item.end) for item in candidates]
+        for score, start, end, reasons, media_id in sorted(fallback_scores, key=lambda item: item[0], reverse=True):
+            media = next((item for item in media_rows if item["id"] == media_id), {"id": media_id, "title": ""})
+            duration = float(media.get("duration") or 0)
+            begin, stop = start * step, min(duration, end * step)
+            if any(begin < b and stop > a for a, b in claimed):
+                continue
+            claimed.append((begin, stop))
+            transcript_text = " ".join(
+                seg.get("text", "")
+                for seg in transcripts.get(media_id, {}).get("segments", [])
+                if seg.get("start", 0) <= stop and seg.get("end", 0) >= begin
+            ).strip()
+            title, hook = make_title(transcript_text, platform, media.get("title", ""))
+            chosen_reasons = list(reasons) or ["steady engagement"]
+            focus_boxes = (regions or {}).get(media_id) or []
+            if focus_boxes:
+                chosen_reasons.append("focused on your player/gameplay regions")
+            candidates.append(Candidate(
+                media_id=media_id, start=round(begin, 2), end=round(stop, 2),
+                score=round(score, 2), reasons=chosen_reasons, title=title,
+                hook=hook[:140], hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
+                transcript=transcript_text[:600],
+                region=focus_boxes[0] if focus_boxes else None,
+                regions=focus_boxes, region_layout=(layouts or {}).get(media_id),
+            ))
+            if len(candidates) >= count:
                 break
     candidates.sort(key=lambda item: item.score, reverse=True)
     return candidates[: max(count, 1)]

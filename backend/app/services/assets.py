@@ -9,6 +9,7 @@ from typing import Any
 
 from ..config import ASSETS, env
 from ..db import db
+from .net import urlopen as https_open
 from .utils import safe_name
 
 HEADERS = {"User-Agent": "AI-Clipper-Pro/1.0 (+https://github.com/Analoggeek/AiFreeClipping)"}
@@ -16,7 +17,7 @@ HEADERS = {"User-Agent": "AI-Clipper-Pro/1.0 (+https://github.com/Analoggeek/AiF
 
 def _get(url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
     request = urllib.request.Request(url, headers={**HEADERS, **(headers or {})})
-    with urllib.request.urlopen(request, timeout=25) as response:
+    with https_open(request, timeout=25) as response:
         return json.loads(response.read())
 
 
@@ -85,7 +86,7 @@ def download(url: str, name: str | None = None, source: str = "stock") -> dict[s
         suffix = ".jpg"
     path = folder / f"{safe_name(name or 'asset')}_{int(__import__('time').time())}{suffix}"
     request = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(request, timeout=120) as response, path.open("wb") as handle:
+    with https_open(request, timeout=120) as response, path.open("wb") as handle:
         total = 0
         while True:
             chunk = response.read(1024 * 256)

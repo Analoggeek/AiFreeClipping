@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import CACHE, ffmpeg_binary
+from ..db import db
 from .tracking import ByteTrackLite
 from .utils import run_command
 
@@ -104,9 +105,14 @@ def _frame_sampler(path: str, fps: float, region: dict[str, float] | None, max_f
     capture.release()
 
 
+def _weights_dir() -> Path:
+    configured = db.get_setting("models_folder", "")
+    return (Path(configured).expanduser() if configured else CACHE) / "yolo"
+
+
 def _onnx_detector():
     """YOLOX Nano ONNX detector — no Torch needed, works inside packaged builds."""
-    weights = CACHE / "yolo" / "yolox_nano.onnx"
+    weights = _weights_dir() / "yolox_nano.onnx"
     if not weights.exists():
         return None
     try:
@@ -200,7 +206,7 @@ def _analyze_one(
 
     if sampler is not None:
         if detect:
-            used_engine = "yolox-onnx + ByteTrack" if (CACHE / "yolo" / "yolox_nano.onnx").exists() else "ultralytics + ByteTrack"
+            used_engine = "yolox-onnx + ByteTrack" if _weights_dir().joinpath("yolox_nano.onnx").exists() else "ultralytics + ByteTrack"
         else:
             used_engine = "opencv-motion + ByteTrack"
         for t, _frame, motion, full_frame in sampler:
@@ -261,7 +267,7 @@ def analyze_sync(
     used_engine = "motion"
     if sampler is not None:
         if detect:
-            used_engine = "yolox-onnx + ByteTrack" if (CACHE / "yolo" / "yolox_nano.onnx").exists() else "ultralytics + ByteTrack"
+            used_engine = "yolox-onnx + ByteTrack" if _weights_dir().joinpath("yolox_nano.onnx").exists() else "ultralytics + ByteTrack"
         else:
             used_engine = "opencv-motion + ByteTrack"
         for t, crops, motions in sampler:

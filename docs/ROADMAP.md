@@ -1,5 +1,17 @@
 # Roadmap
 
+## Shipped in v5.1.4
+
+- Crash-proof Settings view and normalized folder responses
+- Bundled CA certificates for SSL-safe model/media downloads
+- User-selectable model, download and rendered-clip folders
+- Hardware-aware unattended offline model setup with live progress
+- Exact requested clip count across non-overlapping windows
+- Automatic edit section with direct clip rendering and focus crops
+- Zero-based synchronized timeline and free mouse scrubbing
+- Live operation lines and app-folder storage in the sidebar HUD
+- Offline image fallback when SDXL/Nano Banana are unavailable
+
 ## Shipped in v5.1.3
 
 - Instant splash screen and route-level lazy loading for a fast first paint

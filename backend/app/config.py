@@ -158,9 +158,30 @@ def _gpu_info() -> dict[str, Any]:
     return info
 
 
+_usage_cache: dict[str, Any] = {"at": 0.0, "value": 0.0}
+
+
+def _folder_size(paths) -> int:
+    import time
+
+    if time.time() - _usage_cache["at"] < 30:
+        return int(_usage_cache["value"] * 1024 ** 3)
+    total = 0
+    for folder in paths:
+        for root, _dirs, files in os.walk(folder):
+            for name in files:
+                try:
+                    total += os.path.getsize(os.path.join(root, name))
+                except OSError:
+                    pass
+    _usage_cache.update(at=time.time(), value=total / 1024 ** 3)
+    return total
+
+
 def hardware_info() -> dict[str, Any]:
     """Live hardware usage snapshot for the app's performance HUD."""
     import platform
+    import time
 
     info: dict[str, Any] = {
         "cpu_count": os.cpu_count() or 4,
@@ -169,6 +190,11 @@ def hardware_info() -> dict[str, Any]:
         "workers": max(1, min(8, int(env("RENDER_WORKERS") or min(4, os.cpu_count() or 4)))),
         "encoder": env("AIFREECLIP_ENCODER", "auto"),
     }
+    try:
+        used = _folder_size([DOWNLOADS, CACHE, EXPORTS, CLIPS, ASSETS, PROJECTS])
+        info["app_usage_gb"] = round(used / 1024 ** 3, 2)
+    except Exception:
+        info["app_usage_gb"] = 0.0
     try:
         import psutil  # type: ignore
 

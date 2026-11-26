@@ -18,9 +18,12 @@ import zipfile
 from pathlib import Path
 from typing import Any, Callable
 
-from ..config import CACHE, HOME, env, ollama_host
+from ..config import CACHE, HOME, env, hardware_info, ollama_host
 from ..db import db
 from .llm import tags
+from .net import configure_ca_bundle, urlopen as https_open
+
+configure_ca_bundle()
 
 OLLAMA_INSTALLER = "https://ollama.com/download"
 OLLAMA_VERSION = "v0.40.18"
@@ -154,7 +157,10 @@ def _activate(model: dict[str, Any]) -> None:
     db.set_setting("installed_models", json.dumps(sorted(ids)))
     activation = {
         "LLM": {"active_llm": model["id"], "OLLAMA_MODEL": model["id"]},
-        "ASR": {"whisper_model": model["id"].replace("whisper-", "")},
+        "ASR": {
+            "whisper_model": model["id"].replace("whisper-", ""),
+            "WHISPER_MODEL_PATH": str(_whisper_dir(model["id"])),
+        },
         "Vision": {"vision_engine": "yolox" if model["provider"] == "yolox-onnx" else "ultralytics"},
         "TTS": {"tts_voice": model["id"].replace("piper-", "")},
         "Image": {"image_provider": "comfyui"},
@@ -166,7 +172,7 @@ def _activate(model: dict[str, Any]) -> None:
 
 def _ollama_alive() -> bool:
     try:
-        with urllib.request.urlopen(f"{ollama_host()}/api/tags", timeout=2) as response:
+        with https_open(f"{ollama_host()}/api/tags", timeout=2) as response:
             return response.status == 200
     except Exception:
         return False
@@ -211,7 +217,7 @@ def _ensure_ollama(progress: Callable[[float, str], None]) -> None:
     if not binary:
         system = platform.system().lower()
         machine = platform.machine().lower()
-        root = CACHE / "ollama"
+        root = _models_root() / "ollama"
         root.mkdir(parents=True, exist_ok=True)
         base = f"https://github.com/ollama/ollama/releases/download/{OLLAMA_VERSION}"
         if system == "darwin":
@@ -259,11 +265,14 @@ def _ensure_ollama(progress: Callable[[float, str], None]) -> None:
             subprocess.run(["xattr", "-c", str(binary)], capture_output=True, check=False)
     if not _ollama_alive():
         progress(72, "Starting the local Ollama service…")
-        log_path = CACHE / "ollama.log"
+        log_path = _models_root() / "ollama.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        # Keep downloaded weights inside the user's chosen models folder.
+        env_vars = {**os.environ, "OLLAMA_MODELS": str(_models_root() / "ollama-models")}
         with log_path.open("ab") as log:
             subprocess.Popen(
                 [str(binary), "serve"], stdout=log, stderr=subprocess.STDOUT,
-                start_new_session=True, cwd=str(binary.parent),
+                start_new_session=True, cwd=str(binary.parent), env=env_vars,
             )
         for _ in range(60):
             if _ollama_alive():
@@ -273,24 +282,31 @@ def _ensure_ollama(progress: Callable[[float, str], None]) -> None:
             raise RuntimeError(f"Ollama did not start. Check {log_path} for details.")
 
 
+def _models_root() -> Path:
+    configured = db.get_setting("models_folder", "")
+    return Path(configured).expanduser() if configured else CACHE
+
+
 def _path(model: dict[str, Any]) -> Path | None:
     name = model.get("file")
     if not name:
         return None
+    root = _models_root()
     folder = {
-        "yolox-onnx": CACHE / "yolo", "ultralytics": CACHE / "yolo", "piper": CACHE / "piper",
+        "yolox-onnx": root / "yolo", "ultralytics": root / "yolo", "piper": root / "piper",
     }.get(model["provider"])
     return folder / name if folder else None
 
 
 def _whisper_dir(model_id: str) -> Path:
-    return Path(env("HF_HOME", str(CACHE / "huggingface"))).expanduser() / model_id
+    root = _models_root()
+    return Path(env("HF_HOME", str(root / "huggingface"))).expanduser() / model_id
 
 
 async def status() -> list[dict[str, Any]]:
     installed_llm = {item["name"] for item in await tags()}
     persisted = _installed_ids()
-    checkpoint_dir = Path(env("COMFY_CHECKPOINTS", str(HOME / "models" / "checkpoints")))
+    checkpoint_dir = Path(env("COMFY_CHECKPOINTS", str(_models_root() / "checkpoints")))
     result = []
     for model in CATALOG:
         installed = model["id"] in persisted
@@ -324,7 +340,7 @@ def _ollama_pull(model_id: str, progress: Callable[[float, str], None]) -> None:
         data=json.dumps({"name": model_id, "stream": True}).encode(),
         headers={"Content-Type": "application/json"},
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
+    with https_open(request, timeout=30) as response:
         for raw in response:
             try:
                 item = json.loads(raw)
@@ -340,7 +356,7 @@ def _download(url: str, target: Path, progress: Callable[[float, str], None], la
     target.parent.mkdir(parents=True, exist_ok=True)
     temp = target.with_suffix(target.suffix + ".part")
     request = urllib.request.Request(url, headers={"User-Agent": "AI-Clipper-Pro/5.1"})
-    with urllib.request.urlopen(request, timeout=60) as response, temp.open("wb") as handle:
+    with https_open(request, timeout=60) as response, temp.open("wb") as handle:
         total = int(response.headers.get("Content-Length") or 0)
         done = 0
         while True:
@@ -352,6 +368,40 @@ def _download(url: str, target: Path, progress: Callable[[float, str], None], la
             if total:
                 progress(min(95, done / total * 100), f"Downloading {label}…")
     shutil.move(str(temp), str(target))
+
+
+def _install_wh(model_id: str, progress: Callable[[float, str], None]) -> Path:
+    """Download faster-whisper weights directly, without requiring huggingface_hub."""
+    repo = f"Systran/faster-whisper-{model_id.replace('whisper-', '')}"
+    destination = _whisper_dir(model_id)
+    destination.mkdir(parents=True, exist_ok=True)
+    files = ["config.json", "tokenizer.json", "model.bin"]
+    for index, name in enumerate(files):
+        target = destination / name
+        if target.exists() and target.stat().st_size > 0:
+            continue
+        offset = index / len(files) * 100
+        span = 100 / len(files)
+        url = f"https://huggingface.co/{repo}/resolve/main/{name}?download=true"
+
+        def scoped(pct: float, message: str, offset=offset, span=span, name=name) -> None:
+            progress(offset + pct / 100 * span, f"{name}: {message}")
+
+        _download(url, target, scoped, f"Whisper {name}")
+    # Vocabulary is optional; faster-whisper accepts several formats.
+    for vocab in ("vocabulary.txt", "vocabulary.json"):
+        target = destination / vocab
+        if target.exists():
+            break
+        try:
+            _download(
+                f"https://huggingface.co/{repo}/resolve/main/{vocab}?download=true",
+                target, lambda pct, msg: None, f"Whisper {vocab}",
+            )
+            break
+        except Exception:
+            target.unlink(missing_ok=True)
+    return destination
 
 
 async def install(model_id: str, progress: Callable[[float, str], None]) -> dict[str, Any]:
@@ -374,10 +424,8 @@ async def install(model_id: str, progress: Callable[[float, str], None]) -> dict
                 destination = _whisper_dir(model_id)
                 destination.mkdir(parents=True, exist_ok=True)
                 snapshot_download(repo_id=repo, local_dir=str(destination))
-            except ImportError as exc:
-                raise RuntimeError(
-                    "huggingface-hub is required to download Whisper weights. It is included in the packaged app."
-                ) from exc
+            except ImportError:
+                _install_wh(model_id, progress)
         elif _path(model):
             destination = _path(model)
             assert destination is not None
@@ -392,7 +440,7 @@ async def install(model_id: str, progress: Callable[[float, str], None]) -> dict
                     except Exception:
                         pass
         elif model["provider"] == "comfyui":
-            destination = Path(env("COMFY_CHECKPOINTS", str(HOME / "models" / "checkpoints")))
+            destination = Path(env("COMFY_CHECKPOINTS", str(_models_root() / "checkpoints")))
             destination.mkdir(parents=True, exist_ok=True)
             checkpoint = destination / "sd_xl_base_1.0.safetensors"
             if not checkpoint.exists():
@@ -424,6 +472,35 @@ async def install_recommended(progress: Callable[[float, str], None]) -> dict[st
     return {"installed": done, "count": len(done)}
 
 
+async def auto_setup(progress: Callable[[float, str], None]) -> dict[str, Any]:
+    """Hardware-aware, unattended setup: choose the biggest useful local stack."""
+    hardware = hardware_info()
+    ram = float(hardware.get("ram_total_gb") or 8)
+    gpu = hardware.get("gpu") or {}
+    accelerated = bool(gpu.get("cuda") or gpu.get("metal"))
+    target = ["whisper-small", "yolox-nano"]
+    if ram >= 16 and accelerated:
+        target.append("gemma2:7b")
+    else:
+        target.append("gemma3:4b")
+    if ram >= 16:
+        target.append("sdxl-1.0")
+    progress(2, f"Detected {ram:.1f} GB RAM — preparing {len(target)} local models…")
+    installed: list[str] = []
+    for index, model_id in enumerate(target):
+        offset = index / len(target) * 100
+        span = 100 / len(target)
+
+        def scoped(pct: float, message: str, model_id=model_id, offset=offset, span=span) -> None:
+            progress(min(99, offset + pct / 100 * span), f"{model_id}: {message}")
+
+        await install(model_id, scoped)
+        installed.append(model_id)
+    db.set_setting("auto_setup_complete", "1")
+    progress(100, "Your offline studio is ready")
+    return {"installed": installed, "hardware": hardware}
+
+
 async def uninstall(model_id: str) -> dict[str, Any]:
     model = next((item for item in CATALOG if item["id"] == model_id), None)
     if not model:
@@ -435,7 +512,7 @@ async def uninstall(model_id: str) -> dict[str, Any]:
             method="DELETE",
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(request, timeout=30):
+        with https_open(request, timeout=30):
             pass
     elif _path(model):
         path = _path(model)

@@ -20,6 +20,17 @@ class ImportRequest(BaseModel):
     paths: list[str]
 
 
+class FolderPatch(BaseModel):
+    key: str
+    path: str
+
+
+class AutoEditRequest(BaseModel):
+    clip_ids: list[str]
+    style: Literal["hype", "minimal", "premium"] = "hype"
+    aspect: Literal["9:16", "1:1", "16:9"] = "9:16"
+
+
 class MediaInfo(BaseModel):
     id: str
     title: str
@@ -99,6 +110,8 @@ class RenderRequest(BaseModel):
     blur_background: bool = True
     watermark: bool = True
     hardware: bool = False
+    region: dict[str, float] | None = None
+    regions: list[dict[str, float]] = Field(default_factory=list)
 
 
 class ProjectCreate(BaseModel):
@@ -134,7 +147,7 @@ class ApplyEffectsRequest(BaseModel):
 
 class ImageRequest(BaseModel):
     prompt: str
-    provider: Literal["auto", "nano-banana", "comfyui"] = "auto"
+    provider: Literal["auto", "nano-banana", "comfyui", "local"] = "auto"
     aspect: str = "9:16"
     reference_path: str | None = None
     negative_prompt: str = "text, watermark, logo, blurry, low quality"

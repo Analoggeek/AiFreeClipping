@@ -1,5 +1,30 @@
 # Release notes
 
+## v5.1.4 — crash-proof settings, user folders and automatic editing
+
+### Download the installers
+
+GitHub keeps binaries in the collapsible **Assets** section at the bottom of this release. These links go straight to the files:
+
+- **Windows x64:** [AI-Clipper-Pro-5.1.4-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.1.4-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.1.4-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.1.4-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/manifest.json)
+
+### Changes
+
+- **No more Settings crash:** folder/settings responses are normalized before rendering, so a missing or null value can never break the view.
+- **No more SSL download failures:** every in-app HTTPS request now uses the bundled `certifi` CA store with a standard-library fallback, so model and media downloads work behind custom certificate chains.
+- **Choose your folders:** Models, Downloads and Rendered clips can each be pointed at any folder you own with a native folder picker; model weights and runtimes honor the chosen location.
+- **Hardware-aware auto setup:** on first launch the app detects RAM/GPU and downloads, activates and saves the best offline model pack automatically, with one visible progress line per action.
+- **Exact clip counts:** the AI scorer keeps searching non-overlapping windows and enforces the requested number of clips across all selected videos.
+- **Automatic edit section:** cut clips appear immediately in the editor, where you can auto-edit all of them (images, captions, motion, SFX, crop focus) or render any single clip directly.
+- **True timeline sync:** a fixed track-label gutter and zero-based ruler make the playhead, scrubbing and the starting line agree at every zoom level; the mouse can scrub anywhere along the timeline.
+- **Storage HUD:** app-folder usage appears beside the hardware meters, and live operation progress appears directly under the navigation.
+
 ## v5.1.3 — automatic models, faster startup, pro timeline and multi-region AI
 
 ### Download the installers

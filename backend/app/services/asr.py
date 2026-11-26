@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 from typing import Any
 
 from ..config import env
@@ -30,7 +31,10 @@ async def transcribe(
     word_timestamps: bool = True,
     on_progress=None,
 ) -> dict[str, Any]:
-    size = model or env("WHISPER_MODEL", "small")
+    # An installed local weight folder wins over the generic model name so the
+    # downloaded files are actually used instead of re-fetching from the cloud.
+    local_path = env("WHISPER_MODEL_PATH")
+    size = local_path if local_path and Path(local_path).exists() else (model or env("WHISPER_MODEL", "small"))
     device = "cpu"
     compute = "int8"
     try:

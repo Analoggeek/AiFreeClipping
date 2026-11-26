@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Captions, Download, Film, Image as ImageIcon, ImagePlus, Layers3, LoaderCircle,
+  Captions, Check, Download, Film, Image as ImageIcon, ImagePlus, Layers3, LoaderCircle,
   Mic2, Music2, Pause, Play, Plus, Save, Search, SkipBack, SkipForward, Sparkles,
   Split, Trash2, Volume2, WandSparkles,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
 import { JobTracker, Pill, formatClock } from '../components/common';
-import type { Media, Timeline } from '../types';
+import type { Candidate, Media, Timeline } from '../types';
 import type { PageProps } from '../App';
 
 type TrackKey = 'video' | 'captions' | 'stickers' | 'audio';
@@ -42,6 +42,9 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   const [jobId, setJobId] = useState<string | null>(null);
   const [exportJob, setExportJob] = useState<string | null>(null);
   const [exportOutput, setExportOutput] = useState('');
+  const [clips, setClips] = useState<Candidate[]>([]);
+  const [autoJob, setAutoJob] = useState<string | null>(null);
+  const [autoStyle, setAutoStyle] = useState<'hype' | 'minimal' | 'premium'>('hype');
   const [imageResult, setImageResult] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
@@ -101,6 +104,46 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     });
   }, [exportJob, notify]);
 
+  useEffect(() => {
+    api.clips().then((result) => setClips(result.clips || [])).catch(() => undefined);
+  }, [autoJob]);
+
+  useEffect(() => {
+    if (!autoJob) return;
+    return pollJob(autoJob, (job) => {
+      if (job.status === 'done') {
+        void api.clips().then((result) => setClips(result.clips || [])).catch(() => undefined);
+        notify('Automatic editing and rendering finished.');
+      }
+      if (job.status === 'error') notify(job.error || job.message);
+    });
+  }, [autoJob, notify]);
+
+  const runAutoEdit = async () => {
+    const ids = clips.map((clip) => clip.id || '').filter(Boolean);
+    if (!ids.length) { notify('Generate clips with AI Clipper first.'); return; }
+    try {
+      const result = await api.autoEdit(ids, autoStyle, timeline.aspect === '16:9' ? '16:9' : timeline.aspect === '1:1' ? '1:1' : '9:16');
+      setAutoJob(result.job_id);
+      notify(`Auto-editing ${ids.length} clip(s) with captions, images, motion and SFX…`);
+    } catch (error) { notify(String(error)); }
+  };
+
+  const renderAutoClip = async (clip: Candidate) => {
+    if (!clip.id) return;
+    try {
+      const result = await api.renderClip(clip.id, {
+        aspect: timeline.aspect, resolution: '1080p',
+        caption_style: { preset: autoStyle },
+        sfx: ['whoosh', 'pop'], speed: 1.04, brightness: 0.02,
+        contrast: 0.05, saturation: 1.08, blur_background: true,
+        region: clip.region, regions: clip.regions,
+      });
+      setExportJob(result.job_id);
+      notify('Rendering this clip with the same automatic edit stack.');
+    } catch (error) { notify(String(error)); }
+  };
+
   const mutate = (fn: (draft: Timeline) => void) => {
     setTimeline((current) => {
       const next = structuredClone(current);
@@ -151,14 +194,14 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   const scrub = (event: React.PointerEvent<HTMLDivElement>) => {
     const bounds = timelineRef.current?.getBoundingClientRect();
     if (!bounds) return;
-    seekTo((event.clientX - bounds.left + timelineRef.current!.scrollLeft - 100) / zoom);
+    seekTo((event.clientX - bounds.left + timelineRef.current!.scrollLeft) / zoom);
   };
 
   useEffect(() => {
     const node = timelineRef.current;
     if (!node) return;
-    const x = 100 + playhead * zoom;
-    if (x < node.scrollLeft + 100 || x > node.scrollLeft + node.clientWidth - 40) {
+    const x = playhead * zoom;
+    if (x < node.scrollLeft || x > node.scrollLeft + node.clientWidth - 40) {
       node.scrollLeft = Math.max(0, x - node.clientWidth * 0.35);
     }
   }, [playhead, zoom]);
@@ -349,7 +392,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
                 <p>Nano Banana (Gemini key) or local SDXL via ComfyUI — no watermark.</p>
                 <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} placeholder="A glowing neon sticker that says EPIC, transparent background, cartoon style" />
                 <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-                  <option value="auto">Auto (best available)</option><option value="nano-banana">Nano Banana</option><option value="comfyui">Local ComfyUI (SDXL)</option>
+                  <option value="auto">Auto (best available)</option><option value="nano-banana">Nano Banana</option><option value="comfyui">Local ComfyUI (SDXL)</option><option value="local">Offline instant art</option>
                 </select>
                 <button className="primary" disabled={busy} onClick={generateArt}><Sparkles size={15} /> Generate image</button>
                 {imageResult && <img className="generated-preview" src={mediaUrl('/api/assets/file?path=' + encodeURIComponent(imageResult))} alt="Generated asset" />}
@@ -442,6 +485,30 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
         </aside>
       </div>
 
+      <div className="auto-edit-strip">
+        <div className="auto-edit-head">
+          <strong><Sparkles size={14} /> Auto edit</strong>
+          <span>{clips.length} AI clip(s) ready</span>
+          <select value={autoStyle} onChange={(event) => setAutoStyle(event.target.value as typeof autoStyle)}>
+            <option value="hype">High energy</option><option value="minimal">Minimal</option><option value="premium">Premium</option>
+          </select>
+          <button className="primary" disabled={!clips.length || Boolean(autoJob)} onClick={() => void runAutoEdit()}>
+            {autoJob ? <LoaderCircle size={14} className="spin" /> : <WandSparkles size={14} />} Auto edit &amp; render all
+          </button>
+        </div>
+        {autoJob && <JobTracker jobId={autoJob} label="Automatic editing" />}
+        <div className="auto-edit-clips">
+          {clips.length === 0 && <span className="hint">Generate clips in AI Clipper — they will appear here automatically.</span>}
+          {clips.map((clip) => (
+            <div className="auto-edit-clip" key={clip.id}>
+              <div><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small></div>
+              <button className="icon-btn" title="Render with auto edit" aria-label="Render with auto edit" onClick={() => void renderAutoClip(clip)}><Download size={14} /></button>
+              {clip.output && <a className="icon-btn" title="Download rendered MP4" aria-label="Download rendered MP4" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output))} download><Check size={14} /></a>}
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="timeline-panel">
         <div className="timeline-toolbar">
           <div><strong>Timeline</strong> <Pill tone="muted">{formatClock(total)}</Pill></div>
@@ -458,48 +525,55 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
             <label>Zoom <input type="range" min="8" max="90" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>
           </div>
         </div>
-        <div
-          className="timeline-scroll"
-          ref={timelineRef}
-          onPointerDown={(event) => { scrubbingRef.current = true; scrub(event); }}
-          onPointerMove={(event) => { if (scrubbingRef.current) scrub(event); }}
-          onPointerUp={() => { scrubbingRef.current = false; }}
-          onPointerLeave={() => { scrubbingRef.current = false; }}
-        >
-          <div className="timeline-content" style={{ width: Math.max(900, total * zoom + 240) }}>
-            <div className="ruler">
-              {Array.from({ length: Math.floor(total / 5) + 2 }, (_, index) => (
-                <span key={index} style={{ left: 100 + index * 5 * zoom }}>{formatClock(index * 5)}</span>
-              ))}
-            </div>
+        <div className="timeline-body">
+          <div className="track-labels">
+            <div className="ruler-spacer" />
             {(['video', 'captions', 'stickers', 'audio'] as TrackKey[]).map((track) => (
-              <div className="track" key={track}>
-                <div className="track-label">
-                  {track === 'video' ? <Film size={14} /> : track === 'captions' ? <Captions size={14} /> : track === 'stickers' ? <ImagePlus size={14} /> : <Mic2 size={14} />}
-                  <span>{track}</span>
-                </div>
-                <div className="track-lane">
-                  {(timeline.tracks[track] as unknown as AnyItem[]).map((item, index) => {
-                    const start = track === 'video'
-                      ? timeline.tracks.video.slice(0, index).reduce((sum, part) => sum + part.duration, 0)
-                      : (item.start || 0);
-                    const duration = track === 'video' ? item.duration || 1 : Math.max(0.6, (item.end || item.start || 0) - (item.start || 0));
-                    return (
-                      <button
-                        key={`${track}-${index}`}
-                        className={`clip-block block-${track} ${selected?.track === track && selected.index === index ? 'selected' : ''}`}
-                        style={{ left: 100 + start * zoom, width: Math.max(18, duration * zoom) }}
-                        onClick={() => { setSelected({ track, index }); setPlayhead(start + 0.05); }}
-                        title={item.label || item.text || item.path}
-                      >
-                        {item.text || item.label || (item.path || 'clip').split(/[\\/]/).pop()}
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="track-label" key={track}>
+                {track === 'video' ? <Film size={14} /> : track === 'captions' ? <Captions size={14} /> : track === 'stickers' ? <ImagePlus size={14} /> : <Mic2 size={14} />}
+                <span>{track}</span>
               </div>
             ))}
-            <div className="playhead" style={{ left: 100 + playhead * zoom }} />
+          </div>
+          <div
+            className="timeline-scroll"
+            ref={timelineRef}
+            onPointerDown={(event) => { scrubbingRef.current = true; scrub(event); }}
+            onPointerMove={(event) => { if (scrubbingRef.current) scrub(event); }}
+            onPointerUp={() => { scrubbingRef.current = false; }}
+            onPointerLeave={() => { scrubbingRef.current = false; }}
+          >
+            <div className="timeline-content" style={{ width: Math.max(600, total * zoom + 120) }}>
+              <div className="ruler">
+                {Array.from({ length: Math.floor(total / 5) + 2 }, (_, index) => (
+                  <span key={index} style={{ left: index * 5 * zoom }}>{formatClock(index * 5)}</span>
+                ))}
+              </div>
+              {(['video', 'captions', 'stickers', 'audio'] as TrackKey[]).map((track) => (
+                <div className="track" key={track}>
+                  <div className="track-lane">
+                    {(timeline.tracks[track] as unknown as AnyItem[]).map((item, index) => {
+                      const start = track === 'video'
+                        ? timeline.tracks.video.slice(0, index).reduce((sum, part) => sum + part.duration, 0)
+                        : (item.start || 0);
+                      const duration = track === 'video' ? item.duration || 1 : Math.max(0.6, (item.end || item.start || 0) - (item.start || 0));
+                      return (
+                        <button
+                          key={`${track}-${index}`}
+                          className={`clip-block block-${track} ${selected?.track === track && selected.index === index ? 'selected' : ''}`}
+                          style={{ left: start * zoom, width: Math.max(18, duration * zoom) }}
+                          onClick={() => { setSelected({ track, index }); setPlayhead(start + 0.05); }}
+                          title={item.label || item.text || item.path}
+                        >
+                          {item.text || item.label || (item.path || 'clip').split(/[\\/]/).pop()}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              <div className="playhead" style={{ left: playhead * zoom }} />
+            </div>
           </div>
         </div>
       </div>

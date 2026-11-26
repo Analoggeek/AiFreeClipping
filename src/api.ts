@@ -73,6 +73,9 @@ export const api = {
   models: () => request<{ models: ModelInfo[] }>('/api/models'),
   installModel: (model_id: string) => post<{ job_id: string }>('/api/models/install', { model_id }),
   installRecommendedModels: () => post<{ job_id: string }>('/api/models/install-recommended', {}),
+  autoSetupModels: () => post<{ job_id: string; skipped?: boolean; message?: string }>('/api/models/auto-setup', {}),
+  setFolder: (key: string, path: string) => request<{ folders: Record<string, string> }>('/api/folders', { method: 'PUT', body: JSON.stringify({ key, path }) }),
+  autoEdit: (clip_ids: string[], style = 'hype', aspect = '9:16') => post<{ job_id: string }>('/api/auto-edit', { clip_ids, style, aspect }),
 
   youtubeStatus: () => request<{ authorized: boolean; available: boolean; clientSecretConfigured: boolean }>('/api/youtube/status'),
   youtubeAuthorize: () => post<{ job_id: string }>('/api/youtube/authorize'),

@@ -209,6 +209,23 @@ def build_clip_args(
     video_parts: list[str] = []
     speed = max(0.25, min(float(options.get("speed", 1)), 4))
     trim = f"trim=start={start:.3f}:end={end:.3f},setpts=(PTS-STARTPTS)/{speed:.3f},fps=30"
+    focus = options.get("region") or ((options.get("regions") or [None])[0] if options.get("regions") else None)
+    if isinstance(focus, dict):
+        fx, fy = max(0.0, min(1.0, float(focus.get("x", 0)))), max(0.0, min(1.0, float(focus.get("y", 0))))
+        fw = max(0.05, min(1.0 - fx, float(focus.get("w", 1))))
+        fh = max(0.05, min(1.0 - fy, float(focus.get("h", 1))))
+        # A tiny focus box would produce an unusable, pixelated crop. Always
+        # keep at least a quarter of the frame around the selected subject.
+        if fw * fh < 0.25:
+            scale = (0.25 / max(1e-6, fw * fh)) ** 0.5
+            scale = min(scale, 1.0 / max(fw, fh))
+            nw, nh = min(1.0, fw * scale), min(1.0, fh * scale)
+            fx = max(0.0, min(fx - (nw - fw) / 2, 1.0 - nw))
+            fy = max(0.0, min(fy - (nh - fh) / 2, 1.0 - nh))
+            fw, fh = nw, nh
+        trim = (
+            f"crop=iw*{fw:.4f}:ih*{fh:.4f}:iw*{fx:.4f}:ih*{fy:.4f}," + trim
+        )
     if options.get("blur_background", True) and options.get("aspect", "9:16") != "source":
         video_parts.append(f"[0:v]{trim},split=2[bg][fg]")
         video_parts.append(
@@ -410,4 +427,9 @@ async def render_timeline(
 
 
 def export_path(name: str) -> str:
-    return str(EXPORTS / f"{safe_name(name)}.mp4")
+    from ..db import db  # local import avoids a config/db cycle
+
+    configured = db.get_setting("clips_folder", "")
+    folder = Path(configured).expanduser() if configured else EXPORTS
+    folder.mkdir(parents=True, exist_ok=True)
+    return str(folder / f"{safe_name(name)}.mp4")

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  CheckCircle2, Download, ExternalLink, KeyRound, LoaderCircle, Package, RefreshCw, Sparkles, Zap,
+  CheckCircle2, Cpu, Download, ExternalLink, FolderOpen, KeyRound, LoaderCircle, Package, RefreshCw, Sparkles, Zap,
 } from 'lucide-react';
 import { api, pollJob } from '../api';
 import { JobTracker, Panel, Pill } from '../components/common';
@@ -14,6 +14,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
   const [jobs, setJobs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [recommendedJob, setRecommendedJob] = useState<string | null>(null);
+  const [modelFolder, setModelFolder] = useState('');
 
   const refresh = useCallback(async () => {
     try {
@@ -25,6 +26,9 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
     } catch { /* offline */ }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => {
+    api.folders().then((result) => setModelFolder(result.folders?.models || '')).catch(() => undefined);
+  }, []);
 
   const openLink = (url?: string) => {
     if (!url) return;
@@ -56,6 +60,26 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
     });
   }, [recommendedJob, refresh, notify]);
 
+  const autoSetup = async () => {
+    try {
+      const result = await api.autoSetupModels();
+      if (!result.job_id) { notify(result.message || 'Offline setup was attempted recently; retry again later.'); return; }
+      setRecommendedJob(result.job_id);
+      notify('Detecting your hardware and downloading the complete offline model pack…');
+    } catch (error) { notify(String(error)); }
+  };
+
+  const pickModelFolder = async () => {
+    if (!window.desktop?.selectDirectory) { notify('Folder picker works in the desktop app.'); return; }
+    const selected = await window.desktop.selectDirectory();
+    if (!selected) return;
+    try {
+      await api.setFolder('models', selected);
+      setModelFolder(selected);
+      notify('Models will download into this folder.');
+    } catch (error) { notify(String(error)); }
+  };
+
   useEffect(() => {
     Object.entries(jobs).forEach(([id, jobId]) => {
       pollJob(jobId, (job) => {
@@ -82,8 +106,10 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
         action={
           <div className="panel-actions compact">
             <button className="ghost-btn" onClick={() => void refresh()}><RefreshCw size={15} /> Refresh</button>
+            <button className="chip-btn" onClick={() => void pickModelFolder()}><FolderOpen size={14} /> Model folder</button>
+            <button className="chip-btn" disabled={Boolean(recommendedJob)} onClick={() => void autoSetup()}><Cpu size={14} /> Auto setup</button>
             <button className="primary" disabled={Boolean(recommendedJob)} onClick={() => void installAll()}>
-              {recommendedJob ? <LoaderCircle size={15} className="spin" /> : <Zap size={15} />} Set up all recommended
+              {recommendedJob ? <LoaderCircle size={15} className="spin" /> : <Zap size={15} />} Install all
             </button>
           </div>
         }
@@ -91,6 +117,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
         <div className="hardware-bar">
           <Pill tone="green">{caps.gpu?.cuda ? 'CUDA GPU detected' : caps.gpu?.metal ? 'Apple Metal available' : 'CPU fallback'}</Pill>
           <Pill tone="violet">{installedCount}/{models.length} models ready</Pill>
+          {modelFolder && <Pill tone="muted">{modelFolder}</Pill>}
         </div>
         {recommendedJob && <JobTracker jobId={recommendedJob} label="Automatic model setup" />}
       </Panel>

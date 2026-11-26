@@ -67,7 +67,7 @@ export function JobTracker({ jobId, label, onDone }: { jobId: string | null; lab
 export function useJobs() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const refresh = async () => {
-    try { setJobs((await api.jobs()).jobs); } catch { /* offline */ }
+    try { setJobs((await api.jobs()).jobs || []); } catch { /* offline */ }
   };
   useEffect(() => {
     void refresh();
@@ -75,6 +75,25 @@ export function useJobs() {
     return () => window.clearInterval(timer);
   }, []);
   return { jobs, refresh };
+}
+
+export function JobProgressList({ jobs }: { jobs: Job[] }) {
+  const recent = [...jobs]
+    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
+    .slice(0, 3);
+  if (!recent.length) return null;
+  return (
+    <div className="sidebar-jobs">
+      <span className="nav-label">Operations</span>
+      {recent.map((job) => (
+        <div className={`sidebar-job job-${job.status}`} key={job.id}>
+          <div><strong>{job.kind || 'Working'}</strong><small>{job.message || 'Starting…'}</small></div>
+          <span>{job.status === 'done' ? 'Done' : job.status === 'error' ? 'Failed' : `${Math.round(job.progress || 0)}%`}</span>
+          <Progress value={job.status === 'done' ? 100 : job.progress || 0} />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function formatClock(seconds?: number): string {
