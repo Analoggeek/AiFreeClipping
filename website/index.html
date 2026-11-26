@@ -16,7 +16,9 @@
     <a class="brand" href="#top"><img src="assets/logo.svg" alt="AI Clipper Pro" /></a>
     <nav id="nav">
       <a href="#features">Features</a>
+      <a href="#screenshots">Screens</a>
       <a href="#workflow">Workflow</a>
+      <a href="#model-links">AI models</a>
       <a href="#models">Local AI</a>
       <a href="#download">Download</a>
       <a href="https://github.com/Analoggeek/AiFreeClipping/blob/main/README.md">Docs</a>
@@ -37,7 +39,7 @@
         </div>
         <div class="hero-stats">
           <div><strong>5</strong><span>connected stages</span></div>
-          <div><strong>4</strong><span>platform installers</span></div>
+          <div><strong>6</strong><span>platform installers</span></div>
           <div><strong>0</strong><span>cloud requirement</span></div>
         </div>
       </div>
@@ -64,6 +66,15 @@
       </div>
     </section>
 
+    <section class="section screenshots" id="screenshots">
+      <div class="section-head"><span class="kicker">INSIDE THE APP</span><h2>A real studio, not a one-click toy</h2><p>Responsive, animated and built for long editing sessions. These are the actual workspace layouts you get after installation.</p></div>
+      <div class="shot-grid">
+        <figure class="shot"><img src="assets/screen-overview.svg" alt="AI Clipper Pro overview dashboard" /><figcaption><strong>Dashboard</strong><span>Library, hardware usage and the full pipeline</span></figcaption></figure>
+        <figure class="shot"><img src="assets/screen-clipper.svg" alt="AI Clipper viral clip results" /><figcaption><strong>AI Clipper</strong><span>Region lock, ranked moments, batch export</span></figcaption></figure>
+        <figure class="shot"><img src="assets/screen-editor.svg" alt="AI Clipper Pro multi-track video editor" /><figcaption><strong>Timeline editor</strong><span>Multi-track editing with live inspector</span></figcaption></figure>
+      </div>
+    </section>
+
     <section class="section workflow" id="workflow">
       <div class="section-head"><span class="kicker">THE WORKFLOW</span><h2>From link to viral in five steps</h2></div>
       <div class="steps">
@@ -87,6 +98,20 @@
       </div>
     </section>
 
+    <section class="section model-links" id="model-links">
+      <div class="section-head"><span class="kicker">ONE CLICK SETUP</span><h2>Models and keys, linked in-app</h2><p>Every model card in the desktop app has a direct download button. Cloud features link straight to the page where you create the key.</p></div>
+      <div class="link-grid">
+        <a href="https://ollama.com/download"><strong>Ollama runtime</strong><span>Install → then Gemma 2 7B from the app</span><b>Get runtime ↗</b></a>
+        <a href="https://ollama.com/library/gemma2"><strong>Gemma 2 7B</strong><span>Local LLM for titles and reranking</span><b>Download ↗</b></a>
+        <a href="https://huggingface.co/Systran/faster-whisper-small"><strong>Faster-Whisper Small</strong><span>Word-timed captions and transcripts</span><b>Download ↗</b></a>
+        <a href="https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx"><strong>YOLOX Nano ONNX</strong><span>Player tracking with ByteTrack</span><b>Download ↗</b></a>
+        <a href="https://aistudio.google.com/app/apikey"><strong>Nano Banana API</strong><span>Optional Gemini image generation</span><b>Get API key ↗</b></a>
+        <a href="https://console.cloud.google.com/apis/credentials"><strong>YouTube Data API</strong><span>Optional direct channel uploads</span><b>Get API key ↗</b></a>
+        <a href="https://www.pexels.com/api/"><strong>Pexels API</strong><span>Copyright-friendly stock media</span><b>Get API key ↗</b></a>
+        <a href="https://pixabay.com/api/docs/"><strong>Pixabay API</strong><span>Stock images, video and audio</span><b>Get API key ↗</b></a>
+      </div>
+    </section>
+
     <section class="section download" id="download">
       <div class="section-head"><span class="kicker">DOWNLOAD</span><h2>Pick your platform</h2><p id="version-line">Installers include the app, Python engine and FFmpeg. Model weights are installed from the app.</p></div>
       <div class="platforms">
@@ -95,6 +120,7 @@
         <a class="platform" data-file="macOS-x64.dmg" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">◈</div><h3>macOS Intel</h3><p>x64 · DMG</p><span class="p-link">Download .dmg ↗</span></a>
         <a class="platform" data-file="macOS-arm64.dmg" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">◈</div><h3>macOS Apple Silicon</h3><p>M1/M2/M3/M4 · DMG</p><span class="p-link">Download .dmg ↗</span></a>
         <a class="platform" data-file="Linux-x64.AppImage" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">⬡</div><h3>Linux</h3><p>AppImage + .deb · x64</p><span class="p-link">Download AppImage ↗</span></a>
+        <a class="platform" data-file="Linux-amd64.deb" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">⬡</div><h3>Linux Debian</h3><p>Ubuntu / Debian · amd64</p><span class="p-link">Download .deb ↗</span></a>
         <div class="platform source"><div class="p-ico">⌘</div><h3>Build from source</h3><p>Windows, macOS, Linux</p><code>npm install && npm run dev:app</code><span class="p-link" onclick="navigator.clipboard?.writeText('npm install && npm run dev:app')">Copy command ⧉</span></div>
       </div>
       <p class="fine">Unsigned installers may trigger OS warnings on first launch. Checksums are published in <code>SHA256SUMS.txt</code> with every release.</p>

@@ -125,6 +125,11 @@ class ExportAllRequest(BaseModel):
     resolution: str = "1080p"
 
 
+class ApplyEffectsRequest(BaseModel):
+    clip_ids: list[str]
+    effects: dict[str, Any]
+
+
 class ImageRequest(BaseModel):
     prompt: str
     provider: Literal["auto", "nano-banana", "comfyui"] = "auto"

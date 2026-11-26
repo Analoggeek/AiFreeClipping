@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft, ArrowRight, BoxSelect, Check, Clapperboard, Download, Film, ImagePlus,
+  ArrowLeft, ArrowRight, BoxSelect, Check, Clapperboard, Copy, Cpu, Download, Film, ImagePlus,
   LoaderCircle, WandSparkles, Play, Plus, Scissors, Send, Sparkles, Volume2,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
@@ -26,6 +26,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   const [checked, setChecked] = useState<string[]>([]);
   const [renderJobs, setRenderJobs] = useState<Record<string, string>>({});
   const [batchJob, setBatchJob] = useState<string | null>(null);
+  const [hardwareByClip, setHardwareByClip] = useState<Record<string, Record<string, unknown>>>({});
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(() => {
@@ -78,17 +79,32 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     });
   }, [jobId, notify]);
 
+  const effectPayload = () => {
+    const preset = ({ hype: 'hype', story: 'minimal', clean: 'minimal', cinematic: 'premium' } as const)[settings.style as 'hype' | 'story' | 'clean' | 'cinematic'] || 'hype';
+    return {
+      aspect: settings.platform === 'landscape' ? '16:9' : '9:16',
+      resolution: '1080p',
+      caption_style: { preset: settings.captions ? preset : 'none' },
+      sfx: settings.sound_effects ? ['whoosh', 'pop'] : [],
+      speed: 1, brightness: 0, contrast: 0, saturation: 1,
+      blur_background: true, watermark: true,
+    };
+  };
+
+  const copyEffectsToAll = async () => {
+    const ids = candidates.map((clip) => clip.id || '').filter(Boolean);
+    if (!ids.length) { notify('Generate clips first.'); return; }
+    try {
+      const result = await api.applyEffects(ids, effectPayload());
+      notify(`Copied this clip's effects to ${result.changed} clip(s).`);
+    } catch (error) { notify(String(error)); }
+  };
+
   const renderOne = async (clip: Candidate) => {
     const clipId = clip.id || '';
     if (!clipId) return;
     try {
-      const preset = ({ hype: 'hype', story: 'minimal', clean: 'minimal', cinematic: 'premium' } as const)[settings.style as 'hype' | 'story' | 'clean' | 'cinematic'] || 'hype';
-      const result = await api.renderClip(clipId, {
-        aspect: settings.platform === 'landscape' ? '16:9' : '9:16',
-        resolution: '1080p',
-        caption_style: { preset: settings.captions ? preset : 'none' },
-        sfx: settings.sound_effects ? ['whoosh', 'pop'] : [],
-      });
+      const result = await api.renderClip(clipId, effectPayload());
       setRenderJobs((current) => ({ ...current, [clipId]: result.job_id }));
     } catch (error) { notify(String(error)); }
   };
@@ -204,7 +220,12 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       )}
 
       {step === 3 && (
-        <Panel title="AI-picked clips" subtitle={`${candidates.length} candidates — review, tweak, render or open in the editor`} action={<button className="primary" onClick={exportAll}><Download size={16} /> Export selected ({checked.length || candidates.length})</button>}>
+        <Panel title="AI-picked clips" subtitle={`${candidates.length} candidates — review, tweak, render or open in the editor`} action={
+          <div className="panel-actions compact">
+            <button className="ghost-btn" onClick={() => void copyEffectsToAll()}><Copy size={15} /> Copy effects to all</button>
+            <button className="primary" onClick={exportAll}><Download size={16} /> Export selected ({checked.length || candidates.length})</button>
+          </div>
+        }>
           {candidates.length === 0 ? <EmptyState icon={<Clapperboard size={30} />} title="No clips yet" detail="Run the AI analysis in step 3 to discover engaging moments." /> : (
             <>
               <div className="candidate-list">
@@ -236,7 +257,20 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                           <button className="chip-btn" onClick={() => openPublish([clipId])}><Send size={14} /> Publish</button>
                           {clip.output && <a className="chip-btn" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output))} download><Check size={14} /> Download</a>}
                         </div>
-                        {renderJobs[clipId] && <JobTracker jobId={renderJobs[clipId]} label="Rendering clip" onDone={(job) => { if (job.status === 'done') { notify('Clip rendered — find it in Publish.'); refresh(); } }} />}
+                        {renderJobs[clipId] && <JobTracker jobId={renderJobs[clipId]} label="Rendering clip" onDone={(job) => {
+                          if (job.status === 'done') {
+                            notify('Clip rendered — find it in Publish.');
+                            if (job.result?.hardware) setHardwareByClip((current) => ({ ...current, [clipId]: job.result!.hardware as Record<string, unknown> }));
+                            refresh();
+                          }
+                        }} />}
+                        {hardwareByClip[clipId] && (
+                          <div className="hardware-line">
+                            <Cpu size={13} />
+                            <span>{String((hardwareByClip[clipId].gpu as { name?: string })?.name || 'Hardware')} · CPU {String(hardwareByClip[clipId].cpu_percent ?? '—')}% · RAM {String(hardwareByClip[clipId].ram_used_gb ?? '—')} GB · {String(hardwareByClip[clipId].workers ?? 1)} workers</span>
+                            <button className="chip-btn" onClick={() => void navigator.clipboard?.writeText(JSON.stringify(hardwareByClip[clipId], null, 2))}>Copy stats</button>
+                          </div>
+                        )}
                       </div>
                     </article>
                   );

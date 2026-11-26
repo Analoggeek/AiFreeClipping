@@ -132,10 +132,10 @@ Full design notes: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). API reference: 
 bash scripts/release-all.sh
 
 # Every supported platform in one command, via GitHub Actions
-bash scripts/release-all.sh 1.0.0 --all
+bash scripts/release-all.sh 5.1.0 --all
 
 # ...and publish a GitHub Release with SHA256 checksums
-bash scripts/release-all.sh 1.0.0 --all --publish
+bash scripts/release-all.sh 5.1.0 --all --publish
 
 # Windows PowerShell
 powershell -ExecutionPolicy Bypass -File scripts\release-all.ps1 -All -Publish

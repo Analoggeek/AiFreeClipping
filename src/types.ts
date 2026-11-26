@@ -36,6 +36,8 @@ export type Candidate = {
   region?: { x: number; y: number; w: number; h: number } | null;
   id?: string;
   output?: string | null;
+  effects?: Record<string, unknown>;
+  hardware?: HardwareInfo;
 };
 
 export type ModelInfo = {
@@ -47,6 +49,26 @@ export type ModelInfo = {
   use: string;
   installed: boolean;
   recommended?: boolean;
+  downloadUrl?: string;
+  docsUrl?: string;
+  apiUrl?: string;
+  providerUrl?: string;
+  autoInstall?: boolean;
+  needsApi?: boolean;
+  setupNote?: string;
+};
+
+export type HardwareInfo = {
+  cpu_count: number;
+  cpu_percent: number | null;
+  ram_percent: number | null;
+  ram_used_gb: number | null;
+  ram_total_gb: number | null;
+  disk_free_gb: number | null;
+  gpu: { cuda: boolean; metal: boolean; name?: string; note?: string };
+  workers: number;
+  encoder: string;
+  platform: string;
 };
 
 export type Capabilities = {

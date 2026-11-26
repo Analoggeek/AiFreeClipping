@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-label="AI Clipper Pro overview screen">
+  <defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#141a2e"/><stop offset="1" stop-color="#0a0d18"/></linearGradient><linearGradient id="accent" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#22d3ee"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+  <rect width="1200" height="760" rx="22" fill="url(#bg)"/>
+  <rect width="238" height="760" rx="22" fill="#0b0f1c"/>
+  <text x="30" y="56" fill="#fff" font-family="Inter,Arial" font-size="21" font-weight="800">AI Clipper Pro</text>
+  <text x="30" y="76" fill="#818ab0" font-family="Inter,Arial" font-size="10" letter-spacing="3">MADE BY ANALOGGEEK</text>
+  <g fill="#1b2238" stroke="#2b3452" rx="10">
+    <rect x="20" y="108" width="198" height="40" rx="9"/><rect x="20" y="156" width="198" height="40" rx="9"/>
+    <rect x="20" y="204" width="198" height="40" rx="9"/><rect x="20" y="252" width="198" height="40" rx="9"/>
+  </g>
+  <g fill="#aab4d6" font-family="Inter,Arial" font-size="13"><text x="44" y="133">Overview</text><text x="44" y="181">Downloader</text><text x="44" y="229">AI Clipper</text><text x="44" y="277">Video Editor</text></g>
+  <rect x="20" y="108" width="198" height="40" rx="9" fill="#241d47" stroke="#8b5cf6"/>
+  <text x="272" y="70" fill="#8f98bb" font-family="Inter,Arial" font-size="12">Workspace / Overview</text>
+  <rect x="272" y="96" width="890" height="188" rx="18" fill="#171d33" stroke="#2c3452"/>
+  <text x="306" y="140" fill="url(#accent)" font-family="Inter,Arial" font-size="11" font-weight="800" letter-spacing="2">100% LOCAL AI STUDIO</text>
+  <text x="306" y="188" fill="#fff" font-family="Inter,Arial" font-size="34" font-weight="800">Turn any video into</text>
+  <text x="306" y="226" fill="#a98bff" font-family="Inter,Arial" font-size="34" font-weight="800">viral-ready clips.</text>
+  <rect x="306" y="246" width="150" height="30" rx="8" fill="url(#accent)"/><text x="330" y="266" fill="#fff" font-family="Inter,Arial" font-size="12" font-weight="700">Start with a link</text>
+  <circle cx="1060" cy="180" r="68" fill="#1a2140" stroke="url(#accent)" stroke-width="3"/>
+  <path d="M1042 150l44 30-44 30z" fill="url(#accent)"/>
+  <g fill="#151b2f" stroke="#2b3452">
+    <rect x="272" y="308" width="200" height="86" rx="14"/><rect x="488" y="308" width="200" height="86" rx="14"/>
+    <rect x="704" y="308" width="200" height="86" rx="14"/><rect x="920" y="308" width="242" height="86" rx="14"/>
+  </g>
+  <g fill="#fff" font-family="Inter,Arial" font-size="26" font-weight="800"><text x="294" y="352">0</text><text x="510" y="352">0</text><text x="726" y="352">0</text><text x="942" y="352">4</text></g>
+  <g fill="#8f98bb" font-family="Inter,Arial" font-size="11"><text x="294" y="374">Videos in library</text><text x="510" y="374">AI candidates</text><text x="726" y="374">Exports</text><text x="942" y="374">Parallel workers</text></g>
+  <rect x="272" y="416" width="890" height="300" rx="18" fill="#151b2f" stroke="#2b3452"/>
+  <text x="300" y="452" fill="#fff" font-family="Inter,Arial" font-size="17" font-weight="700">Your creation pipeline</text>
+  <g fill="#1b2238" stroke="#303a5b">
+    <rect x="300" y="476" width="152" height="200" rx="12"/><rect x="468" y="476" width="152" height="200" rx="12"/>
+    <rect x="636" y="476" width="152" height="200" rx="12"/><rect x="804" y="476" width="152" height="200" rx="12"/>
+    <rect x="972" y="476" width="158" height="200" rx="12"/>
+  </g>
+  <g fill="url(#accent)" font-family="Inter,Arial" font-size="22" font-weight="800"><text x="318" y="514">01</text><text x="486" y="514">02</text><text x="654" y="514">03</text><text x="822" y="514">04</text><text x="990" y="514">05</text></g>
+  <g fill="#cbd2ec" font-family="Inter,Arial" font-size="13" font-weight="700"><text x="318" y="562">Download</text><text x="486" y="562">Understand</text><text x="654" y="562">Clip</text><text x="822" y="562">Edit</text><text x="990" y="562">Publish</text></g>
+</svg>

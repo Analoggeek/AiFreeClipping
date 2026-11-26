@@ -1,5 +1,13 @@
 # Roadmap
 
+## Shipped in v5.1.0
+
+- One-click model downloads and direct API-key links inside the app
+- YOLOX ONNX + ByteTrack inside packaged builds (no Torch required)
+- Live hardware HUD, per-clip render telemetry and copy-to-all effects
+- Parallel hardware-aware batch exports
+- Redesigned 3D brand identity, animated app UI and animated static website
+
 ## Shipped in v5.0.0
 
 - Link/playlist downloader with max-quality selection and local library
