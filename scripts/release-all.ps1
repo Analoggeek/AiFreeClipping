@@ -1,0 +1,61 @@
+<#
+  AI Clipper Pro — Windows one-command release (PowerShell).
+    powershell -ExecutionPolicy Bypass -File scripts\release-all.ps1
+    powershell -ExecutionPolicy Bypass -File scripts\release-all.ps1 -All -Publish
+#>
+param(
+  [string]$Version = (node -p "require('./package.json').version"),
+  [switch]$All,
+  [switch]$Publish,
+  [switch]$SkipBackend
+)
+
+$ErrorActionPreference = 'Stop'
+Set-Location (Split-Path -Parent $PSScriptRoot)
+Write-Host "== AI Clipper Pro release v$Version =="
+
+function Invoke-Checked([string]$Command) {
+  Write-Host "> $Command"
+  Invoke-Expression $Command
+  if ($LASTEXITCODE -ne 0) { throw "Failed: $Command" }
+}
+
+Invoke-Checked 'npm run typecheck'
+if (Test-Path '.venv\Scripts\python.exe') { $Python = '.venv\Scripts\python.exe' } else { $Python = 'python' }
+& $Python -m pytest backend/tests -q
+Invoke-Checked "$Python scripts/generate-icons.py"
+Invoke-Checked 'npm run build'
+if ($SkipBackend) { Invoke-Checked "$Python scripts/package-backend.py --skip-pyinstaller" }
+else { Invoke-Checked "$Python scripts/package-backend.py" }
+
+if ($All) {
+  Invoke-Checked "gh workflow run release.yml -f version=$Version"
+  Start-Sleep -Seconds 8
+  $runId = (gh run list --workflow release.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+  if (-not $runId) { throw 'Could not find the dispatched GitHub Actions run' }
+  Invoke-Checked "gh run watch $runId --exit-status"
+  if (Test-Path release) { Remove-Item -Recurse -Force release }
+  New-Item -ItemType Directory -Force release | Out-Null
+  Invoke-Checked "gh run download $runId -D release\.download"
+  Get-ChildItem release\.download -Recurse -File | ForEach-Object { Copy-Item $_.FullName -Destination release -Force }
+  Remove-Item -Recurse -Force release\.download
+} else {
+  Invoke-Checked 'npx electron-builder --win --x64 --arm64 --publish never'
+}
+
+if (-not (Test-Path release)) { New-Item -ItemType Directory -Force release | Out-Null }
+$installers = Get-ChildItem release -Recurse -File | Where-Object { $_.Extension -in '.exe', '.dmg', '.AppImage', '.deb', '.zip' }
+$lines = $installers | ForEach-Object { "$((Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower())  $($_.Name)" }
+$lines | Set-Content release\SHA256SUMS.txt
+@{
+  product = 'AI Clipper Pro'; author = 'analoggeek'; version = $Version
+  builtAt = (Get-Date).ToUniversalTime().ToString('o'); buildMode = $(if ($All) { 'ci' } else { 'local' })
+  installers = @($installers.Name)
+} | ConvertTo-Json -Depth 4 | Set-Content release\manifest.json
+
+if ($Publish) {
+  try { Invoke-Checked "gh release create v$Version release/* --generate-notes --title 'AI Clipper Pro v$Version'" }
+  catch { Invoke-Checked "gh release upload v$Version release/* --clobber" }
+}
+Write-Host 'Done. Installers and checksums are in .\release'
+Get-ChildItem release | Select-Object Name, Length

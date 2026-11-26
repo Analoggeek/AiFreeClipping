@@ -1,0 +1,40 @@
+# dependencies
+node_modules/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# build output
+dist/
+release/
+backend/build/
+backend/dist/*.spec.bak
+*.egg-info/
+build/
+coverage/
+out/
+
+# local data / secrets / generated media
+AIDATA/
+*.db
+*.sqlite3
+.env
+.env.local
+client_secret.json
+token.json
+*.log
+.DS_Store
+Thumbs.db
+
+# large model binaries and caches
+models/
+.cache/
+models--*/
+
+# locally built engine bundles (release artifacts)
+backend/runtime/*
+!backend/runtime/README.md
