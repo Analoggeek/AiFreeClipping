@@ -25,29 +25,30 @@ permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Resolve build matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - id: matrix
+        shell: bash
+        run: |
+          ALL='{"include":[{"os":"windows-latest","platform":"win","arch":"x64"},{"os":"windows-latest","platform":"win","arch":"arm64"},{"os":"macos-15-intel","platform":"mac","arch":"x64"},{"os":"macos-15","platform":"mac","arch":"arm64"},{"os":"ubuntu-24.04","platform":"linux","arch":"x64"}]}'
+          FILTER="${{ inputs.only_platform }}"
+          if [ -z "$FILTER" ] || [ "$FILTER" = "all" ]; then
+            echo "matrix=$ALL" >> "$GITHUB_OUTPUT"
+          else
+            echo "matrix=$(echo "$ALL" | jq -c --arg f "$FILTER" '.include |= map(select(.platform == $f))')" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: ${{ matrix.platform }}-${{ matrix.arch }}
+    needs: prepare
     runs-on: ${{ matrix.os }}
-    if: ${{ inputs.only_platform == '' || inputs.only_platform == 'all' || matrix.platform == inputs.only_platform }}
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            platform: win
-            arch: x64
-          - os: windows-latest
-            platform: win
-            arch: arm64
-          - os: macos-15-intel
-            platform: mac
-            arch: x64
-          - os: macos-15
-            platform: mac
-            arch: arm64
-          - os: ubuntu-24.04
-            platform: linux
-            arch: x64
+      matrix: ${{ fromJson(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
 
