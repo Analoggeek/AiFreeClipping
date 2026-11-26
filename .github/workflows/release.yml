@@ -122,7 +122,7 @@ jobs:
           VERSION="${{ inputs.version || github.ref_name }}"
           VERSION="${VERSION#v}"
           mkdir -p release/installers
-          find release -mindepth 2 -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -exec cp -f {} release/installers/ \;
+          find release -maxdepth 1 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -exec cp -f {} release/installers/ \;
           cd release/installers
           find . -maxdepth 1 -type f -name 'AI-Clipper-Pro-*' -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS.txt
           printf '{"product":"AI Clipper Pro","author":"analoggeek","version":"%s","installers":%s}\n' \
