@@ -63,7 +63,7 @@ if [ "$MODE" = "ci" ]; then
   gh workflow run release.yml -f version="$VERSION"
   echo "Waiting for the workflow to appear…"
   sleep 8
-  RUN_ID="$(gh run list --workflow release.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')"
+  RUN_ID="$(gh run list --workflow release.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')"
   [ -n "$RUN_ID" ] || { echo "Could not find the dispatched run" >&2; exit 1; }
   echo "Run ID: $RUN_ID — watch with: gh run view $RUN_ID"
   gh run watch "$RUN_ID" --exit-status

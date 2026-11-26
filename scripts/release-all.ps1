@@ -31,7 +31,7 @@ else { Invoke-Checked "$Python scripts/package-backend.py" }
 if ($All) {
   Invoke-Checked "gh workflow run release.yml -f version=$Version"
   Start-Sleep -Seconds 8
-  $runId = (gh run list --workflow release.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId')
+  $runId = (gh run list --workflow release.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')
   if (-not $runId) { throw 'Could not find the dispatched GitHub Actions run' }
   Invoke-Checked "gh run watch $runId --exit-status"
   if (Test-Path release) { Remove-Item -Recurse -Force release }
