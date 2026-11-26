@@ -42,9 +42,21 @@ function findBackendBinary() {
       }
     };
     try { walk(resourceRoot); } catch (_) { /* ignore */ }
-    const match = candidates.find((file) => file.includes(process.platform === 'darwin' ? 'macos' : process.platform));
-    if (match) return { command: match, args: [] };
-    if (candidates.length) return { command: candidates[0], args: [] };
+    const platformName = { win32: 'windows', darwin: 'macos', linux: 'linux' }[process.platform] || process.platform;
+    const archName = process.arch === 'ia32' ? 'x64' : process.arch;
+    const match = candidates.find((file) => file.includes(`${platformName}-${archName}`))
+      || candidates.find((file) => file.includes(platformName));
+    if (match) {
+      if (process.platform !== 'win32') {
+        try { fs.chmodSync(match, 0o755); } catch (_) { /* best effort */ }
+      }
+      console.log('[engine] bundled binary:', match);
+      return { command: match, args: [] };
+    }
+    if (candidates.length) {
+      console.warn('[engine] exact runtime not found, using:', candidates[0]);
+      return { command: candidates[0], args: [] };
+    }
   }
   const pythonCandidates = [
     path.join(root, '.venv', 'bin', 'python'),

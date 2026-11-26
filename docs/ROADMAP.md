@@ -1,5 +1,11 @@
 # Roadmap
 
+## Shipped in v5.1.1
+
+- Reliable browser start (`npm start`) with Electron fallback
+- Correct platform + architecture matching for bundled engine binaries
+- Fully redesigned animated static website with interactive screenshot tabs
+
 ## Shipped in v5.1.0
 
 - One-click model downloads and direct API-key links inside the app

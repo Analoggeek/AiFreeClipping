@@ -54,7 +54,8 @@ pip install -r backend/requirements-vision.txt
 # Optional YouTube publishing:
 pip install -r backend/requirements-youtube.txt
 python scripts/generate-icons.py
-npm run dev:app
+npm start                            # browser studio (no Electron required)
+npm run dev:app                      # Electron window; auto-falls back to browser studio
 ```
 
 Environment variables:
