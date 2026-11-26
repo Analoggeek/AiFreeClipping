@@ -117,6 +117,7 @@
           ]
         }
       ],
+      "maintainer": "analoggeek <analoggeek@users.noreply.github.com>",
       "icon": "brand/icon.png",
       "category": "Video",
       "artifactName": "AI-Clipper-Pro-${version}-Linux-${arch}.${ext}"

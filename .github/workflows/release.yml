@@ -4,9 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 1.0.0)'
+        description: 'Release version (e.g. 5.0.0)'
         required: true
-        default: '1.0.0'
+        default: '5.0.0'
+      only_platform:
+        description: 'Build only one platform (leave all for the full matrix)'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - win
+          - mac
+          - linux
   push:
     tags:
       - 'v*'
@@ -18,6 +28,7 @@ jobs:
   build:
     name: ${{ matrix.platform }}-${{ matrix.arch }}
     runs-on: ${{ matrix.os }}
+    if: ${{ inputs.only_platform == '' || inputs.only_platform == 'all' || matrix.platform == inputs.only_platform }}
     strategy:
       fail-fast: false
       matrix:
@@ -90,6 +101,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs: build
+    if: ${{ inputs.only_platform == '' || inputs.only_platform == 'all' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
