@@ -24,6 +24,12 @@ class FrameCompositor:
 
     def frame(self,project,time,max_size=640):
         project.validate()
+        if any(item.color_grade for lane in project.lanes if lane.enabled for item in lane.items):
+            raise ValueError('Color grading requires shared-graph playback or rendered snapshot')
+        if any(item.transition_mode!='dissolve_linear' for lane in project.lanes if lane.enabled for item in lane.items):
+            raise ValueError('Transition recipes require shared-graph playback or rendered snapshot')
+        if any(item.effects for lane in project.lanes if lane.enabled for item in lane.items):
+            raise ValueError('Layer effects require shared-graph live playback or rendered snapshot, not the legacy draft compositor')
         if not math.isfinite(time) or not 0<=time<=project.duration:raise ValueError('Preview time outside project')
         cv2=cv2_module()
         if cv2 is None:raise RuntimeError('OpenCV unavailable')

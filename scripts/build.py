@@ -335,6 +335,7 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
         ("resources/models", "resources/models"),
         ("resources/icons", "resources/icons"),
         ("resources/sounds", "resources/sounds"),
+        ("resources/templates", "resources/templates"),
     ]
     args = [
         venv_python(), "-m", "PyInstaller",
@@ -355,6 +356,7 @@ def pyinstaller_args(target: str, target_arch: str = "") -> list[str]:
     args += [
         "--collect-all", "yt_dlp", "--hidden-import", "clipos",
         "--collect-all", "faster_whisper",
+        "--collect-all", "av",
         "--collect-all", "cv2",
         "--collect-all", "supervision",
         "--copy-metadata", "supervision",

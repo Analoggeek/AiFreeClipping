@@ -9,15 +9,23 @@ import time
 from ..core.ffmpeg import FFmpegRunner, probe
 from ..core.hardware import choose_encoder
 from .renderer import RenderResult, tempo_filter, _filter_args
+from .studio_audio import audio_filters
 
 
-def graph(project,work_dir=None):
+def graph(project,work_dir=None,window=None):
     """Return inputs/filter graph for enabled video layers and independent audio lanes."""
     project.validate()
     duration=project.duration
     if not 0<duration<=21600:raise ValueError('Export duration must be within 0–6 hours')
     media={source.id:source for source in project.media}
-    active=[(lane,item) for lane in project.lanes if lane.enabled for item in lane.items]
+    enabled=[(lane,item) for lane in project.lanes if lane.enabled for item in lane.items]
+    duck_history=window is not None and any(lane.kind=='audio' and item.audio_role=='music' and item.ducking
+        and item.at<window[0]+window[1] and item.at+item.duration>window[0] for lane,item in enabled)
+    # Prior dialogue can still affect a music compressor's release envelope.
+    # Keep driver history for seek/window parity rather than resetting ducking.
+    active=[(lane,item) for lane,item in enabled if window is None or
+        (item.at < window[0]+window[1] and item.at+item.duration > window[0]) or
+        (duck_history and lane.kind=='audio' and item.audio_role=='dialogue' and item.at<window[0]+window[1])]
     if len(active)>64:raise ValueError('Current export supports at most 64 active items')
     for source_id in {item.media_id for lane,item in active if lane.kind in ('video','audio')}:
         source=media[source_id]
@@ -28,7 +36,7 @@ def graph(project,work_dir=None):
     inputs=[]
     parts=[f'color=c=black:s={project.width}x{project.height}:r={project.fps}:d={duration:.6f}[canvas]',
            f'anullsrc=r=48000:cl=stereo,atrim=duration={duration:.6f}[silence]']
-    base='[canvas]';audio=['[silence]'];input_index=0
+    base='[canvas]';audio=['[silence]'];input_index=0;audio_entries=[]
     for index,(lane,item) in enumerate(active):
         if lane.kind=='transition':continue
         if lane.kind=='effect':
@@ -52,7 +60,7 @@ def graph(project,work_dir=None):
             x=round(item.x*project.width);y=round(item.y*project.height)
             parts.append(f'[{stream}:v]setpts=(PTS-STARTPTS)/{item.speed:.8f},fps={project.fps},'
                 f'scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},'
-                f'setsar=1,' + video_effects(item) + 'format=rgba,' + video_opacity(item) +
+                f'setsar=1,' + video_effects(item,work_dir) + 'format=rgba,' + video_opacity(item) +
                 video_fades(item) + dissolve_filter(project,item) +
                 f'setpts=PTS+{item.at:.6f}/TB[layer{index}]')
             parts.append(f'{base}[layer{index}]overlay=x={x}:y={y}:eof_action=pass:repeatlast=0:'
@@ -61,22 +69,37 @@ def graph(project,work_dir=None):
         else:
             delay=round(item.at*1000)
             parts.append(f'[{stream}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},'
-                f'aresample=48000,aformat=channel_layouts=stereo,' + audio_gain(item) +
+                f'aresample=48000,aformat=channel_layouts=stereo,' + audio_filters(item.audio_effects) + audio_gain(item) +
                 f'atrim=duration={item.duration:.6f},' + audio_envelope(item) + f'adelay={delay}|{delay}[audio{index}]')
-            audio.append(f'[audio{index}]')
+            audio_entries.append((f'[audio{index}]',item.audio_role,item.ducking))
+    from .studio_audio import ducking_graph
+    duck_parts,processed_audio=ducking_graph(audio_entries,duration,dialogue_available=any(i.audio_role=='dialogue' for l in project.lanes if l.enabled and l.kind=='audio' for i in l.items))
+    parts.extend(duck_parts);audio.extend(processed_audio)
     # Compensate amix averaging; limit peaks without auto loudness boosting.
     parts.append(''.join(audio)+f'amix=inputs={len(audio)}:duration=first:dropout_transition=0,'
         f'volume={len(audio)},alimiter=limit=0.95:level=0[aout]')
     return inputs,';'.join(parts),base,'[aout]'
 
 
-def export_project(project,output,work_dir,*,encoder='auto',progress_cb=None,cancel_cb=None):
+def export_project(project,output,work_dir,*,encoder='auto',progress_cb=None,cancel_cb=None,window=None):
     output=Path(output)
     if output.suffix.lower()!='.mp4':raise ValueError('Multitrack export requires an .mp4 path')
     if output.resolve() in {Path(media.path).resolve() for media in project.media}:
         raise ValueError('Export cannot overwrite source media')
     work_dir=Path(work_dir);work_dir.mkdir(parents=True,exist_ok=True)
-    inputs,filters,video,audio=graph(project,work_dir)
+    import math
+    if window is not None:
+        if (not isinstance(window,(tuple,list)) or len(window)!=2 or
+            any(type(v) not in (int,float) or not math.isfinite(v) for v in window) or
+            window[0]<0 or window[1]<=0 or window[0]+window[1]>project.duration+1e-6):
+            raise ValueError('Invalid timeline export window')
+    duration=window[1] if window is not None else project.duration
+    inputs,filters,video,audio=graph(project,work_dir,window=window)
+    if window is not None:
+        start,end=window[0],window[0]+window[1]
+        filters+=f';{video}trim=start={start:.8f}:end={end:.8f},setpts=PTS-STARTPTS[windowvideo]'
+        filters+=f';{audio}atrim=start={start:.8f}:end={end:.8f},asetpts=PTS-STARTPTS[windowaudio]'
+        video,audio='[windowvideo]','[windowaudio]'
     output.parent.mkdir(parents=True,exist_ok=True)
     work_dir=Path(work_dir);work_dir.mkdir(parents=True,exist_ok=True)
     fd,temp=tempfile.mkstemp(prefix='.multitrack-',suffix='.mp4',dir=output.parent)
@@ -91,20 +114,22 @@ def export_project(project,output,work_dir,*,encoder='auto',progress_cb=None,can
             if choice.hw_accel=='videotoolbox':codec+=['-allow_sw','0']
         return ['-hide_banner','-nostdin','-y','-filter_complex_threads','2',*inputs,
             *_filter_args(filters,work_dir,Path(temp).stem),'-map',video,'-map',audio,*codec,
-            '-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-t',f'{project.duration:.6f}',
+            '-pix_fmt','yuv420p','-c:a','aac','-b:a','160k','-t',f'{duration:.6f}',
             '-movflags','+faststart','-threads','2',temp]
     try:
         choice=choose_encoder(encoder)
         try:
-            FFmpegRunner(total_duration=project.duration,progress_cb=progress_cb,cancel_cb=cancel_cb).run(command(choice))
+            FFmpegRunner(total_duration=duration,progress_cb=progress_cb,cancel_cb=cancel_cb).run(command(choice))
         except Exception as exc:
             from ..core.ffmpeg import FFmpegCancelled
             if isinstance(exc,FFmpegCancelled) or not choice.is_hardware:raise
             result.warnings.append(f'Hardware encoding failed; CPU retry: {exc}')
             choice=choose_encoder('cpu')
-            FFmpegRunner(total_duration=project.duration,progress_cb=progress_cb,cancel_cb=cancel_cb).run(command(choice))
+            FFmpegRunner(total_duration=duration,progress_cb=progress_cb,cancel_cb=cancel_cb).run(command(choice))
         info=probe(temp)
         if not info.has_video or not info.has_audio or info.duration<=0:raise ValueError('Invalid multitrack export')
+        if (info.video.width,info.video.height)!=(project.width,project.height) or abs(info.duration-duration)>max(.25,2/project.fps):
+            raise ValueError('Encoded dimensions/duration differ from timeline export configuration')
         os.replace(temp,output)
         result.encoder=choice.description;result.duration=info.duration;result.size_bytes=output.stat().st_size
         result.elapsed=time.monotonic()-started
@@ -124,7 +149,7 @@ def audio_preview_command(project,start):
     sources={source.id:source for source in project.media}
     inputs=[];labels=['[silence]']
     parts=[f'anullsrc=r=48000:cl=stereo,atrim=duration={duration:.6f}[silence]']
-    index=0
+    index=0;audio_entries=[]
     for lane in project.lanes:
         if not lane.enabled or lane.kind!='audio':continue
         for item in lane.items:
@@ -137,9 +162,12 @@ def audio_preview_command(project,start):
             delay=round(max(0,item.at-start)*1000)
             inputs+=['-threads','2','-ss',f'{source_in:.6f}','-t',f'{length:.6f}','-i',source.path]
             parts.append(f'[{index}:a]asetpts=PTS-STARTPTS,{tempo_filter(item.speed)},aresample=48000,'
-                f'aformat=channel_layouts=stereo,' + audio_gain(item,offset) + audio_envelope(item,offset) + f'adelay={delay}|{delay}[p{index}]')
-            labels.append(f'[p{index}]');index+=1
+                f'aformat=channel_layouts=stereo,' + audio_filters(item.audio_effects) + audio_gain(item,offset) + audio_envelope(item,offset) + f'adelay={delay}|{delay}[p{index}]')
+            audio_entries.append((f'[p{index}]',item.audio_role,item.ducking));index+=1
     if index>64:raise ValueError('Audio preview supports at most 64 items')
+    from .studio_audio import ducking_graph
+    duck_parts,processed_audio=ducking_graph(audio_entries,duration,dialogue_available=any(i.audio_role=='dialogue' for l in project.lanes if l.enabled and l.kind=='audio' for i in l.items))
+    parts.extend(duck_parts);labels.extend(processed_audio)
     parts.append(''.join(labels)+f'amix=inputs={len(labels)}:duration=first:dropout_transition=0,'
         f'volume={len(labels)},alimiter=limit=0.95:level=0[pcm]')
     return [require_ffmpeg(),'-hide_banner','-nostdin','-v','error','-filter_complex_threads','2',*inputs,
@@ -183,17 +211,24 @@ def video_opacity(item):
     return f"format=gbrap,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='alpha(X,Y)*({expression})',"
 
 
-def video_effects(item):
+def video_effects(item,work_dir=None):
     """Per-layer actual color and rotation filters, before alpha automation."""
     filters=[]
     if (item.brightness,item.contrast,item.saturation)!=(0.,1.,1.):
         filters.append(f'eq=brightness={item.brightness:.8f}:contrast={item.contrast:.8f}:saturation={item.saturation:.8f}')
     if item.rotation:
         filters.append(f'rotate={item.rotation:.8f}*PI/180:ow=iw:oh=ih:c=black')
+    from .studio_effects import effect_filters
+    filters.extend(effect_filters(item.effects))
+    from .studio_color import grade_filters
+    filters.extend(grade_filters(item.color_grade,work_dir))
     return ','.join(filters)+(',' if filters else '')
 
 
 def dissolve_filter(project,item):
     from .overlay_tracks import dissolve_duration
     duration=dissolve_duration(project,item.id)
-    return f'fade=t=in:st=0:d={duration:.8f}:alpha=1,' if duration else ''
+    if not duration:return ''
+    from .studio_transitions import alpha_filter
+    transition=next(t for lane in project.lanes if lane.kind=='transition' and lane.enabled for t in lane.items if t.incoming_id==item.id)
+    return alpha_filter(transition.transition_mode,duration)

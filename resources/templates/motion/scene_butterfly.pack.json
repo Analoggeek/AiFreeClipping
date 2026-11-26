@@ -1,0 +1,46 @@
+{
+  "id": "scene_butterfly",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Fresh beginning",
+    "asset": "scene_butterfly.png",
+    "artwork": "scene_butterfly.art.png",
+    "panel": "scene_butterfly.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "defaults": {
+    "title": "Fresh beginning",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

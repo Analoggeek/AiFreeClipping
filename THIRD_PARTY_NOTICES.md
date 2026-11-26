@@ -93,3 +93,14 @@ and https://evermeet.cx/ffmpeg/ (Intel macOS distributor). FFmpeg/x264 GPL
 obligations remain applicable, separately from this application's own code.
 The native release gate rejects a build configured with `--enable-nonfree`.
 No imageio wheel with a known nonfree build configuration is substituted.
+
+## Optional Noto Emoji PNG library (not bundled artwork)
+
+The Motion graphics panel optionally downloads 50 individually selected PNG
+illustrations from Google Noto Emoji, pinned to commit
+`e8073ab740292f8d5f19b5de144087ac58044d06` (v2.038).
+Copyright Google LLC; Apache License 2.0. The license from that exact revision is
+bundled at `resources/templates/free_library/Noto-Apache-2.0.txt` and copied beside
+each downloaded file together with source URL, revision and integrity metadata.
+The artwork is not public-domain or copyright-free. No Google endorsement is
+implied. These downloads are opt-in and are not required for offline editing.

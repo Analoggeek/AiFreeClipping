@@ -1,0 +1,46 @@
+{
+  "id": "scene_battery",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Energy update",
+    "asset": "scene_battery.png",
+    "artwork": "scene_battery.art.png",
+    "panel": "scene_battery.panel.png",
+    "category": "Original illustrated scenes",
+    "title_box": [
+      76,
+      980,
+      432,
+      70
+    ],
+    "subtitle_box": [
+      76,
+      1098,
+      432,
+      60
+    ],
+    "logo_box": [
+      564,
+      974,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#FDE68A"
+  },
+  "defaults": {
+    "title": "Energy update",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

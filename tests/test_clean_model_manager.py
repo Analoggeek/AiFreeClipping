@@ -180,3 +180,36 @@ def test_additional_manifest_host_requires_explicit_allowlist_and_exact_hostname
             allowed_hosts=("huggingface.co",),
         )
     assert (tmp_path / "verified").read_bytes() == payload
+
+
+def test_windows_signature_uses_os_security_module_not_inherited_pwsh_modules(tmp_path):
+    from types import SimpleNamespace
+
+    with patch.dict(
+        "os.environ",
+        {"PSModulePath": "untrusted-pwsh-modules", "SystemRoot": r"C:\Windows"},
+    ):
+        with patch.object(
+            ollama_install.subprocess, "run", return_value=SimpleNamespace(returncode=0)
+        ) as run:
+            ollama_install.verify_windows_signature(tmp_path / "OllamaSetup.exe")
+            args = run.call_args.args[0]
+            env = run.call_args.kwargs["env"]
+            assert args[0].endswith("powershell.exe")
+            assert "WindowsPowerShell" in args[0]
+            assert not any(key.upper() == "PSMODULEPATH" for key in env)
+            assert "Join-Path $PSHOME" in args[-1]
+            assert '$ErrorActionPreference="Stop"' in args[-1]
+            assert '$s.Status -ne "Valid"' in args[-1]
+
+
+def test_windows_signature_failure_stays_fail_closed(tmp_path):
+    from types import SimpleNamespace
+
+    with patch.object(
+        ollama_install.subprocess,
+        "run",
+        return_value=SimpleNamespace(returncode=1, stdout="HashMismatch", stderr=""),
+    ):
+        with pytest.raises(RuntimeError, match="HashMismatch"):
+            ollama_install.verify_windows_signature(tmp_path / "OllamaSetup.exe")

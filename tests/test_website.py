@@ -5,7 +5,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / 'docs'
-RELEASE = 'v3.6.1'
+RELEASE = 'v4.0.0'
 
 
 class Page(HTMLParser):
@@ -40,7 +40,11 @@ def test_page_brand_assets_anchors_and_downloads():
 
 def test_readme_is_current_release_only_and_no_script_interactivity():
     text=(ROOT/'README.md').read_text()
-    assert set(re.findall(r'v\d+\.\d+\.\d+',text))=={RELEASE}
+    # An explicitly pending release may be announced without advertising missing downloads.
+    downloads=re.findall(r'/releases/download/(v\d+\.\d+\.\d+)/',text)
+    assert downloads and set(downloads)=={RELEASE}
+    assert 'All seven installer/archive downloads below are published and nonempty.' in text
+    assert '## v4.0.0 — published Studio release' in text
     assert not re.search(r'(?i)<script|onclick=',text)
     assert text.count('<details>')>=4 and text.count('<details>')==text.count('</details>')
     assert 'cross-dissolves' in text

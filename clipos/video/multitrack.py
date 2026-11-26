@@ -26,6 +26,8 @@ class Media:
     duration: float
     has_video: bool
     has_audio: bool
+    queue_clip_id: int | None = None
+    graphic: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -54,6 +56,13 @@ class Item:
     text: str = ""
     caption_style: str = "bold_viral"
     caption_options: dict = field(default_factory=dict)
+    caption_words: list = field(default_factory=list)
+    effects: list = field(default_factory=list)
+    transition_mode: str = "dissolve_linear"
+    audio_effects: list = field(default_factory=list)
+    color_grade: dict = field(default_factory=dict)
+    audio_role: str = "dialogue"
+    ducking: dict = field(default_factory=dict)
     incoming_id: str = ""
     outgoing_id: str = ""
 
@@ -111,6 +120,10 @@ class MultitrackProject:
                 raise ValueError('Media must be a local file path')
             number(media.duration,.001,1e7)
             if type(media.has_video) is not bool or type(media.has_audio) is not bool:raise ValueError('Invalid source type')
+            if media.queue_clip_id is not None and (type(media.queue_clip_id) is not int or media.queue_clip_id <= 0):
+                raise ValueError('Invalid generated clip reference')
+            from .studio_graphics import validate_graphic
+            validate_graphic(media.graphic)
             sources[media.id]=media
         groups={}
         for lane in self.lanes:
@@ -124,7 +137,8 @@ class MultitrackProject:
                     from .overlay_tracks import validate_overlay
                     validate_overlay(lane,item,number)
                     continue
-                if item.text or item.caption_options or item.incoming_id or item.outgoing_id:
+                if item.transition_mode!='dissolve_linear':raise ValueError('Transition recipes require a transition lane')
+                if item.text or item.caption_options or item.caption_words or item.incoming_id or item.outgoing_id:
                     raise ValueError('Overlay metadata requires a dedicated overlay lane')
                 if item.media_id not in sources:raise ValueError('Missing media reference')
                 if not isinstance(item.group_id,str) or len(item.group_id)>128:raise ValueError('Invalid link group')
@@ -138,6 +152,18 @@ class MultitrackProject:
                 number(item.length,.001,media.duration);number(item.speed,.25,4);number(item.gain,0,4)
                 number(item.brightness,-1,1);number(item.contrast,0,3)
                 number(item.saturation,0,3);number(item.rotation,-180,180)
+                from .studio_color import validate_grade
+                validate_grade(item.color_grade)
+                if lane.kind!='video' and item.color_grade:raise ValueError('Color grading requires video items')
+                from .studio_audio import validate_ducking
+                validate_ducking(item.audio_role,item.ducking)
+                if lane.kind!='audio' and (item.audio_role!='dialogue' or item.ducking):raise ValueError('Audio roles/ducking require audio items')
+                from .studio_audio import validate_audio_effects
+                validate_audio_effects(item.audio_effects)
+                if lane.kind!='audio' and item.audio_effects:raise ValueError('Audio processors require an audio lane')
+                from .studio_effects import validate_effects
+                validate_effects(item.effects)
+                if lane.kind!='video' and item.effects:raise ValueError('Video effects require a video lane')
                 if lane.kind=='audio' and (item.brightness,item.contrast,item.saturation,item.rotation)!=(0.,1.,1.,0.):
                     raise ValueError('Color and rotation controls require a video track')
                 number(item.fade_in,0,item.duration);number(item.fade_out,0,item.duration)
@@ -235,11 +261,11 @@ class MultitrackProject:
         self.media,self.lanes=following.media,following.lanes
         return True
 
-    def import_media(self,path,at=0.):
+    def import_media(self,path,at=0.,queue_clip_id=None):
         path=Path(path).expanduser().resolve()
         if not path.is_file():raise FileNotFoundError(f'Media file not found: {path}')
         info=probe(path)
-        media=Media(uid(),str(path),info.duration,info.has_video,info.has_audio)
+        media=Media(uid(),str(path),info.duration,info.has_video,info.has_audio,queue_clip_id=queue_clip_id)
         group=uid() if info.has_video and info.has_audio else ''
         def operation(project):
             project.media.append(media)
@@ -264,7 +290,7 @@ class MultitrackProject:
         self.edit(operation)
         return lane_id,item.id
 
-    def add_dissolve(self,lane_id,item_id,duration):
+    def add_dissolve(self,lane_id,item_id,duration,mode="dissolve_linear"):
         incoming_lane,incoming=self.find(lane_id,item_id)
         if incoming_lane.kind!='video':raise ValueError('Select the incoming video layer')
         ordered=[item for lane in self.lanes if lane.enabled and lane.kind=='video' for item in lane.items]
@@ -273,7 +299,7 @@ class MultitrackProject:
                     if item.at<incoming.at<item.at+item.duration]
         if not candidates:raise ValueError('Arrange two overlapping video items first: incoming video starts later and is above the outgoing layer')
         return self._add_overlay('transition',Item(uid(),'',incoming.at,0.,duration,
-                                incoming_id=incoming.id,outgoing_id=candidates[-1].id))
+                                incoming_id=incoming.id,outgoing_id=candidates[-1].id,transition_mode=mode))
 
     def _linked_targets(self,lane_id,item_id):
         _,selected=self.find(lane_id,item_id)
@@ -283,7 +309,7 @@ class MultitrackProject:
         return targets
 
     def change_item(self,lane_id,item_id,*,linked=False,**values):
-        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options'}
+        allowed={'at','source_in','length','speed','gain','x','y','w','h','opacity','fade_in','fade_out','brightness','contrast','saturation','rotation','text','caption_style','caption_options','caption_words','effects','audio_effects','color_grade','audio_role','ducking'}
         if not values.keys()<=allowed:raise ValueError('Unsupported item properties')
         def operation(project):
             lane,item=project.find(lane_id,item_id)
@@ -361,6 +387,17 @@ class MultitrackProject:
                     midpoint=curve_value(keys,elapsed,1.)
                     setattr(right,field,[[0.,midpoint]]+[[t-elapsed,v] for t,v in keys if t>elapsed])
                     setattr(item,field,[[t,v] for t,v in keys if t<elapsed]+[[elapsed,midpoint]])
+            if lane.kind=='caption' and item.caption_words:
+                left_words=[];right_words=[]
+                for word in item.caption_words:
+                    if word['s'] < elapsed:
+                        left_words.append({**word,'e':min(word['e'],elapsed)})
+                    if word['e'] > elapsed:
+                        right_words.append({**word,'s':max(0.,word['s']-elapsed),'e':word['e']-elapsed})
+                if not left_words or not right_words:raise ValueError('Split timed captions at a spoken-word boundary or edit text first')
+                item.caption_words=left_words;right.caption_words=right_words
+                item.text=' '.join(w['w'] for w in left_words)
+                right.text=' '.join(w['w'] for w in right_words)
             item.length=used;item.fade_out=0.
             lane.items.insert(lane.items.index(item)+1,right)
         self.edit(operation)

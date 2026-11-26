@@ -1,0 +1,43 @@
+{
+  "id": "corner_frame",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Corner frame",
+    "asset": "corner_frame.png",
+    "title_box": [
+      84,
+      216,
+      420,
+      70
+    ],
+    "subtitle_box": [
+      84,
+      322,
+      420,
+      70
+    ],
+    "logo_box": [
+      558,
+      234,
+      78,
+      78
+    ],
+    "title_color": "#FFFFFF",
+    "subtitle_color": "#F9A8D4"
+  },
+  "defaults": {
+    "title": "Corner frame",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}

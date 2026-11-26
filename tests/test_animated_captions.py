@@ -10,7 +10,7 @@ from clipos.captions.caption_engine import (
 from clipos.captions.motion import timed_words
 from clipos.core.ffmpeg import require_ffmpeg
 
-ANIMATED = [key for key, style in CAPTION_STYLES.items() if style.animation != 'none']
+ANIMATED = [key for key, style in CAPTION_STYLES.items() if style.animation != 'none' and not key.startswith('original_')]
 
 
 def sample():
@@ -21,7 +21,7 @@ def sample():
 
 def test_thirty_distinct_combinations_are_exposed_through_existing_registry():
     assert len(ANIMATED) == 30
-    assert len(CAPTION_STYLES) == 38
+    assert len(CAPTION_STYLES) == 88  # 38 compatibility styles + 50 original compositions
     assert len({render_ass([sample()],get_style(key)) for key in ANIMATED}) == 30
     assert all(item['animation'] != 'none' for item in list_styles() if item['key'] in ANIMATED)
     assert get_style('bold_viral').animation == 'none'  # Legacy appearance retained.

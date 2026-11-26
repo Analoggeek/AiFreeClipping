@@ -32,6 +32,7 @@ def native(tmp_path, monkeypatch):
 
     paths = AppPaths(tmp_path / "data")
     paths.ensure()
+    monkeypatch.setattr(config, "PATHS", paths)
     # Existing modules share this object in production. Override module references
     # in tests so decoding/exports never touch the developer's real library.
     for module in (
@@ -62,10 +63,16 @@ def native(tmp_path, monkeypatch):
         db.close()
 
 
-def test_only_four_routes_and_no_retired_feature_construction(native):
+def test_core_routes_and_integrated_studio_without_retired_feature_construction(native):
     app, db, window, _ = native
     assert set(window.pages) == {"clipper"}
-    assert set(window.nav_buttons) == {"clipper", "library", "models", "settings"}
+    assert set(window.nav_buttons) == {
+        "clipper",
+        "library",
+        "models",
+        "settings",
+        "studio",
+    }
     for key in (
         "home",
         "workflow",
@@ -171,3 +178,360 @@ def test_explicit_speech_model_missing_stops_without_download_or_silent_fallback
             generate_clips(db, pid, crop, paths.exports, speech=True)
         download.assert_not_called()
     assert not db.list_clips(pid)
+
+
+def test_studio_twenty_queue_entries_real_media_import_split_and_reopen(
+    native, tmp_path
+):
+    """20 DB queue entries reference real fixture media; not 20 AI-generated clips."""
+    from clipos.video.multitrack import MultitrackProject
+
+    app, db, window, paths = native
+    video = source(tmp_path, 320, 180)
+    pid = db.create_project(name="Queue acceptance", source_path=str(video), duration=2)
+    window.navigate("studio")
+    page = window.pages["studio"]
+    assert page.queue.rowCount() == 0
+    for index in range(20):
+        db.create_clip(
+            project_id=pid,
+            title=f"Clip {index + 1}",
+            output_path=str(video),
+            duration=2,
+        )
+    window.data_changed.emit()
+    assert page.queue.rowCount() == 20
+    page.queue.selectAll()
+    page.add_selected()
+    deadline = time.monotonic() + 15
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert len(page.project.media) == 20
+    assert page.project.duration == pytest.approx(40)
+    lane = page.project.lanes[0]
+    item = lane.items[0]
+    page.project.split(lane.id, item.id, 1, linked=True)
+    page.draw_timeline()
+    assert len(page.project.lanes[0].items) == 2
+    saved = tmp_path / "assembly.json"
+    page.project.save(saved)
+    assert MultitrackProject.load(saved).to_dict() == page.project.to_dict()
+    assert video.is_file()
+
+
+def test_studio_track_controls_waveforms_and_actual_timeline_preview(native, tmp_path):
+    from clipos.core.ffmpeg import probe
+    from clipos.video.multitrack import MultitrackProject
+
+    app, db, window, paths = native
+    video = source(tmp_path, 320, 180)
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video)
+    page.draw_timeline()
+    node = page.timeline.topLevelItem(0)
+    page.timeline.setCurrentItem(node)
+    page.toggle_track("locked")
+    assert page.project.lanes[0].locked
+    page.toggle_track("locked")
+    page.toggle_track("enabled")
+    assert not page.project.lanes[0].enabled
+    page.toggle_track("enabled")
+    captured = []
+    with patch(
+        "PySide6.QtGui.QDesktopServices.openUrl",
+        side_effect=lambda url: captured.append(url.toLocalFile()),
+    ):
+        page.render_preview()
+        deadline = time.monotonic() + 20
+        while page.worker.isRunning() and time.monotonic() < deadline:
+            app.processEvents()
+            QTest.qWait(5)
+        app.processEvents()
+    assert not page.worker.isRunning()
+    assert "Rendered timeline snapshot" in page.status.text(), page.status.text()
+    # Headless runner uses system-player fallback; on multimedia-capable hosts
+    # inspect the source actually loaded by QMediaPlayer instead.
+    output = page.player.source().toLocalFile() if page.player else captured[-1]
+    info = probe(output)
+    assert (info.video.width, info.video.height) == (160, 90)
+    assert info.has_audio
+    from clipos.video.waveform import build_waveform
+
+    waveform = build_waveform(output, tmp_path / "waveforms")
+    assert waveform["duration"] > 0
+    assert len(waveform["peaks"]) > 0
+    Path(output).unlink(missing_ok=True)
+
+
+def test_studio_selective_batch_group_and_future_import_settings(native, tmp_path):
+    from clipos.video.multitrack import MultitrackProject
+    from clipos.video.editing_preset import EditingPreset
+
+    app, db, window, paths = native
+    video = source(tmp_path, 320, 180)
+    pid = db.create_project(name="Selective edits", source_path=str(video), duration=2)
+    first = db.create_clip(
+        project_id=pid, title="A", output_path=str(video), duration=2
+    )
+    second = db.create_clip(
+        project_id=pid, title="B", output_path=str(video), duration=2
+    )
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video, queue_clip_id=first)
+    page.project.import_media(video, at=2, queue_clip_id=second)
+    page.queue_manager.group([first], "Interview")
+    page.draw_timeline()
+    page.refresh()
+    panel = page.editing
+    panel.scope.setCurrentIndex(panel.scope.findData("group"))
+    panel.group.setText("Interview")
+    panel.fields["brightness"].setValue(0.2)
+    panel.apply()
+    video_items = [
+        i for lane in page.project.lanes if lane.kind == "video" for i in lane.items
+    ]
+    assert video_items[0].brightness == 0.2 and video_items[1].brightness == 0
+    panel.scope.setCurrentIndex(panel.scope.findData("all"))
+    panel.apply()
+    assert all(
+        i.brightness == 0.2
+        for lane in page.project.lanes
+        if lane.kind == "video"
+        for i in lane.items
+    )
+    panel.set_future()
+    incoming = MultitrackProject.from_dict(page.project.to_dict())
+    new_id = incoming.import_media(video, at=4, queue_clip_id=second)
+    panel.fields["brightness"].setValue(0.4)  # saved future preset remains .2
+    page._imported(incoming.to_dict())
+    assert (
+        page.project.find(
+            page.project.lanes[-1].id, page.project.lanes[-1].items[0].id
+        )[1].brightness
+        == 0.2
+    )
+    assert page.project.media[-1].id == new_id
+    panel.clear_future()
+
+
+def test_native_caption_correction_keeps_word_timing_and_is_undoable(native):
+    app, db, window, paths = native
+    window.navigate("studio")
+    page = window.pages["studio"]
+    lane_id, item_id = page.project.add_caption("hello world", 0, 2)
+    page.project.change_item(
+        lane_id,
+        item_id,
+        caption_words=[
+            {"w": "hello", "s": 0.0, "e": 0.8},
+            {"w": "world", "s": 1.0, "e": 1.8},
+        ],
+    )
+    page.draw_timeline()
+    page.timeline.setCurrentItem(page.timeline.topLevelItem(0).child(0))
+    panel = page.captions
+    panel.read()
+    assert panel.words.rowCount() == 2
+    panel.words.item(0, 0).setText("namaste")
+    panel.text.setText("namaste world")
+    panel.start.setValue(1)
+    panel.apply()
+    item = page.project.find(lane_id, item_id)[1]
+    assert item.text == "namaste world" and item.at == 1
+    assert item.caption_words[0]["w"] == "namaste"
+    assert page.project.undo()
+    assert page.project.find(lane_id, item_id)[1].text == "hello world"
+
+
+def test_native_batch_dashboard_renders_actual_queue_item(native, tmp_path):
+    from clipos.video.multitrack import MultitrackProject
+    from clipos.core.ffmpeg import probe
+
+    app, db, window, paths = native
+    video = source(tmp_path, 160, 90)
+    pid = db.create_project(name="Batch", source_path=str(video), duration=2)
+    cid = db.create_clip(
+        project_id=pid, title="Clip", output_path=str(video), duration=2
+    )
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video, queue_clip_id=cid)
+    page.draw_timeline()
+    panel = page.batch
+    panel.folder.setText(str(tmp_path))
+    panel.encoder.setCurrentIndex(panel.encoder.findData("cpu"))
+    panel.start(True)
+    deadline = time.monotonic() + 20
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert panel.jobs[0].status == "completed", page.status.text()
+    assert panel.table.item(0, 1).text() == "completed"
+    assert "Completed 1" in panel.summary.text()
+    assert probe(panel.jobs[0].output).has_audio
+    assert panel.manifest.is_file()
+
+
+def test_native_automation_and_track_order_controls(native, tmp_path):
+    from clipos.video.multitrack import MultitrackProject
+
+    app, db, window, paths = native
+    video = source(tmp_path, 160, 90)
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video)
+    page.project.import_media(video, at=2)
+    page.draw_timeline()
+    page.timeline.setCurrentItem(page.timeline.topLevelItem(0).child(0))
+    lane_id, item_id = page.target()
+    page.split_time.setValue(0.5)
+    page.key_value.setValue(0.4)
+    page.edit_curve("set")
+    assert page.project.find(lane_id, item_id)[1].opacity_keys == [[0.5, 0.4]]
+    page.edit_curve("remove")
+    assert page.project.find(lane_id, item_id)[1].opacity_keys == []
+    page.move_track(1)
+    assert page.project.lanes[1].id == lane_id
+    page.snap_enabled.setChecked(False)
+    assert not page.graph.snap
+
+
+def test_native_creative_library_recipe_load_and_real_thumbnail(native):
+    app, db, window, paths = native
+    window.navigate("studio")
+    page = window.pages["studio"]
+    library = page.creative
+    assert library.list.count() == 50
+    library.kind.setCurrentIndex(1)
+    assert library.list.count() == 50
+    library.load_selected()
+    assert page.editing.name.text() == next(iter(library.catalog.values()))["name"]
+    library.preview()
+    deadline = time.monotonic() + 15
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert library.image.pixmap() is not None and not library.image.pixmap().isNull(), (
+        page.status.text()
+    )
+
+
+def test_composite_edit_guard_and_device_unavailability_are_explicit(native):
+    app, db, window, paths = native
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.live.running = True
+    before = page.project.to_dict()
+    page.action(lambda: setattr(page.project, "width", 200))
+    assert page.project.to_dict() == before
+    assert "Stop composited playback" in page.status.text()
+    page.live.running = False
+    # No media means no successful playback is possible, with or without an
+    # actual audio device on this runner. Physical-device sync is not certified.
+    page.live.play()
+    assert not page.live.running
+    assert "unavailable" in page.live.status.text().lower()
+
+
+def test_native_audio_import_processing_and_color_lut_controls(native, tmp_path):
+    import subprocess
+    from clipos.core.ffmpeg import require_ffmpeg
+    from clipos.video.multitrack import MultitrackProject
+    from tests.test_studio_color import cube
+
+    app, db, window, paths = native
+    video = source(tmp_path, 160, 90)
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(width=160, height=90, fps=10)
+    page.project.import_media(video)
+    page.draw_timeline()
+    page.timeline.setCurrentItem(page.timeline.topLevelItem(0).child(0))
+    page.color_studio.import_lut(cube(tmp_path))
+    deadline = time.monotonic() + 10
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert page.color_studio.lut_sha
+    page.color_studio.load()
+    page.editing.apply()
+    assert (
+        page.project.lanes[0].items[0].color_grade["lut_sha256"]
+        == page.color_studio.lut_sha
+    )
+    audio = tmp_path / "music.wav"
+    subprocess.run(
+        [
+            require_ffmpeg(),
+            "-v",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=220:duration=0.3",
+            str(audio),
+        ],
+        check=True,
+        capture_output=True,
+    )
+    page.split_time.setValue(1)
+    page.audio_studio.import_path(str(audio))
+    deadline = time.monotonic() + 10
+    while page.worker.isRunning() and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(5)
+    app.processEvents()
+    assert page.project.lanes[-1].kind == "audio"
+    assert page.project.lanes[-1].items[0].at == 1
+    page.timeline.setCurrentItem(
+        page.timeline.topLevelItem(len(page.project.lanes) - 1).child(0)
+    )
+    page.audio_studio.load()
+    page.editing.apply()
+    assert page.project.lanes[-1].items[0].audio_effects[0]["kind"] == "bass"
+
+
+def test_native_explicit_music_role_and_ducking_configuration(native, tmp_path):
+    from clipos.video.multitrack import MultitrackProject, Media, Lane, Item
+
+    app, db, window, paths = native
+    window.navigate("studio")
+    page = window.pages["studio"]
+    page.project = MultitrackProject(
+        width=160,
+        height=90,
+        fps=10,
+        media=[Media("music", str(tmp_path / "music.wav"), 2, False, True)],
+        lanes=[
+            Lane(
+                "musiclane",
+                "Music",
+                "audio",
+                [Item("musicitem", "music", 0, 0, 2, audio_role="music")],
+            )
+        ],
+    )
+    page.draw_timeline()
+    page.timeline.setCurrentItem(page.timeline.topLevelItem(0).child(0))
+    audio = page.audio_studio
+    audio.role.setCurrentIndex(audio.role.findData("music"))
+    audio.duck_enabled.setChecked(True)
+    audio.load_routing()
+    page.editing.apply()
+    item = page.project.lanes[0].items[0]
+    assert item.audio_role == "music" and item.ducking["ratio"] == 6
+    assert page.editing.checks["audio_routing"].isChecked()
+    assert not page.editing.checks["audio_effects"].isChecked()
+    assert page.project.undo() and page.project.lanes[0].items[0].ducking == {}

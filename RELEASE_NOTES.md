@@ -1,3 +1,36 @@
+# Ai clipping PRO 4.0.0 — Integrated offline Studio
+
+## Included
+- Integrated Clip Queue, selective per-clip/batch preset application and local rendering.
+- Shared composited video/audio playback, timeline captions, effects and transitions.
+- Verified local .cube LUT import, curves, tonal wheels and global/six-range HSL.
+- Audio processors, explicit dialogue/music roles and signal-driven music ducking.
+- 50 original editable CC0 title-scene designs with offline pack ZIP export.
+- Optional 50-image Noto Emoji Apache-2.0 library: explicit individual/full-library
+  download, integrity verification, offline reuse and source/license records.
+- Existing AI clipping, model management and source crop ownership retained.
+
+## Evidence and limitations
+Local regression: **698 passed, 15 skipped**. Actual tests render all 50 original
+designs with both animations, inspect alpha, verify pack archives and check color,
+PCM processing, persistence and invalid-input rejection. All 50 optional library
+images were actually downloaded and verified in development.
+
+Publication is gated on all seven native installer/archive assets. Native build
+checks are not physical hardware certification. Physical speaker/display sync,
+human Windows/macOS permission/consent flows and sustained device/GPU performance
+remain NOT RUN. Use docs/NATIVE_DESKTOP_ACCEPTANCE.md. macOS ad-hoc integrity does
+not mean Apple notarization. Do not disable OS security to install.
+
+The 50 designs are editable title-scene packs, not stock footage/music libraries
+or arbitrary layered motion-project interchange. This release does not certify
+completion of every advanced editor requirement, including restart-resumable
+render jobs or broad physical-device acceptance. Back up projects before upgrading.
+Original and third-party artwork licenses are distinct; see THIRD_PARTY_NOTICES.md.
+Compatibility filenames and data paths retain CLIPOS.
+
+---
+
 # Ai clipping PRO 3.6.1 — Reference-aligned native workspace
 
 - Native Create Clips dashboard now follows the supplied layout: purple/blue hero,

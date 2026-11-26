@@ -11,30 +11,51 @@ shape your captions, edit real timelines and export local files—without a mand
 cloud account, upload or subscription.
 
 **[Explore the website ↗](https://analoggeek.github.io/AiFreeClipping/)** ·
-**[Download v3.6.1 ↓](#download)** ·
+**[Download v4.0.0 ↓](#download)** ·
 **[Quick start](#quick-start)** ·
 **[What works](#features)** ·
 **[Support](https://github.com/Analoggeek/AiFreeClipping/issues)**
 
-**LATEST RELEASE: v3.6.1** · Windows · Apple Silicon · Intel Mac · Linux
+**LATEST RELEASE: v4.0.0** · Windows · Apple Silicon · Intel Mac · Linux
 
 </div>
 
 ---
 
+## v4.0.0 — published Studio release
+
+The integrated Studio release is published for Windows x64, macOS Apple
+Silicon/Intel and Linux. All four native build jobs and the seven-asset publication
+gate passed in [release run 45747828123](https://github.com/Analoggeek/AiFreeClipping/actions/runs/45747828123).
+All seven installer/archive downloads below are published and nonempty.
+
+New in v4.0.0: Clip Queue and selective batch presets, shared composited playback,
+Caption Studio, timeline effects/transitions, verified LUT/curves/wheels/selective
+HSL, audio processors and dialogue-driven music ducking, **50 original CC0
+editable title-scene designs** and an optional **50-image Apache-2.0 artwork
+library** with explicit one-click downloads and verified offline caching.
+Original pack ZIPs and generated artwork carry license/source records.
+
+Local regression: **698 passed, 15 skipped**. Physical speaker/display sync,
+human OS-permission acceptance and sustained target-device/GPU performance are
+**not verified**. macOS ad-hoc bundle integrity is not Apple notarization. These
+are release limitations, not passed tests. See [release notes](RELEASE_NOTES.md),
+[Studio quick start](docs/STUDIO_QUICKSTART.md) and
+[desktop QA protocol](docs/NATIVE_DESKTOP_ACCEPTANCE.md).
+
 ## Download
 
 Choose your platform. Every link below is a direct download from the official
-**v3.6.1** release—no download manager or account required.
+**v4.0.0** release—no download manager or account required.
 
 | Your system | Installer | Alternative |
 | :--- | :--- | :--- |
-| **Windows 10 / 11 · x64** | [**Download EXE ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-Setup.exe) | — |
-| **macOS · Apple Silicon** | [**Download ARM64 DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-arm64.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-arm64.app.tar.gz) |
-| **macOS · Intel x86_64** | [**Download Intel DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-intel.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-intel.app.tar.gz) |
-| **Linux · Debian / Ubuntu amd64** | [**Download DEB ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS_3.6.1_amd64.deb) | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v3.6.1/CLIPOS-3.6.1-linux-x86_64.zip) |
+| **Windows 10 / 11 · x64** | [**Download EXE ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-Setup.exe) | — |
+| **macOS · Apple Silicon** | [**Download ARM64 DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-4.0.0-arm64.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-arm64.app.tar.gz) |
+| **macOS · Intel x86_64** | [**Download Intel DMG ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-4.0.0-intel.dmg) | [APP archive](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-intel.app.tar.gz) |
+| **Linux · Debian / Ubuntu amd64** | [**Download DEB ↓**](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS_4.0.0_amd64.deb) | [Portable ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v4.0.0/CLIPOS-4.0.0-linux-x86_64.zip) |
 
-[Release notes & all seven assets ↗](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.6.1)
+[Release notes & all seven assets ↗](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v4.0.0)
 
 > **Which Mac build?** Open **Apple menu → About This Mac**. “Chip: Apple M…” means
 > Apple Silicon; “Processor: Intel…” means the Intel build. Asset/executable names
@@ -49,7 +70,7 @@ Choose your platform. Every link below is a direct download from the official
 - **Debian / Ubuntu:** open the DEB in your package manager, or use:
 
   ```bash
-  sudo apt install ./CLIPOS_3.6.1_amd64.deb
+  sudo apt install ./CLIPOS_4.0.0_amd64.deb
   ```
 
 Download only from the official release. Native signature integrity checks are
@@ -62,7 +83,7 @@ Follow official OS security guidance; do not disable security protections.
 
 [![Actual Ai clipping PRO reference-aligned Create clips dashboard](docs/assets/home.webp)](https://analoggeek.github.io/AiFreeClipping/#studio)
 
-*Actual v3.6.1 application capture. The empty recent-project list and model availability are genuine—not seeded demo data.*
+*Actual v4.0.0 application capture. The empty recent-project list and model availability are genuine—not seeded demo data.*
 
 ## Features
 
@@ -110,7 +131,7 @@ falls back to cue-level motion rather than fabricated synchronization.
 
 ![Actual multitrack validation project with caption, effect and dissolve lanes](docs/assets/editor.webp)
 
-Actual v3.6.1 application capture using generated red/blue validation footage—not
+Actual v4.0.0 application capture using generated red/blue validation footage—not
 user recordings. The purple blend is a real cross-dissolve, with ASS captions over
 video and a timed color-effect lane. The decoded preview is best-effort.
 
@@ -254,9 +275,221 @@ their own LGPL/GPL terms.
 **Local intelligence. Creative independence.**
 
 [Website](https://analoggeek.github.io/AiFreeClipping/) ·
-[Download](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v3.6.1) ·
+[Download](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v4.0.0) ·
 [Report an issue](https://github.com/Analoggeek/AiFreeClipping/issues)
 
 **Ai clipping PRO · by Analoggeek**
 
 </div>
+
+### Integrated production studio (development branch)
+
+An additive **Clip Queue & Editor** foundation is under development in the same
+native app. Generated clips feed the queue, which supports multiselection and
+background import into the existing non-destructive multitrack assembly engine.
+Graphical trim/move, linked A/V split/remove, undo/redo, assembly save/open,
+persistent queue groups/order, track locking/visibility, source waveforms and
+background-rendered timeline snapshots with mixed audio are available. Source
+playback and rendered snapshots are explicitly distinct; real-time composited
+playback is not yet implemented.
+This is **not yet the complete professional editor** or a new published release.
+See [phase status and limitations](docs/PRODUCTION_STUDIO_PLAN.md).
+
+The development inspector also supports selective color, transform, audio-fade
+and existing-caption-style application to current/selected/all/grouped timeline
+media, with atomic undo and JSON presets. Explicit future-import defaults are
+available for supported non-caption categories. Automatic timeline captions now use an explicitly installed local Whisper model,
+with cue/word timing correction, font/color/position/animation overrides and
+captioned FFmpeg export. Real-time composited playback and the full professional
+caption/template libraries remain unfinished; see the phase-status document
+rather than treating this as a complete editor release.
+
+The development batch dashboard renders selected/all imported queue entries as
+MP4/H.264/AAC timeline-window outputs, including composited captions and mixed
+audio. It reports real per-job states/progress/errors, supports cancellation and
+in-session failed-job retry, and refuses existing output files. Full export
+profiles, real-time composited playback and the complete original creative
+libraries remain unfinished. Linear opacity/gain keyframes and track controls are
+available; this is not a claim of a fully completed professional editor.
+
+The development studio now includes shared-graph streaming composite playback,
+50 original caption compositions, 50 asset-free editing recipes, twenty video
+effect combinations and forty overlap-transition recipes. Counts describe
+parameterized compositions, **not distinct algorithms or motion-graphics asset
+packs**. Playback performance/physical audio sync and new packaged builds still
+need native acceptance. The entire original professional-editor specification is
+not complete. See the [working-controls tutorial](docs/STUDIO_QUICKSTART.md) and
+[remaining acceptance gates](docs/PRODUCTION_STUDIO_PLAN.md).
+
+Recent development controls add exposure/gamma/RGB tonal grading, verified local
+`.cube` LUTs with strength, fixed-band EQ/noise reduction/compressor/limiter/echo,
+and independent background-audio import. These use the same selective preset and
+preview/export graph. Native macOS/Linux builds passed at `60350e0`; Windows found
+a non-seekable-pipe bug, now fixed locally and awaiting its native rerun. Physical
+audio-device sync and full motion-graphics asset packs are not certified/complete.
+
+Automatic music ducking is now implemented with explicit dialogue/music/neutral
+routing, measured dialogue sidechain control and adjustable threshold/ratio/
+attack/release. It is offline and separate from speaker detection. Native Windows,
+macOS and Linux builds passed at `8ccc387`; the newer ducking revision still needs
+its own native CI result. Physical speaker sync/performance and human permission
+UX remain unrun gates: [desktop acceptance checklist](docs/NATIVE_DESKTOP_ACCEPTANCE.md).
+
+
+### Curves, wheels and original asset graphics (development branch)
+
+- Color panel now exposes draggable master/R/G/B natural-cubic curves,
+  linked shadows/midtones/highlights wheels and **global** HSL. Global HSL
+  is not selective hue-range grading. Legacy saved grades remain accepted.
+- Motion graphics panel adds three original transparent geometric plates with
+  editable title/subtitle and verified local raster logo. Fade/slide animations
+  render to real alpha MOV media; the shared compositor handles final export.
+  Select a generated graphic to reload/rebuild its settings. Older files remain
+  available for undo; keep generated media alongside project references.
+- Actual tests render all three plates with both animations, inspect alpha,
+  composite over source video, check logo-change rejection and saved settings;
+  curves/HSL tests inspect encoded and streaming pixels.
+- Local regression: **689 passed, 15 skipped**. Native builds for this increment
+  and physical speaker/desktop acceptance are not yet verified. This small pack
+  does not fulfill the remaining request for complete asset-rich template packs.
+
+
+### Original graphics pack and sync QA tooling update
+
+Motion graphics now includes **12 original asset-backed compositions** (nine new
+geometric layouts), each with replaceable title, subtitle and verified local logo.
+All twelve are actually rendered with fade and slide in automated alpha tests.
+This is not a claim of 50 complete asset-rich packs.
+
+`python scripts/create_av_sync_fixture.py /local/path/sync.mov --seconds 300`
+creates a real 60 FPS flash / 48 kHz PCM click stimulus without overwriting media.
+See `docs/NATIVE_DESKTOP_ACCEPTANCE.md` for calibrated device measurement and result
+recording. Physical speaker/display QA remains **NOT RUN** in this sandbox.
+
+At inspection, commit `a404987` passed macOS packaging-integrity and website checks;
+installer run `45736934646` was pending with no jobs yet. Packaging-integrity is
+not native runtime/installer acceptance. New pack native results are also pending.
+
+
+### Selective HSL grading and native verification queue
+
+The Color panel now switches between global HSL and six secondary hue ranges
+(red/yellow/green/cyan/blue/magenta). Overlapping triangular masks span 60 degrees
+on either side of each hue center, use original hue to avoid order-dependent
+selection, and suppress changes to neutral gray. These are hue qualifiers, not
+spatial/power-window masks. Settings persist and apply through the existing
+selective color-grade preset category and shared preview/export LUT graph.
+Actual tests verify red desaturation with blue/gray protection, encoded and
+streamed gray pixels, round-trip settings and atomic invalid-input rejection.
+Local regression: **691 passed, 15 skipped**.
+
+Superseded installer run 45736063073 (92a0291) had completed Windows/Linux but
+was still building Intel macOS, blocking the newer run. Cancellation was requested
+to unblock the current asset-pack revision. Run **45738604181** (4f8fa30) now has
+Windows, macOS and Linux jobs **in progress**, not yet passed. Subsequent grading
+revision requires its own native verification. Physical device tests remain
+NOT RUN; twelve geometric templates do not complete a 50-pack asset library.
+
+
+### Illustrated asset-library increment
+
+The motion-graphics library now contains **20 original compositions**, including
+8 newly authored illustrated scenes: rocket launch, learning/book, podcast/mic,
+growth/chart, travel/mountains, kitchen/chef, gaming/controller and science/
+microscope. Each includes an original illustration, multi-part title/subtitle
+plate and replaceable local logo slot. Offline plate thumbnails in the native
+panel show actual bundled artwork; they are explicitly labeled static plate
+previews, not animated or text/logo previews. Use rendered timeline playback to
+review the complete result. All 20 assets are rendered with both fade and slide
+in actual tests; catalog tests check unique file hashes, RGBA format and editable
+slot bounds. **692 passed, 15 skipped** in the full local regression.
+
+Native status at this increment: Windows installer job for `4f8fa30` succeeded
+(run 45738604181); Linux/macOS jobs still running. `dfbcf35` native installer run
+45739066758 remains pending behind it. Neither result certifies this newer asset
+revision. Physical audio-sync/permission tests remain NOT RUN. This library is
+20 compositions, not completion of 50 full asset-rich packs.
+
+
+### Optional one-click freely licensed artwork library
+
+Motion graphics now has a **50-item Noto Emoji illustration library**. Choose an
+item and click **Download / use selected library art as graphic logo**. Only the
+chosen PNG is downloaded; then Add/Rebuild applies it to the editable graphic.
+Cached verified artwork works offline. No account, API key or mandatory cloud is
+required. Internet is required only for the first explicit download. This is 50
+illustrations plus 20 original compositions, **not 50 complete template packs**.
+
+Assets are pinned to Google Noto Emoji revision
+`e8073ab740292f8d5f19b5de144087ac58044d06` under Apache-2.0. Freely licensed does
+not mean copyright-free or public-domain. The panel identifies provider/license;
+full license and per-file source/revision/SHA256 metadata are saved beside each
+PNG. Pinned Git blob/size and PNG format/dimensions are checked before atomic
+publication. Corrupt caches are rejected, not silently overwritten. Network,
+rate-limit and cancellation failures surface without fake success. Artwork is
+used unmodified; no trademark endorsement is implied.
+
+Verification: all **50 real upstream PNG downloads** succeeded and passed identity
+and image checks in this sandbox; one downloaded rocket was actually rendered
+into an alpha MOV with editable title/subtitle. Unit tests separately cover cache
+reuse, corruption/cancellation and license provenance. Full local regression:
+**695 passed, 15 skipped**. Native tests include the library contracts, not an
+assumed network availability pass.
+
+At last inspection native run 45738604181 (`4f8fa30`) had successful Windows and
+Linux jobs, with macOS still running. Newer commits need their own native results.
+Physical speaker/display sync and human permission-dialog QA remain **NOT RUN**;
+they require actual devices and cannot be fixed by claiming a simulated pass.
+
+
+### Full-library offline download and artwork provenance
+
+Motion graphics includes **Download / verify all 50 illustrations for offline use**.
+This is an explicit opt-in download, not a startup network request. Progress
+reports checked/ready/failed counts; per-file failures do not mark the library
+successful. Retry reuses verified cached files. Cancellation retains completed
+files. The selected-art preview only reads integrity-checked local cache and
+never triggers a network fetch. Full-library verification was actually executed:
+**50 ready, 0 failures** (reusing already downloaded, verified files).
+
+Generated alpha MOV graphics now carry adjacent `.source.json` records and,
+when recognized Noto artwork is used, `.LICENSE.txt` including copyright,
+Apache-2.0 license and modification notice. Preserve these records when sharing
+generated assets/projects; this is not a promise that flattened downstream exports
+automatically package every third-party license. A real downloaded-art derivative
+was rendered and its source/license records inspected. Local regression:
+**696 passed, 15 skipped**.
+
+Native installer run **45738604181** for `4f8fa30` is now **SUCCESS**, covering
+Windows/Linux/macOS jobs. This verifies that revision only. Run 45740805406
+(`42956c9`) is still in progress; later library revisions await their own native
+results. Physical device audio-sync/permission QA remains NOT RUN. The count is
+still 20 original compositions plus 50 licensed illustrations, not 50 packs.
+
+
+### Fifty original offline title-scene designs
+
+The Motion graphics catalog now contains **50 original compositions**: 20 prior
+designs plus 30 new authored illustrations (film, laptop, phone, satellite, robot,
+battery, shield, lock, key, compass, globe, clock, calendar, trophy, dumbbell,
+football, basketball, music, piano, headphones, palette, bulb, umbrella, anchor,
+sailboat, train, gift, diamond, leaf and butterfly). These are distinct drawings,
+not 30 palette-only variants. The new scenes include separate illustration and
+panel PNG assets as well as the composed RGBA plate.
+
+Every design has a CC0 offline `.pack.json` describing title/subtitle/logo slots,
+defaults and fade/slide animations. **Export selected original offline pack ZIP**
+in the native panel exports the actual plate/components, editable recipe, license
+and usage note, refusing to overwrite an existing file. Installed fonts, user
+logos and third-party library illustrations are not redistributed inside these
+original-design ZIPs. The 50 Apache-2.0 downloaded illustrations remain a separate
+optional library, not part of the original-pack count.
+
+Actual tests render all **50 designs with both animations**, inspect alpha and
+frame count, validate all editable slot bounds, verify all 50 ZIP archives and
+manifests, reconstruct the 30 component-based plates, and test no-overwrite.
+Full local regression: **698 passed, 15 skipped**. These are complete editable
+**title-scene design packs**, not stock-video/music bundles or arbitrarily layered
+After Effects-style projects. Full professional-editor acceptance, physical
+speaker/display/permission QA and exact-revision native release remain separate
+gates; no stable-complete release claim is made by this increment.

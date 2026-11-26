@@ -93,3 +93,15 @@ rate against its reference (maximum 25%). This is a single English runtime
 acceptance sample, not broad speech-recognition quality certification. Its result
 must be checked before claiming it passed. Interactive OS dialogs still require
 physical desktop acceptance.
+
+### Windows signature module-loading fix
+
+The diagnostic retry identified `CouldNotAutoloadMatchingModule` for
+`Microsoft.PowerShell.Security`, not evidence of an invalid Ollama signature.
+Windows verification now launches the explicit OS Windows PowerShell executable,
+removes inherited `PSModulePath` (PowerShell 7 environments may supply incompatible
+module paths), imports the security manifest from that executable's `$PSHOME`,
+and stops on module-load errors. SHA256 and Valid Authenticode remain mandatory;
+no execution-policy, certificate or OS-security bypass is introduced.
+Regression contracts cover module isolation and fail-closed signature rejection.
+Actual Windows lifecycle acceptance must be rechecked on the new revision.

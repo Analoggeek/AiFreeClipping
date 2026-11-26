@@ -29,6 +29,54 @@ def verify():
                 result["yolox"] = (
                     "Not tested: no explicit validation weight path supplied"
                 )
+            import subprocess
+            from .ffmpeg import require_ffmpeg
+            from ..video.multitrack import MultitrackProject
+            from ..video.live_playback import stream_frames
+            from ..captions.original_styles import original_style_keys
+
+            source = Path(folder) / "stream-check.mp4"
+            subprocess.run(
+                [
+                    require_ffmpeg(),
+                    "-v",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=blue:s=160x90:r=10:d=0.3",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "sine=frequency=440:duration=0.3",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-shortest",
+                    str(source),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=30,
+            )
+            project = MultitrackProject(width=160, height=90, fps=10)
+            project.import_media(source)
+            counts = {"video": 0, "audio": 0}
+            for kind, _, payload in stream_frames(project, max_size=160):
+                counts[kind] += 1
+            if not counts["video"] or not counts["audio"]:
+                raise RuntimeError(
+                    "Packaged compositor did not produce video and audio"
+                )
+            result["composited_stream"] = counts
+            result["original_caption_presets"] = len(original_style_keys())
+            result["physical_audio_device"] = (
+                "Not tested by this headless runtime check"
+            )
             return result
         finally:
             db.close()

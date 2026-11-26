@@ -1,0 +1,44 @@
+{
+  "id": "gaming_controller",
+  "license": "CC0-1.0",
+  "design": {
+    "name": "Gaming / controller",
+    "asset": "gaming_controller.png",
+    "title_box": [
+      80,
+      892,
+      438,
+      70
+    ],
+    "subtitle_box": [
+      80,
+      1004,
+      422,
+      60
+    ],
+    "logo_box": [
+      556,
+      912,
+      88,
+      88
+    ],
+    "title_color": "#F1F5F9",
+    "subtitle_color": "#C4B5FD",
+    "category": "Illustrated scenes"
+  },
+  "defaults": {
+    "title": "Gaming / controller",
+    "subtitle": "Your subtitle",
+    "animation": "fade",
+    "duration": 3.0
+  },
+  "editable": [
+    "title",
+    "subtitle",
+    "logo"
+  ],
+  "animations": [
+    "fade",
+    "slide"
+  ]
+}
