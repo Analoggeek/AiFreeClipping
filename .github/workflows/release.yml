@@ -135,8 +135,9 @@ jobs:
         run: |
           VERSION="${{ inputs.version || github.ref_name }}"
           VERSION="${VERSION#v}"
-          gh release create "v$VERSION" release/installers/* --generate-notes --title "AI Clipper Pro v$VERSION" || \
-            gh release upload "v$VERSION" release/installers/* --clobber
+          gh release create "v$VERSION" release/installers/* --notes-file docs/RELEASE_NOTES.md --title "AI Clipper Pro v$VERSION" || \
+            (gh release upload "v$VERSION" release/installers/* --clobber && \
+             gh release edit "v$VERSION" --notes-file docs/RELEASE_NOTES.md --title "AI Clipper Pro v$VERSION")
 
   publish_existing:
     name: Publish from existing runs
