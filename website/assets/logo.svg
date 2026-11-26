@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 180" role="img" aria-label="AI Clipper Pro — made by analoggeek">
+  <defs>
+    <linearGradient id="ag" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8b5cf6"/>
+      <stop offset="0.5" stop-color="#6366f1"/>
+      <stop offset="1" stop-color="#22d3ee"/>
+    </linearGradient>
+    <linearGradient id="agText" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#a5f3fc"/>
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="520" height="180" fill="#090b14"/>
+  <g filter="url(#glow)">
+    <rect x="24" y="32" width="112" height="112" rx="28" fill="#111428" stroke="url(#ag)" stroke-width="4"/>
+    <path d="M64 60 L64 116 L108 88 Z" fill="url(#agText)"/>
+    <path d="M52 58 L84 58 L76 70 L44 70 Z" fill="url(#ag)"/>
+    <path d="M52 106 L84 106 L76 118 L44 118 Z" fill="url(#ag)" opacity=".65"/>
+  </g>
+  <text x="156" y="88" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="42" font-weight="800" letter-spacing="-1" fill="url(#agText)">AI CLIPPER</text>
+  <text x="156" y="126" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="30" font-weight="700" letter-spacing="8" fill="url(#ag)">PRO</text>
+  <line x1="156" y1="142" x2="490" y2="142" stroke="url(#ag)" stroke-width="1.5" opacity=".65"/>
+  <text x="156" y="163" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="600" letter-spacing="4.5" fill="#8b93b5">MADE BY ANALOGGEEK</text>
+</svg>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#080b14" />
+  <meta name="description" content="AI Clipper Pro — local-first AI video clipping, editing and publishing studio. Download, find viral moments, edit and upload — all offline on your hardware. Made by analoggeek." />
+  <title>AI Clipper Pro — Viral clips, made locally</title>
+  <link rel="icon" href="assets/logo-mark.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="glow glow-a"></div><div class="glow glow-b"></div>
+
+  <header class="site-header">
+    <a class="brand" href="#top"><img src="assets/logo.svg" alt="AI Clipper Pro" /></a>
+    <nav id="nav">
+      <a href="#features">Features</a>
+      <a href="#workflow">Workflow</a>
+      <a href="#models">Local AI</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/Analoggeek/AiFreeClipping/blob/main/README.md">Docs</a>
+    </nav>
+    <a class="btn btn-small" href="#download">Get the app <span>↗</span></a>
+    <button class="nav-toggle" aria-label="Toggle navigation" onclick="document.getElementById('nav').classList.toggle('open')">☰</button>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="dot"></span> 100% LOCAL · PRIVATE BY DESIGN</div>
+        <h1>One video in.<br /><em>Viral clips out.</em></h1>
+        <p class="lede">Paste any link. AI Clipper Pro finds the engaging moments with local Gemma, Whisper and YOLOX + ByteTrack, polishes them with captions, stickers and sound effects, then exports or uploads them — without your footage ever leaving your machine.</p>
+        <div class="hero-actions">
+          <a class="btn" href="#download">Download for free <span>↓</span></a>
+          <a class="btn btn-ghost" href="https://github.com/Analoggeek/AiFreeClipping">View source <span>↗</span></a>
+        </div>
+        <div class="hero-stats">
+          <div><strong>5</strong><span>connected stages</span></div>
+          <div><strong>4</strong><span>platform installers</span></div>
+          <div><strong>0</strong><span>cloud requirement</span></div>
+        </div>
+      </div>
+      <div class="hero-visual">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <img class="mark" src="assets/logo-mark.png" alt="AI Clipper Pro app icon" />
+        <span class="float-chip chip-1">Whisper captions</span>
+        <span class="float-chip chip-2">Gemma 2 7B</span>
+        <span class="float-chip chip-3">YOLOX + ByteTrack</span>
+        <span class="float-chip chip-4">1080p export</span>
+        <div class="made">MADE BY ANALOGGEEK</div>
+      </div>
+    </section>
+
+    <section class="section" id="features">
+      <div class="section-head"><span class="kicker">EVERYTHING CONNECTED</span><h2>A complete creator studio, on your hardware</h2><p>Not just a clipper — a full pipeline from source link to published Short.</p></div>
+      <div class="cards">
+        <article class="card"><div class="ico">⇩</div><h3>Downloader + playlists</h3><p>Max available quality, audio merged, subtitles optional, full playlists with item selection and a local media library.</p></article>
+        <article class="card"><div class="ico">◎</div><h3>AI moment detection</h3><p>Word-level speech energy, hook keywords, scene changes and tracked player activity fused into one viral score.</p></article>
+        <article class="card"><div class="ico">✂</div><h3>Multiple clips at once</h3><p>Select several videos, lock the player or gameplay region, and get a batch of non-overlapping viral candidates.</p></article>
+        <article class="card"><div class="ico">▤</div><h3>Full timeline editor</h3><p>Video, caption, sticker and audio tracks with split, trim, inspector, import, stock assets and AI art generation.</p></article>
+        <article class="card"><div class="ico">♪</div><h3>Sound & style</h3><p>Auto captions in four presets, royalty-free procedural SFX, music beds, blurred-background reframing and branding.</p></article>
+        <article class="card"><div class="ico">↥</div><h3>One-click publish</h3><p>Batch 1080p renders with fast-start, downloadable MP4s and optional resumable YouTube uploads via your own OAuth app.</p></article>
+      </div>
+    </section>
+
+    <section class="section workflow" id="workflow">
+      <div class="section-head"><span class="kicker">THE WORKFLOW</span><h2>From link to viral in five steps</h2></div>
+      <div class="steps">
+        <div class="step"><b>01</b><h3>Paste</h3><p>Any supported video or playlist URL, or import a local file.</p></div>
+        <div class="step"><b>02</b><h3>Analyse</h3><p>Local Whisper transcript and visual activity tracking.</p></div>
+        <div class="step"><b>03</b><h3>Clip</h3><p>AI picks engaging windows and writes hook titles.</p></div>
+        <div class="step"><b>04</b><h3>Edit</h3><p>Captions, stickers, SFX and fine cuts in the timeline.</p></div>
+        <div class="step"><b>05</b><h3>Publish</h3><p>Export all clips or upload to your channel.</p></div>
+      </div>
+    </section>
+
+    <section class="section" id="models">
+      <div class="section-head"><span class="kicker">YOUR MACHINES, YOUR MODELS</span><h2>Powered by open local AI</h2><p>Download once, create forever offline. No subscriptions, no footage uploads, no per-clip fees.</p></div>
+      <div class="logos">
+        <span>Gemma via Ollama</span><span>Faster-Whisper</span><span>YOLOX + ByteTrack</span><span>FFmpeg</span><span>ComfyUI SDXL</span><span>Piper TTS</span><span>Nano Banana (opt-in)</span>
+      </div>
+      <div class="callout">
+        <div><strong>Private by default</strong><p>The engine binds to 127.0.0.1 with a token regenerated on every launch. Cloud features only activate when you add your own key.</p></div>
+        <div><strong>Hardware friendly</strong><p>CPU fallback everywhere, CUDA and Apple Metal acceleration where available. Runs on Intel Macs, M-series, Windows and Linux.</p></div>
+        <div><strong>One-command releases</strong><p><code>bash scripts/release-all.sh --all</code> builds every offline installer via GitHub Actions and publishes checksums.</p></div>
+      </div>
+    </section>
+
+    <section class="section download" id="download">
+      <div class="section-head"><span class="kicker">DOWNLOAD</span><h2>Pick your platform</h2><p id="version-line">Installers include the app, Python engine and FFmpeg. Model weights are installed from the app.</p></div>
+      <div class="platforms">
+        <a class="platform" data-file="Windows-x64.exe" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">▣</div><h3>Windows</h3><p>10 / 11 · x64</p><span class="p-link">Download .exe ↗</span></a>
+        <a class="platform" data-file="Windows-arm64.exe" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">▣</div><h3>Windows ARM</h3><p>11 · arm64</p><span class="p-link">Download .exe ↗</span></a>
+        <a class="platform" data-file="macOS-x64.dmg" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">◈</div><h3>macOS Intel</h3><p>x64 · DMG</p><span class="p-link">Download .dmg ↗</span></a>
+        <a class="platform" data-file="macOS-arm64.dmg" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">◈</div><h3>macOS Apple Silicon</h3><p>M1/M2/M3/M4 · DMG</p><span class="p-link">Download .dmg ↗</span></a>
+        <a class="platform" data-file="Linux-x64.AppImage" href="https://github.com/Analoggeek/AiFreeClipping/releases/latest"><div class="p-ico">⬡</div><h3>Linux</h3><p>AppImage + .deb · x64</p><span class="p-link">Download AppImage ↗</span></a>
+        <div class="platform source"><div class="p-ico">⌘</div><h3>Build from source</h3><p>Windows, macOS, Linux</p><code>npm install && npm run dev:app</code><span class="p-link" onclick="navigator.clipboard?.writeText('npm install && npm run dev:app')">Copy command ⧉</span></div>
+      </div>
+      <p class="fine">Unsigned installers may trigger OS warnings on first launch. Checksums are published in <code>SHA256SUMS.txt</code> with every release.</p>
+    </section>
+
+    <section class="section faq">
+      <div class="section-head"><span class="kicker">GOOD TO KNOW</span><h2>Questions, answered</h2></div>
+      <div class="faq-list">
+        <details open><summary>Does it really work offline?</summary><p>Yes. Downloading videos needs internet, of course. AI analysis, clipping, editing, rendering and model inference run locally after the one-time model download. Nano Banana, stock search and YouTube upload are opt-in cloud features.</p></details>
+        <details><summary>Which models are supported?</summary><p>Gemma 2 7B / Gemma 3 4B & 12B through Ollama; Whisper small/medium/large-v3 through faster-whisper; YOLO11 Nano and YOLOX Nano with ByteTrack; SDXL in ComfyUI; Piper voices for narration.</p></details>
+        <details><summary>Can I get several clips from one video?</summary><p>Yes. The clipper searches non-overlapping windows and can process multiple source videos in one job. Every candidate can be rendered individually or batch-exported.</p></details>
+        <details><summary>Can I edit the clips afterwards?</summary><p>The built-in timeline editor supports video, captions, stickers and audio tracks, split/trim, imported media, copyright-friendly stock search, AI-generated images and high-quality export.</p></details>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <img src="assets/logo.svg" alt="AI Clipper Pro" />
+    <p>Local-first video creation for creators who move fast.</p>
+    <div class="footer-links"><a href="#download">Download</a><a href="https://github.com/Analoggeek/AiFreeClipping">GitHub</a><a href="https://github.com/Analoggeek/AiFreeClipping/blob/main/README.md">Documentation</a><a href="https://github.com/Analoggeek/AiFreeClipping/issues">Support</a></div>
+    <p class="made-footer">MADE BY ANALOGGEEK · MIT LICENSE · © 2026</p>
+  </footer>
+  <script src="app.js"></script>
+</body>
+</html>

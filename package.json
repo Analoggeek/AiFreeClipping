@@ -1,0 +1,125 @@
+{
+  "name": "ai-clipper-pro",
+  "version": "5.0.0",
+  "description": "Local-first AI video clipping, editing and publishing studio — made by analoggeek",
+  "author": "analoggeek",
+  "license": "MIT",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "dev:app": "node scripts/dev-app.cjs",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "tsc --noEmit",
+    "test": "python3 -m pytest backend/tests -q",
+    "dist": "electron-builder --publish never",
+    "dist:win": "electron-builder --win --publish never",
+    "dist:mac": "electron-builder --mac --publish never",
+    "dist:linux": "electron-builder --linux --publish never",
+    "icons": "python3 scripts/generate-icons.py",
+    "release": "bash scripts/release-all.sh"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
+  },
+  "build": {
+    "appId": "com.analoggeek.aifreeclipping",
+    "productName": "AI Clipper Pro",
+    "directories": {
+      "output": "release",
+      "buildResources": "brand"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/runtime",
+        "to": "backend_bin",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "nsis",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "brand/icon.ico",
+      "artifactName": "AI-Clipper-Pro-${version}-Windows-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "deleteAppDataOnUninstall": false
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "icon": "brand/icon.icns",
+      "category": "public.app-category.video",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "AI-Clipper-Pro-${version}-macOS-${arch}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "brand/icon.png",
+      "category": "Video",
+      "artifactName": "AI-Clipper-Pro-${version}-Linux-${arch}.${ext}"
+    }
+  }
+}
