@@ -6,12 +6,12 @@ httpx>=0.27,<1.0
 yt-dlp>=2025.1.1
 imageio-ffmpeg>=0.5.1
 
-# Local AI stack — downloads weights on first use, everything runs offline afterwards
+# Local AI stack — weights download on first use, inference runs offline afterwards.
+# Torch-based vision is optional (requirements-vision.txt) to keep installers under
+# GitHub's 2 GB asset limit; the app falls back to local motion detection without it.
 faster-whisper>=1.1,<2.0
 huggingface-hub>=0.24,<2.0
 opencv-python-headless>=4.9,<5.0
-ultralytics>=8.3,<9.0
-supervision>=0.24,<1.0
 Pillow>=10.3,<12.0
 
 # Packaging
