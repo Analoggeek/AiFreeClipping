@@ -66,8 +66,11 @@ def build(plat: str, arch: str, skip_pyinstaller: bool = False) -> Path:
             "--hidden-import", "uvicorn.protocols.http.auto",
             "--hidden-import", "yt_dlp",
             "--hidden-import", "faster_whisper",
-            "--hidden-import", "ultralytics",
             "--hidden-import", "cv2",
+            "--exclude-module", "torch",
+            "--exclude-module", "torchvision",
+            "--exclude-module", "ultralytics",
+            "--exclude-module", "supervision",
             str(ROOT / "backend" / "entrypoint.py"),
         ]
         print("Bundling Python engine:", " ".join(cmd), flush=True)

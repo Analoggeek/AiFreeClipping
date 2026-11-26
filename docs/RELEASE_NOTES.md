@@ -26,4 +26,4 @@ The engine binds to `127.0.0.1` with a per-launch token. Model weights download 
 | macOS Apple Silicon | `AI-Clipper-Pro-5.0.0-macOS-arm64.dmg` |
 | Linux x64 | `AI-Clipper-Pro-5.0.0-Linux-x64.AppImage`, `...-x64.deb` |
 
-Installers include the Electron UI, a PyInstaller Python runtime, FFmpeg and platform icons. Model packs are installed from the app's **Local Models** page.
+Installers include the Electron UI, a slim PyInstaller Python runtime, FFmpeg and platform icons. Speech and Gemma model packs are installed from the app's **Local Models** page; Torch-based YOLO vision is available in source installs via `backend/requirements-vision.txt`, while packaged builds use the built-in local motion detector until a vision model is supplied.

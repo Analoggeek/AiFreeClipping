@@ -1,0 +1,5 @@
+# Optional Torch-based vision stack for YOLOX / YOLO11 + ByteTrack.
+# Install in a development Python environment; excluded from packaged installers
+# so each release asset stays below GitHub's 2 GB limit.
+ultralytics>=8.3,<9.0
+supervision>=0.24,<1.0

@@ -49,6 +49,8 @@ Ollama must be installed and running for Gemma. The Model page's install button 
 npm install
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt
+# Optional Torch/YOLO vision models for development:
+pip install -r backend/requirements-vision.txt
 # Optional YouTube publishing:
 pip install -r backend/requirements-youtube.txt
 python scripts/generate-icons.py
