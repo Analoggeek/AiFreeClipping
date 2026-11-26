@@ -1,0 +1,31 @@
+name: Diagnose release upload
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Try asset upload
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          echo "diagnostic" > /tmp/aifreeclip-diagnostic.txt
+          {
+            echo "gh version: $(gh --version | head -1)"
+            echo "release:"
+            gh release view v5.0.0 --json name,tagName,url 2>&1 || true
+            echo "upload:"
+            gh release upload v5.0.0 /tmp/aifreeclip-diagnostic.txt --clobber 2>&1 || true
+            echo "assets:"
+            gh release view v5.0.0 --json assets --jq '.assets[].name' 2>&1 || true
+          } > /tmp/diagnostic.log 2>&1
+          gh pr comment 174 --body-file /tmp/diagnostic.log || true
+          cat /tmp/diagnostic.log
