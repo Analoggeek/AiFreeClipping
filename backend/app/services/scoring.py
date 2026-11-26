@@ -44,6 +44,8 @@ class Candidate(BaseModel):
     hashtags: list[str] = Field(default_factory=list)
     transcript: str = ""
     region: dict[str, float] | None = None
+    regions: list[dict[str, float]] = Field(default_factory=list)
+    region_layout: str | None = None
 
 
 def _bins(duration: float, step: float = 0.5) -> list[float]:
@@ -134,7 +136,8 @@ def propose(
     min_duration: float = 15,
     max_duration: float = 60,
     platform: str = "shorts",
-    regions: dict[str, dict[str, float]] | None = None,
+    regions: dict[str, list[dict[str, float]]] | None = None,
+    layouts: dict[str, str] | None = None,
 ) -> list[Candidate]:
     """Greedy non-overlapping window search over fused audio/visual features."""
     candidates: list[Candidate] = []
@@ -147,6 +150,11 @@ def propose(
         speech, keywords, visual = build_features(
             transcripts.get(media_id), visions.get(media_id), duration, step
         )
+        focus_boxes = (regions or {}).get(media_id) or []
+        if focus_boxes:
+            # Region-focused visual activity is already fused into `visual`; mark
+            # the bias so the reason list and the editor keep the same context.
+            visual = [min(1.0, value * 1.12) for value in visual]
         seen: list[tuple[float, float]] = []
         lengths = sorted(
             {min_duration, (min_duration + max_duration) / 2, max_duration, 30.0}
@@ -176,18 +184,23 @@ def propose(
                     if seg.get("start", 0) <= stop and seg.get("end", 0) >= begin
                 ).strip()
                 title, hook = make_title(transcript_text, platform, media.get("title", ""))
+                reasons = list(reasons) or ["steady engagement"]
+                if focus_boxes:
+                    reasons.append("focused on your player/gameplay regions")
                 candidates.append(
                     Candidate(
                         media_id=media_id,
                         start=round(begin, 2),
                         end=round(stop, 2),
                         score=round(score * (1 + min(len(reasons), 3) * 0.02), 2),
-                        reasons=reasons or ["steady engagement"],
+                        reasons=reasons,
                         title=title,
                         hook=hook[:140],
                         hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
                         transcript=transcript_text[:600],
-                        region=(regions or {}).get(media_id),
+                        region=focus_boxes[0] if focus_boxes else None,
+                        regions=focus_boxes,
+                        region_layout=(layouts or {}).get(media_id),
                     )
                 )
                 if len(candidates) >= count * 4:

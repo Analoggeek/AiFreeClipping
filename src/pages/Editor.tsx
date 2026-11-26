@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Captions, Download, Film, Image as ImageIcon, ImagePlus, Layers3, LoaderCircle,
-  Mic2, Music2, Pause, Play, Plus, Save, Search, Sparkles,
+  Mic2, Music2, Pause, Play, Plus, Save, Search, SkipBack, SkipForward, Sparkles,
   Split, Trash2, Volume2, WandSparkles,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
@@ -44,6 +44,8 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   const [exportOutput, setExportOutput] = useState('');
   const [imageResult, setImageResult] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const timelineRef = useRef<HTMLDivElement>(null);
+  const scrubbingRef = useRef(false);
 
   const total = useMemo(() => Math.max(6, timeline.tracks.video.reduce((sum, item) => sum + item.duration, 0)), [timeline.tracks.video]);
 
@@ -136,6 +138,30 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     });
     notify('Clip split at playhead.');
   };
+
+  const seekTo = (seconds: number) => {
+    const next = Math.max(0, Math.min(total, seconds));
+    setPlayhead(next);
+    if (videoRef.current && Number.isFinite(next)) {
+      const offset = Math.max(0, next - activeVideoStart);
+      videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration || offset, offset + (activeVideo?.sourceStart || 0)));
+    }
+  };
+
+  const scrub = (event: React.PointerEvent<HTMLDivElement>) => {
+    const bounds = timelineRef.current?.getBoundingClientRect();
+    if (!bounds) return;
+    seekTo((event.clientX - bounds.left + timelineRef.current!.scrollLeft - 100) / zoom);
+  };
+
+  useEffect(() => {
+    const node = timelineRef.current;
+    if (!node) return;
+    const x = 100 + playhead * zoom;
+    if (x < node.scrollLeft + 100 || x > node.scrollLeft + node.clientWidth - 40) {
+      node.scrollLeft = Math.max(0, x - node.clientWidth * 0.35);
+    }
+  }, [playhead, zoom]);
 
   const selectedItem = selected ? (timeline.tracks[selected.track] as unknown as AnyItem[])[selected.index] : null;
   const updateSelected = (patch: Partial<AnyItem>) => {
@@ -264,15 +290,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
           <input value={projectName} onChange={(event) => setProjectName(event.target.value)} />
           {projectId && <Pill tone="muted">Saved locally</Pill>}
         </div>
-        <div className="editor-tools">
-          <button className="chip-btn" onClick={autoCaptions}><Captions size={15} /> Auto captions</button>
-          <button className="chip-btn" onClick={() => setTab('art')}><ImagePlus size={15} /> AI art</button>
-          <button className="chip-btn" onClick={() => setTab('sfx')}><Volume2 size={15} /> Sound effects</button>
-          <button className="chip-btn" onClick={splitSelected}><Split size={15} /> Split</button>
-          <button className="chip-btn" onClick={removeSelected}><Trash2 size={15} /> Delete</button>
-          <button className="ghost-btn" onClick={save}><Save size={15} /> Save</button>
-          <button className="primary" onClick={exportVideo}><Download size={16} /> Export</button>
-        </div>
+        <Pill tone="violet">Timeline editor</Pill>
       </header>
 
       <div className="editor-body">
@@ -357,11 +375,6 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
               ))}
             </div>
             <span className="stage-time">{formatClock(playhead)} / {formatClock(total)}</span>
-            <button className={`chip-btn ${playing ? 'active' : ''}`} onClick={() => {
-              if (!videoRef.current) return;
-              if (videoRef.current.paused) { void videoRef.current.play(); setPlaying(true); }
-              else { videoRef.current.pause(); setPlaying(false); }
-            }}>{playing ? <Pause size={15} /> : <Play size={15} />} {playing ? 'Pause' : 'Play'}</button>
           </div>
           <div className={`stage-frame aspect-${timeline.aspect.replace(':', '-')}`}>
             {activeVideo ? (
@@ -387,6 +400,23 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
                 alt="sticker"
               />
             ))}
+          </div>
+          <div className="stage-controls">
+            <button className="icon-btn" title="Jump to start" aria-label="Jump to start" onClick={() => seekTo(0)}><SkipBack size={17} /></button>
+            <button className="icon-btn" title="Back 5 seconds" aria-label="Back 5 seconds" onClick={() => seekTo(playhead - 5)}><SkipBack size={17} /></button>
+            <button
+              className={`play-btn ${playing ? 'is-playing' : ''}`}
+              title={playing ? 'Pause' : 'Play'}
+              aria-label={playing ? 'Pause' : 'Play'}
+              onClick={() => {
+                if (!videoRef.current) return;
+                if (videoRef.current.paused) { void videoRef.current.play(); setPlaying(true); }
+                else { videoRef.current.pause(); setPlaying(false); }
+              }}
+            >{playing ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button>
+            <button className="icon-btn" title="Forward 5 seconds" aria-label="Forward 5 seconds" onClick={() => seekTo(playhead + 5)}><SkipForward size={17} /></button>
+            <button className="icon-btn" title="Jump to end" aria-label="Jump to end" onClick={() => seekTo(total)}><SkipForward size={17} /></button>
+            <span className="stage-time">{formatClock(playhead)} / {formatClock(total)}</span>
           </div>
           <p className="stage-hint">Shortcuts: Space play/pause · S split · Delete remove selected</p>
         </div>
@@ -416,14 +446,28 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
         <div className="timeline-toolbar">
           <div><strong>Timeline</strong> <Pill tone="muted">{formatClock(total)}</Pill></div>
           <div className="timeline-actions">
+            <div className="timeline-tools">
+              <button className="icon-btn" title="Auto captions with Whisper" aria-label="Auto captions" onClick={autoCaptions}><Captions size={15} /></button>
+              <button className="icon-btn" title="Generate AI art" aria-label="Generate AI art" onClick={() => setTab('art')}><ImagePlus size={15} /></button>
+              <button className="icon-btn" title="Sound effects" aria-label="Sound effects" onClick={() => setTab('sfx')}><Volume2 size={15} /></button>
+              <button className="icon-btn" title="Split clip at playhead" aria-label="Split clip" onClick={splitSelected}><Split size={15} /></button>
+              <button className="icon-btn" title="Delete selected item" aria-label="Delete selected item" onClick={removeSelected}><Trash2 size={15} /></button>
+              <button className="icon-btn" title="Save project" aria-label="Save project" onClick={() => void save()}><Save size={15} /></button>
+              <button className="icon-btn primary-icon" title="Export video" aria-label="Export video" onClick={() => void exportVideo()}><Download size={15} /></button>
+            </div>
             <label>Zoom <input type="range" min="8" max="90" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>
-            <button className="chip-btn" onClick={() => setPlayhead(0)}>⏮ Start</button>
-            <button className="chip-btn" onClick={splitSelected}><Split size={14} /> Split</button>
           </div>
         </div>
-        <div className="timeline-scroll">
+        <div
+          className="timeline-scroll"
+          ref={timelineRef}
+          onPointerDown={(event) => { scrubbingRef.current = true; scrub(event); }}
+          onPointerMove={(event) => { if (scrubbingRef.current) scrub(event); }}
+          onPointerUp={() => { scrubbingRef.current = false; }}
+          onPointerLeave={() => { scrubbingRef.current = false; }}
+        >
           <div className="timeline-content" style={{ width: Math.max(900, total * zoom + 240) }}>
-            <div className="ruler" onClick={(event) => setPlayhead(Math.max(0, Math.min(total, (event.nativeEvent.offsetX - 100) / zoom)))}>
+            <div className="ruler">
               {Array.from({ length: Math.floor(total / 5) + 2 }, (_, index) => (
                 <span key={index} style={{ left: 100 + index * 5 * zoom }}>{formatClock(index * 5)}</span>
               ))}

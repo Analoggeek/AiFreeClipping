@@ -285,7 +285,13 @@ async def propose_clips(payload: ClipProposalRequest):
         rows = [media_row(mid) for mid in req.media_ids]
         transcripts: dict[str, Any] = {}
         visions: dict[str, Any] = {}
-        region_map = {r.media_id: (r.box if r.kind in ("custom", "player", "gameplay") else None) for r in req.regions}
+        region_map: dict[str, list[dict[str, float]]] = {}
+        layout_map: dict[str, str] = {}
+        for region in req.regions:
+            boxes = [box for box in ([*region.boxes, region.box] if region.box else region.boxes) if box]
+            region_map[region.media_id] = boxes if region.kind in ("custom", "player", "gameplay") else []
+            if region.layout:
+                layout_map[region.media_id] = region.layout
         total = max(len(rows), 1)
         for index, row in enumerate(rows):
             base = index / total * 85
@@ -303,25 +309,30 @@ async def propose_clips(payload: ClipProposalRequest):
             else:
                 result = last_analysis(row["id"], "transcript")
             transcripts[row["id"]] = result
-            if not last_analysis(row["id"], "vision"):
+            boxes = region_map.get(row["id"], [])
+            expected_key = json.dumps(boxes, sort_keys=True)
+            cached_vision = last_analysis(row["id"], "vision")
+            if not cached_vision or cached_vision.get("region_key", json.dumps([], sort_keys=True)) != expected_key:
                 try:
                     jobs.update(job_id, progress=base + 25, message=f"Analysing visuals of {row['title']}…")
                     vresult = await vision.analyze(
-                        row["path"], region_map.get(row["id"]), 2.0, "auto",
+                        row["path"], None, 2.0, "auto",
                         on_progress=lambda pct, msg: jobs.update(job_id, progress=base + 25 + pct / 4, message=msg),
+                        regions=boxes,
                     )
+                    vresult["layout"] = layout_map.get(row["id"])
                     save_analysis(row["id"], "vision", vresult)
                 except Exception as exc:
                     jobs.update(job_id, message=f"Vision skipped: {exc}")
-                    vresult = {"timeline": []}
+                    vresult = {"timeline": [], "region_key": expected_key}
             else:
-                vresult = last_analysis(row["id"], "vision")
+                vresult = cached_vision
             visions[row["id"]] = vresult
 
         jobs.update(job_id, progress=88, message="Scoring engaging moments…")
         candidates = scoring.propose(
             rows, transcripts, visions, req.count, req.min_duration, req.max_duration,
-            req.platform, region_map,
+            req.platform, region_map, layout_map,
         )
         if req.use_llm and await llm.reachable():
             jobs.update(job_id, progress=94, message="Gemma is refining titles…")
@@ -613,6 +624,16 @@ async def install_model(payload: ModelInstallRequest):
         )
 
     return ok(job_id=jobs.run("model-install", work, payload.model_dump()))
+
+
+@app.post("/api/models/install-recommended")
+async def install_recommended_models():
+    async def work(job_id: str, _payload: dict[str, Any]):
+        return await models.install_recommended(
+            lambda pct, msg: jobs.update(job_id, progress=pct, message=msg)
+        )
+
+    return ok(job_id=jobs.run("model-install", work, {}))
 
 
 @app.delete("/api/models/{model_id}")

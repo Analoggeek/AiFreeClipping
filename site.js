@@ -114,7 +114,7 @@
         }
       });
     } catch (_) {
-      // Static fallback links already point straight to the v5.1.2 installer files.
+      // Static fallback links already point straight to the v5.1.3 installer files.
     }
   })();
 })();

@@ -15,4 +15,8 @@ contextBridge.exposeInMainWorld('desktop', {
     ipcRenderer.on('backend:status', (_event, value) => callback(value));
     return () => ipcRenderer.removeAllListeners('backend:status');
   },
+  onBackendStatus: (callback) => {
+    ipcRenderer.on('backend:status', (_event, value) => callback(value));
+    return () => ipcRenderer.removeAllListeners('backend:status');
+  },
 });

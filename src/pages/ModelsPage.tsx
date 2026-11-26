@@ -13,6 +13,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
   const [caps, setCaps] = useState<Capabilities>({});
   const [jobs, setJobs] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [recommendedJob, setRecommendedJob] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -39,6 +40,22 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
     } catch (error) { notify(String(error)); setBusy(null); }
   };
 
+  const installAll = async () => {
+    try {
+      const result = await api.installRecommendedModels();
+      setRecommendedJob(result.job_id);
+      notify('Downloading, installing, activating and saving the recommended models…');
+    } catch (error) { notify(String(error)); }
+  };
+
+  useEffect(() => {
+    if (!recommendedJob) return;
+    return pollJob(recommendedJob, (job) => {
+      if (job.status === 'done') { void refresh(); setRecommendedJob(null); notify('All recommended models are ready and saved.'); }
+      if (job.status === 'error') { setRecommendedJob(null); notify(job.error || job.message); }
+    });
+  }, [recommendedJob, refresh, notify]);
+
   useEffect(() => {
     Object.entries(jobs).forEach(([id, jobId]) => {
       pollJob(jobId, (job) => {
@@ -61,13 +78,21 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
     <div className="stack">
       <Panel
         title="AI models & hardware"
-        subtitle="One click downloads into your own folder. Cloud models link straight to their API key page."
-        action={<button className="ghost-btn" onClick={() => void refresh()}><RefreshCw size={15} /> Refresh</button>}
+        subtitle="One click downloads, installs, activates and saves everything locally. Cloud models link straight to their API key page."
+        action={
+          <div className="panel-actions compact">
+            <button className="ghost-btn" onClick={() => void refresh()}><RefreshCw size={15} /> Refresh</button>
+            <button className="primary" disabled={Boolean(recommendedJob)} onClick={() => void installAll()}>
+              {recommendedJob ? <LoaderCircle size={15} className="spin" /> : <Zap size={15} />} Set up all recommended
+            </button>
+          </div>
+        }
       >
         <div className="hardware-bar">
           <Pill tone="green">{caps.gpu?.cuda ? 'CUDA GPU detected' : caps.gpu?.metal ? 'Apple Metal available' : 'CPU fallback'}</Pill>
           <Pill tone="violet">{installedCount}/{models.length} models ready</Pill>
         </div>
+        {recommendedJob && <JobTracker jobId={recommendedJob} label="Automatic model setup" />}
       </Panel>
 
       <div className="model-groups">
@@ -121,7 +146,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
         <ol className="howto">
           <li><Package size={16} /><div><strong>1. Whisper Small (Medium for Hindi)</strong><p>Word-level captions and transcript-driven moment detection.</p></div></li>
           <li><Zap size={16} /><div><strong>2. YOLOX Nano ONNX + ByteTrack</strong><p>Player/gameplay tracking inside the packaged app — no Torch needed.</p></div></li>
-          <li><Sparkles size={16} /><div><strong>3. Gemma 2 7B via Ollama</strong><p>Viral titles and reranking. Install Ollama with the “Get runtime” button above.</p></div></li>
+          <li><Sparkles size={16} /><div><strong>3. Gemma 2 7B via Ollama</strong><p>Viral titles and reranking. The runtime is downloaded and started automatically — no manual setup.</p></div></li>
           <li><KeyRound size={16} /><div><strong>4. Optional cloud APIs</strong><p>Nano Banana, YouTube, Pexels and Pixabay links open their key pages directly.</p></div></li>
         </ol>
       </Panel>

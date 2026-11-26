@@ -1,23 +1,28 @@
 # Release notes
 
-## v5.1.2 — stable downloads, compact HUD and root-level site
+## v5.1.3 — automatic models, faster startup, pro timeline and multi-region AI
 
 ### Download the installers
 
-GitHub keeps binaries in the collapsible **Assets** section at the bottom of this release. Use these direct links if you don't see it:
+GitHub keeps binaries in the collapsible **Assets** section at the bottom of this release. These links go straight to the files:
 
-- **Windows x64:** [AI-Clipper-Pro-5.1.2-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Windows-x64.exe) (299 MB)
-- **Windows ARM64:** [AI-Clipper-Pro-5.1.2-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Windows-arm64.exe) (305 MB)
-- **macOS Intel:** [AI-Clipper-Pro-5.1.2-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-x64.dmg) (285 MB)
-- **macOS Apple Silicon:** [AI-Clipper-Pro-5.1.2-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-arm64.dmg) (281 MB)
-- **Linux AppImage:** [AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-x86_64.AppImage) (441 MB)
-- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.1.2-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-Linux-amd64.deb) (387 MB)
-- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/manifest.json)
-- **macOS ZIP fallback:** [Intel](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-x64.zip) · [Apple Silicon](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.2/AI-Clipper-Pro-5.1.2-macOS-arm64.zip). Use the ZIP if Finder reports **Error code -36** while copying from the DMG.
-
-Each installer includes the Electron UI, Python engine, FFmpeg and icons. AI model weights are downloaded from inside the app on first use. macOS images are built without signing, stripped of AppleDouble/extended-attribute metadata, and verified in CI by mounting the DMG and copying the `.app` with `ditto` before upload.
+- **Windows x64:** [AI-Clipper-Pro-5.1.3-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.1.3-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.1.3-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.1.3-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/AI-Clipper-Pro-5.1.3-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.3/manifest.json)
 
 ### Changes
+
+- **Instant startup:** the desktop app now shows an animated splash immediately and loads the React workspace in lazy route chunks while the local engine boots in the background.
+- **Fully automatic models:** one click now downloads, installs, activates and saves the model. Ollama itself is downloaded and started automatically for Gemma; Whisper, YOLOX, Piper and SDXL save into `~/.AiFreeClipping` and become the active model in Settings. A **Set up all recommended** button does the whole pipeline in one job.
+- **Multi-region AI clipping:** mark several focus areas in the same video — gameplay above/player below, player above/gameplay below, square player over full gameplay, or side-by-side. Video is decoded once, all selected regions are scored, and the AI picks moments using the fused activity.
+- **Professional editor:** all editing actions are icon-only in the timeline toolbar; play/pause and 5-second jump controls sit directly below the preview; the playhead scrubs in sync with the ruler and tracks and auto-scrolls with zoom.
+- **macOS reliability:** DMGs and ZIPs are built without signing, stripped of AppleDouble/extended-attribute metadata, and verified in CI by mounting and copying the bundle.
+
+## v5.1.2 — stable downloads, compact HUD and root-level site
 
 - **Downloader fixed:** `JobManager.update()` now accepts positional progress/message arguments, so any legacy progress callback works. Download jobs no longer fail mid-run.
 - **Model downloads fixed:** the primary card button now downloads **and** installs directly in the app; external links use Electron's proper `openExternal` handler. API-key status reflects keys saved in Settings.

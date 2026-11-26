@@ -9,14 +9,52 @@ import type { Candidate, Media } from '../types';
 import type { PageProps } from '../App';
 
 type Box = { x: number; y: number; w: number; h: number };
+type RegionItem = { id: string; label: string; box: Box; color: string };
+type RegionLayout = { preset: string; boxes: RegionItem[] };
 type Props = PageProps & { mediaSelection: string[]; setMediaSelection: (ids: string[]) => void };
 
 const STEPS = ['Select videos', 'Mark region', 'Viral settings', 'AI results'];
 
+const FULL: Box = { x: 0, y: 0, w: 1, h: 1 };
+const REGION_PRESETS: Array<{ id: string; label: string; icon: string; boxes: Array<{ id: string; label: string; box: Box }> }> = [
+  { id: 'full', label: 'Full frame', icon: '▣', boxes: [] },
+  {
+    id: 'top-game-bottom-player', label: 'Gameplay top · player bottom', icon: '▤▣',
+    boxes: [
+      { id: 'gameplay', label: 'Gameplay', box: { x: 0, y: 0, w: 1, h: 0.58 } },
+      { id: 'player', label: 'Player', box: { x: 0, y: 0.58, w: 1, h: 0.42 } },
+    ],
+  },
+  {
+    id: 'top-player-bottom-game', label: 'Player top · gameplay bottom', icon: '◉▤',
+    boxes: [
+      { id: 'player', label: 'Player', box: { x: 0, y: 0, w: 1, h: 0.42 } },
+      { id: 'gameplay', label: 'Gameplay', box: { x: 0, y: 0.42, w: 1, h: 0.58 } },
+    ],
+  },
+  {
+    id: 'square-player-full-game', label: 'Square player · full gameplay', icon: '◱',
+    boxes: [
+      { id: 'gameplay', label: 'Gameplay', box: FULL },
+      { id: 'player', label: 'Player (square)', box: { x: 0.03, y: 0.03, w: 0.34, h: 0.34 } },
+    ],
+  },
+  {
+    id: 'side-by-side', label: 'Player side · gameplay side', icon: '◫',
+    boxes: [
+      { id: 'gameplay', label: 'Gameplay', box: { x: 0, y: 0, w: 0.62, h: 1 } },
+      { id: 'player', label: 'Player', box: { x: 0.62, y: 0, w: 0.38, h: 1 } },
+    ],
+  },
+];
+
+const COLORS = ['#22d3ee', '#a78bfa', '#34d399', '#fbbf24'];
+
 export default function Clipper({ notify, openEditor, openPublish, mediaSelection, setMediaSelection }: Props) {
   const [media, setMedia] = useState<Media[]>([]);
   const [step, setStep] = useState(0);
-  const [regions, setRegions] = useState<Record<string, Box | null>>({});
+  const [regions, setRegions] = useState<Record<string, RegionLayout>>({});
+  const [activeRegionId, setActiveRegionId] = useState('gameplay');
   const [settings, setSettings] = useState({
     count: 5, min_duration: 15, max_duration: 60, platform: 'shorts', style: 'hype',
     captions: true, sound_effects: true, stickers: true, use_llm: true, music: '',
@@ -37,7 +75,35 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
 
   const selectedMedia = media.filter((item) => mediaSelection.includes(item.id));
   const preview = selectedMedia[0];
-  const activeBox = preview ? regions[preview.id] || null : null;
+  const layout: RegionLayout = preview ? regions[preview.id] || { preset: 'full', boxes: [] } : { preset: 'full', boxes: [] };
+  const activeRegion = layout.boxes.find((item) => item.id === activeRegionId) || layout.boxes[0] || null;
+
+  const applyPreset = (preset: typeof REGION_PRESETS[number]) => {
+    if (!preview) return;
+    const boxes = preset.boxes.map((item, index) => ({ ...item, color: COLORS[index % COLORS.length] }));
+    setRegions((current) => ({ ...current, [preview.id]: { preset: preset.id, boxes } }));
+    if (boxes[0]) setActiveRegionId(boxes[0].id);
+  };
+
+  const updateBox = (regionId: string, box: Box) => {
+    if (!preview) return;
+    setRegions((current) => {
+      const existing = current[preview.id] || { preset: 'custom', boxes: [] };
+      const boxes = existing.boxes.some((item) => item.id === regionId)
+        ? existing.boxes.map((item) => item.id === regionId ? { ...item, box } : item)
+        : [...existing.boxes, { id: regionId, label: regionId, box, color: COLORS[existing.boxes.length % COLORS.length] }];
+      return { ...current, [preview.id]: { preset: 'custom', boxes } };
+    });
+  };
+
+  const removeBox = (regionId: string) => {
+    if (!preview) return;
+    setRegions((current) => {
+      const existing = current[preview.id] || { preset: 'full', boxes: [] };
+      const boxes = existing.boxes.filter((item) => item.id !== regionId);
+      return { ...current, [preview.id]: { preset: boxes.length ? 'custom' : 'full', boxes } };
+    });
+  };
 
   const importFiles = async () => {
     if (!window.desktop) { notify('Local file picker works inside the desktop app.'); return; }
@@ -57,11 +123,16 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     try {
       const result = await api.propose({
         media_ids: mediaSelection,
-        regions: mediaSelection.map((id) => ({
-          media_id: id,
-          kind: regions[id] ? 'custom' : 'full',
-          box: regions[id] || undefined,
-        })),
+        regions: mediaSelection.map((id) => {
+          const selection = regions[id] || { preset: 'full', boxes: [] };
+          return {
+            media_id: id,
+            kind: selection.boxes.length ? 'custom' : 'full',
+            box: selection.boxes[0]?.box,
+            boxes: selection.boxes.map((item) => item.box),
+            layout: selection.preset,
+          };
+        }),
         ...settings,
       });
       setJobId(result.job_id);
@@ -149,28 +220,36 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       )}
 
       {step === 1 && (
-        <Panel title="Choose the area that matters" subtitle="Draw a box over the player or gameplay region — the AI will focus its visual scoring there">
+        <Panel title="Choose what the AI should watch" subtitle="Mark several areas in the same clip — player, gameplay, HUD or anything else. The AI scores every selected area.">
           <div className="region-layout">
             <div className="region-preview">
               {preview ? (
                 <div className="video-stage">
                   <video src={mediaUrl(`/api/media/${preview.id}/stream`)} controls playsInline />
-                  <RegionOverlay box={activeBox} onChange={(box) => setRegions((current) => ({ ...current, [preview.id]: box }))} />
+                  <RegionOverlay
+                    boxes={layout.boxes}
+                    activeId={activeRegion?.id || ''}
+                    onChange={(box) => activeRegion && updateBox(activeRegion.id, box)}
+                  />
                 </div>
               ) : <EmptyState icon={<BoxSelect size={28} />} title="No video selected" detail="Go back and select a video." />}
             </div>
             <div className="region-side">
-              <h3>Region presets</h3>
-              {[
-                { name: 'Full frame', box: null as Box | null, icon: '▣' },
-                { name: 'Player / subject', box: { x: 0.15, y: 0.1, w: 0.7, h: 0.7 } as Box, icon: '◉' },
-                { name: 'Gameplay HUD', box: { x: 0.05, y: 0.35, w: 0.9, h: 0.55 } as Box, icon: '▤' },
-              ].map((preset) => (
-                <button key={preset.name} className={`preset ${activeBox === preset.box ? 'active' : ''}`} onClick={() => preview && setRegions((current) => ({ ...current, [preview.id]: preset.box }))}>
-                  <b>{preset.icon}</b>{preset.name}
+              <h3>Layout presets</h3>
+              {REGION_PRESETS.map((preset) => (
+                <button key={preset.id} className={`preset ${layout.preset === preset.id ? 'active' : ''}`} onClick={() => applyPreset(preset)}>
+                  <b>{preset.icon}</b>{preset.label}
                 </button>
               ))}
-              <p className="hint">Drag directly on the video to draw a custom area. Press “Full frame” to clear the selection.</p>
+              <h3 className="region-subhead">Areas in this clip</h3>
+              {layout.boxes.length === 0 && <p className="hint">Full frame — nothing cropped. Pick a preset above or draw a box.</p>}
+              {layout.boxes.map((item) => (
+                <div key={item.id} className={`region-chip ${activeRegion?.id === item.id ? 'active' : ''}`}>
+                  <button onClick={() => setActiveRegionId(item.id)}><i style={{ background: item.color }} />{item.label}</button>
+                  <button className="region-remove" title={`Remove ${item.label}`} onClick={() => removeBox(item.id)}>×</button>
+                </div>
+              ))}
+              <p className="hint">Pick an area above, then drag on the video to redraw just that area. Press “Full frame” to clear all.</p>
               {selectedMedia.length > 1 && <Pill tone="amber">{selectedMedia.length} videos selected — first one shown</Pill>}
               <div className="panel-actions"><button className="ghost-btn" onClick={() => setStep(0)}><ArrowLeft size={15} /> Back</button><button className="primary" onClick={() => setStep(2)}>Next <ArrowRight size={16} /></button></div>
             </div>
@@ -287,13 +366,12 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   );
 }
 
-function RegionOverlay({ box, onChange }: { box: Box | null; onChange: (box: Box) => void }) {
+function RegionOverlay({ boxes, activeId, onChange }: { boxes: RegionItem[]; activeId: string; onChange: (box: Box) => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [drawing, setDrawing] = useState(false);
   const [start, setStart] = useState({ x: 0, y: 0 });
-  const [current, setCurrent] = useState<Box | null>(box);
+  const [draft, setDraft] = useState<Box | null>(null);
 
-  useEffect(() => setCurrent(box), [box]);
   const point = (event: React.PointerEvent) => {
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
@@ -306,15 +384,39 @@ function RegionOverlay({ box, onChange }: { box: Box | null; onChange: (box: Box
     x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y),
   });
 
+  const rectStyle = (box: Box) => ({
+    left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%`,
+  });
+
   return (
     <div
       className="region-overlay"
       ref={ref}
-      onPointerDown={(event) => { setDrawing(true); const p = point(event); setStart(p); setCurrent({ ...p, w: 0, h: 0 }); (event.target as HTMLElement).setPointerCapture(event.pointerId); }}
-      onPointerMove={(event) => { if (drawing) setCurrent(normalise(start, point(event))); }}
-      onPointerUp={() => { setDrawing(false); if (current && current.w > 0.03 && current.h > 0.03) onChange(current); }}
+      onPointerDown={(event) => {
+        if (!activeId) return;
+        setDrawing(true);
+        const p = point(event);
+        setStart(p);
+        setDraft({ ...p, w: 0, h: 0 });
+        (event.target as HTMLElement).setPointerCapture(event.pointerId);
+      }}
+      onPointerMove={(event) => { if (drawing) setDraft(normalise(start, point(event))); }}
+      onPointerUp={() => {
+        setDrawing(false);
+        if (draft && draft.w > 0.03 && draft.h > 0.03) onChange(draft);
+        setDraft(null);
+      }}
     >
-      {current && current.w > 0 && <div className="region-box" style={{ left: `${current.x * 100}%`, top: `${current.y * 100}%`, width: `${current.w * 100}%`, height: `${current.h * 100}%` }}><span>{Math.round(current.w * 100)}% × {Math.round(current.h * 100)}%</span></div>}
+      {boxes.map((item) => (
+        <div
+          key={item.id}
+          className={`region-box ${item.id === activeId ? 'active' : ''}`}
+          style={{ ...rectStyle(item.box), borderColor: item.color }}
+        >
+          <span style={{ background: item.color }}>{item.label} · {Math.round(item.box.w * 100)}×{Math.round(item.box.h * 100)}</span>
+        </div>
+      ))}
+      {draft && draft.w > 0 && <div className="region-box draft" style={rectStyle(draft)}><span>Drawing…</span></div>}
     </div>
   );
 }

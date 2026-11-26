@@ -74,8 +74,9 @@ function findBackendBinary() {
   };
 }
 
-async function startBackend() {
+async function startBackend(onStatus = () => {}) {
   fs.mkdirSync(dataDir, { recursive: true });
+  onStatus('Preparing the local engine…', 'This only happens once per launch.');
   const tokenPath = path.join(dataDir, '.api_token');
   if (process.env.AIFREECLIP_EXTERNAL_BACKEND === '1') {
     apiBase = process.env.AIFREECLIP_API_BASE || 'http://127.0.0.1:8787';
@@ -110,18 +111,46 @@ async function startBackend() {
     console.warn('[engine] exited with', code);
     backendProcess = null;
   });
+  onStatus('Starting the AI engine…', 'Loading local models and FFmpeg.');
 
   for (let i = 0; i < 90; i++) {
+    if (i === 12) onStatus('Still starting…', 'The first launch unpacks the Python engine.');
     if (fs.existsSync(tokenPath)) {
       apiToken = fs.readFileSync(tokenPath, 'utf8').trim();
       try {
         const response = await fetch(`${apiBase}/api/health`, { headers: { 'X-AI-Clipper-Token': apiToken } });
-        if (response.ok) return;
+        if (response.ok) { onStatus('Ready', 'Opening AI Clipper Pro…'); return; }
       } catch (_) { /* still starting */ }
     }
     await sleep(400);
   }
   throw new Error('The local AI engine did not start. Check that Python 3.11+ and the bundled runtime are installed.');
+}
+
+let splashWindow = null;
+
+async function createSplash() {
+  splashWindow = new BrowserWindow({
+    width: 720,
+    height: 420,
+    resizable: false,
+    frame: false,
+    transparent: false,
+    backgroundColor: '#090b14',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  });
+  await splashWindow.loadFile(path.join(__dirname, 'splash.html'));
+}
+
+function splashStatus(text, detail = '') {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.webContents.send('backend:status', { text, detail });
+  }
 }
 
 async function createWindow() {
@@ -202,20 +231,24 @@ app.whenReady().then(async () => {
     dataDir,
     apiBase,
   }));
-  try {
-    await startBackend();
+  await createSplash();
+  startBackend(splashStatus).then(async () => {
     await createWindow();
-  } catch (error) {
-    dialog.showErrorBox('AI Clipper Pro could not start', String(error && error.message ? error.message : error));
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+    splashWindow = null;
+  }).catch((error) => {
+    const message = String(error && error.message ? error.message : error);
+    splashStatus('Could not start', message);
+    dialog.showErrorBox('AI Clipper Pro could not start', message);
     app.quit();
-  }
+  });
 });
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) createWindow();
+  if (BrowserWindow.getAllWindows().length === 0 && apiBase && apiToken) void createWindow();
 });
 app.on('before-quit', () => {
   if (backendProcess && !backendProcess.killed) {
