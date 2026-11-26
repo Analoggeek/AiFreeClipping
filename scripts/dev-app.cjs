@@ -6,6 +6,9 @@ const os = require('os');
 const path = require('path');
 
 const root = path.join(__dirname, '..');
+const electronBinary = process.platform === 'win32'
+  ? path.join(root, 'node_modules', 'electron', 'dist', 'electron.exe')
+  : path.join(root, 'node_modules', 'electron', 'dist', 'electron');
 const tokenPath = path.join(os.homedir(), '.AiFreeClipping', '.api_token');
 const children = [];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -37,6 +40,13 @@ function ping(url) {
 }
 
 (async () => {
+  if (!fs.existsSync(electronBinary)) {
+    console.warn('Electron binary is unavailable here — starting the browser studio instead.');
+    const fallback = spawn('node', [path.join(__dirname, 'start-browser.cjs')], { cwd: root, stdio: 'inherit', shell: process.platform === 'win32' });
+    children.push(fallback);
+    fallback.on('exit', (code) => process.exit(code || 0));
+    return;
+  }
   if (fs.existsSync(tokenPath)) fs.unlinkSync(tokenPath);
   const python = fs.existsSync(path.join(root, '.venv', 'bin', 'python'))
     ? path.join(root, '.venv', 'bin', 'python')

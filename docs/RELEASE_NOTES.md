@@ -1,5 +1,12 @@
 # Release notes
 
+## v5.1.1 — reliable startup & redesigned site
+
+- **Startup fixed:** added a browser studio launcher (`npm start`) that works without Electron; `npm run dev:app` now falls back to it automatically when the Electron binary is unavailable. Vite accepts proxied preview hosts.
+- **Packaged app fix:** the Windows/macOS/Linux engine binary is now matched by both platform **and** architecture, so x64 and ARM64 installers no longer pick the wrong bundled runtime.
+- **Website redesigned:** a new immersive static site with an animated hero, bento feature grid, interactive screenshot tabs, tech marquee, hardware section, model/API links and direct installer downloads.
+- **Clearer docs:** README and installation guide now lead with the one-command browser start.
+
 ## v5.1.0 — 3D studio, one-click model setup & hardware awareness
 
 - **One-click model setup:** every local model card now has a real download URL and a one-click installer that saves weights into `~/.AiFreeClipping/cache`. Cloud models show a direct **Get API key** button (Gemini/Nano Banana, YouTube, Pexels, Pixabay).

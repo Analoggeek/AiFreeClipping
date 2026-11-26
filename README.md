@@ -52,7 +52,8 @@ pip install -r backend/requirements.txt
 python scripts/generate-icons.py
 
 # 3. Desktop dev mode (engine + Vite + Electron)
-npm run dev:app
+npm start                            # browser studio — works without Electron
+npm run dev:app                      # Electron desktop window (falls back to browser if Electron is missing)
 
 # ...or run the pieces separately
 npm run dev                          # http://localhost:5173
@@ -61,7 +62,7 @@ PYTHONPATH=backend python -m backend.app.main   # http://127.0.0.1:8787
 
 Point the browser at `http://localhost:5173?token=<value in ~/.AiFreeClipping/.api_token>&api=http://127.0.0.1:8787` when running the UI without Electron.
 
-**Hindi quick start (हिंदी में):** `npm install` → `pip install -r backend/requirements.txt` → `npm run dev:app` → app खोलें → **Local Models** में Whisper + Gemma install करें → **Downloader** में link paste करें → **AI Clipper** से clips निकालें → **Editor** में edit करें → **Publish** से export/upload करें।
+**Hindi quick start (हिंदी में):** `npm install` → `pip install -r backend/requirements.txt` → `npm start` → browser में app खोलें → **Local Models** में Whisper + YOLOX + Gemma install करें → **Downloader** में link paste करें → **AI Clipper** से clips निकालें → **Editor** में edit करें → **Publish** से export/upload करें।
 
 ---
 
