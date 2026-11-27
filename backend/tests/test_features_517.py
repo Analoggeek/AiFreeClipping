@@ -1,4 +1,4 @@
-"""v5.1.7 regression coverage for source-quality renders, Auto Edit and model settings."""
+"""v5.1.7–v5.1.8 regressions for source-quality rendering and editable Auto Edit."""
 from __future__ import annotations
 
 import asyncio
@@ -447,6 +447,12 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
         assert auto_job["status"] == "done", auto_job
         assert auto_job["result"]["count"] == 1
         assert any("captions unavailable" in warning for warning in auto_job["result"]["warnings"])
+        recipe = auto_job["result"]["edits"][0]
+        assert recipe["source_start"] == 2.0 and recipe["source_duration"] == 6.0
+        assert recipe["duration"] == 6.0 and recipe["region_layout"] == "top-game-bottom-player"
+        assert recipe["regions"] == [region_a, region_b]
+        assert recipe["captions"][0]["text"] == "The creator lands an incredible final move."
+        assert [track["kind"] for track in recipe["audio"]] == ["music", "sfx", "sfx"]
         assert auto_options["resolution"] == "source"
         assert auto_options["title"] == "Creator's winning moment"
         assert auto_options["region_layout"] == "top-game-bottom-player"
@@ -475,6 +481,18 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
         assert batch_options["title"] == "Creator's winning moment"
         assert batch_options["music"] == str(music)
         assert batch_options["watermark_path"] is None
+
+        auto_options.clear()
+        no_music_response = client.post("/api/auto-edit", headers=HEADERS, json={
+            "clip_ids": [clip_id], "music": "", "captions": False, "sound_effects": False,
+        })
+        assert no_music_response.status_code == 200
+        no_music_job_id = no_music_response.json()["job_id"]
+        jobs_to_delete.append(no_music_job_id)
+        no_music_job = _wait_for_job(no_music_job_id)
+        assert no_music_job["status"] == "done", no_music_job
+        assert auto_options["music"] is None and auto_options["captions"] == [] and auto_options["sfx"] == []
+        assert no_music_job["result"]["edits"][0]["audio"] == []
     finally:
         for job_id in jobs_to_delete:
             db.delete("jobs", "id", job_id)

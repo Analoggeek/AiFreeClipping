@@ -1,29 +1,38 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
-  Captions, Check, Clapperboard, Download, Film, Image as ImageIcon, ImagePlus, Layers3, LoaderCircle,
+  Captions, Clapperboard, Download, Film, Image as ImageIcon, ImagePlus, Layers3, LoaderCircle,
   Mic2, Music2, Pause, Play, Plus, Save, Search, SkipBack, SkipForward, Sparkles,
   Split, Trash2, Volume2, WandSparkles,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
 import { JobTracker, Pill, formatClock } from '../components/common';
-import type { Candidate, Media, Timeline } from '../types';
+import type { AutoEditOptions, AutoEditTimelineEdit, Candidate, Media, Timeline } from '../types';
+import { appendAutoEditTimeline } from '../lib/autoEdit';
 import { drawVideoComposition } from '../lib/composition';
 import type { PageProps } from '../App';
 
 type TrackKey = 'video' | 'captions' | 'stickers' | 'audio';
 type AnyItem = {
-  id?: string; clip_id?: string; path?: string; text?: string; sourceStart?: number; duration?: number;
-  start?: number; end?: number; volume?: number; x?: number; y?: number; label?: string;
+  id?: string; clip_id?: string; path?: string; text?: string; sourceStart?: number; sourceDuration?: number; duration?: number;
+  start?: number; end?: number; volume?: number; x?: number; y?: number; scale?: number; label?: string;
   region?: Candidate['region']; regions?: Candidate['regions']; region_layout?: string | null;
+  effects?: Record<string, unknown>; auto_edit?: boolean; auto_edit_clip_id?: string; kind?: string;
 };
 type Selection = { track: TrackKey; index: number } | null;
+type ImageOption = { path: string; url?: string; provider?: string };
 
 const emptyTimeline = (): Timeline => ({
   tracks: { video: [], captions: [], stickers: [], audio: [] },
   aspect: '9:16', resolution: 'source', caption_style: { preset: 'hype' },
 });
+const DEFAULT_AUTO_EDIT: AutoEditOptions = {
+  style: 'hype', aspect: '9:16', resolution: 'source', captions: true,
+  sound_effects: true, stickers: true, blur_background: true, music: '', music_volume: 0.18,
+};
 
-export default function Editor({ notify, clipSelection }: PageProps & { clipSelection: string[] }) {
+export default function Editor({ notify, clipSelection, setMediaSelection }: PageProps & {
+  clipSelection: string[]; setMediaSelection: Dispatch<SetStateAction<string[]>>;
+}) {
   const [projectId, setProjectId] = useState<string | null>(null);
   const [projectName, setProjectName] = useState('Untitled project');
   const [timeline, setTimeline] = useState<Timeline>(emptyTimeline());
@@ -42,25 +51,53 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   const [sfxList, setSfxList] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
+  const [jobKind, setJobKind] = useState<'captions' | 'art' | null>(null);
   const [exportJob, setExportJob] = useState<string | null>(null);
   const [exportOutput, setExportOutput] = useState('');
   const [clips, setClips] = useState<Candidate[]>([]);
   const [autoJob, setAutoJob] = useState<string | null>(null);
-  const [autoStyle, setAutoStyle] = useState<'hype' | 'minimal' | 'premium'>('hype');
-  const [imageResult, setImageResult] = useState('');
+  const [autoEditOptions, setAutoEditOptions] = useState<AutoEditOptions>(DEFAULT_AUTO_EDIT);
+  const [autoEditSettingsLoaded, setAutoEditSettingsLoaded] = useState(false);
+  const [imageResults, setImageResults] = useState<ImageOption[]>([]);
+  const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageCanvasRef = useRef<HTMLCanvasElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const timelineStateRef = useRef(timeline);
+  const projectStateRef = useRef({ id: projectId, name: projectName });
   const scrubbingRef = useRef(false);
 
   const total = useMemo(() => Math.max(6, timeline.tracks.video.reduce((sum, item) => sum + item.duration, 0)), [timeline.tracks.video]);
 
+  useEffect(() => { timelineStateRef.current = timeline; }, [timeline]);
+  useEffect(() => { projectStateRef.current = { id: projectId, name: projectName }; }, [projectId, projectName]);
+  useEffect(() => {
+    api.settings().then(({ values }) => {
+      const volume = Number(values.auto_edit_music_volume ?? DEFAULT_AUTO_EDIT.music_volume);
+      setAutoEditOptions({
+        style: ['hype', 'minimal', 'premium'].includes(values.auto_edit_style) ? values.auto_edit_style as AutoEditOptions['style'] : DEFAULT_AUTO_EDIT.style,
+        aspect: ['9:16', '1:1', '16:9'].includes(values.auto_edit_aspect) ? values.auto_edit_aspect as AutoEditOptions['aspect'] : DEFAULT_AUTO_EDIT.aspect,
+        resolution: ['source', '720p', '1080p'].includes(values.auto_edit_resolution) ? values.auto_edit_resolution as AutoEditOptions['resolution'] : DEFAULT_AUTO_EDIT.resolution,
+        captions: values.auto_edit_captions === undefined ? true : !['0', 'false'].includes(values.auto_edit_captions.toLowerCase()),
+        sound_effects: values.auto_edit_sound_effects === undefined ? true : !['0', 'false'].includes(values.auto_edit_sound_effects.toLowerCase()),
+        stickers: values.auto_edit_stickers === undefined ? true : !['0', 'false'].includes(values.auto_edit_stickers.toLowerCase()),
+        blur_background: values.auto_edit_blur_background === undefined ? true : !['0', 'false'].includes(values.auto_edit_blur_background.toLowerCase()),
+        music: values.auto_edit_music || '',
+        music_volume: Number.isFinite(volume) ? Math.max(0, Math.min(1, volume)) : DEFAULT_AUTO_EDIT.music_volume,
+      });
+      setAutoEditSettingsLoaded(true);
+    }).catch(() => setAutoEditSettingsLoaded(true));
+  }, []);
+
   const loadProject = useCallback(async (id: string) => {
     try {
       const result = await api.project(id);
+      const loadedTimeline = result.project.timeline || emptyTimeline();
+      projectStateRef.current = { id, name: result.project.name };
+      timelineStateRef.current = loadedTimeline;
       setProjectId(id);
       setProjectName(result.project.name);
-      setTimeline(result.project.timeline || emptyTimeline());
+      setTimeline(loadedTimeline);
       setPlayhead(0);
     } catch (error) { notify(String(error)); }
   }, [notify]);
@@ -75,7 +112,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
       return api.projects();
     }).then((projects) => {
       if (clipSelection[0]) {
-        void api.createProject({ name: 'Clip edit', clip_id: clipSelection[0] }).then((created) => loadProject(created.project.id));
+        void api.createProject({ name: 'Auto Edit project', clip_id: clipSelection[0] }).then((created) => loadProject(created.project.id));
       } else if (projects.projects.length) {
         void loadProject(projects.projects[0].id);
       }
@@ -85,31 +122,42 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
 
   useEffect(() => {
     if (!jobId) return;
-    return pollJob(jobId, async (job) => {
+    return pollJob(jobId, (job) => {
       if (job.status === 'done') {
-        if (job.result?.path && tab === 'art') {
-          setImageResult(String(job.result.path));
-          addItem('stickers', { path: String(job.result.path), start: playhead, end: playhead + 3, x: 0.7, y: 0.15, label: 'AI art' });
+        if (jobKind === 'art') {
+          const generated = Array.isArray(job.result?.images) ? job.result.images as ImageOption[] : [];
+          const options = generated.length ? generated : (job.result?.path ? [{ path: String(job.result.path), provider: String(job.result.provider || '') }] : []);
+          const warnings = Array.isArray(job.result?.warnings) ? job.result.warnings.map((warning: unknown) => String(warning)) : [];
+          setImageResults(options.filter((option) => option.path));
+          const warningSummary = warnings.length ? ` ${warnings.join(' ')}` : '';
+          notify(options.length ? `Generated ${options.length} image option(s).${warningSummary} Choose one to add it to the timeline.` : 'Image generation returned no usable options.');
         }
-        const transcript = (job.result?.segments || job.result?.transcript) as { segments?: Array<{ start: number; end: number; text: string }> } | undefined;
-        if (transcript) {
-          const segments = Array.isArray(transcript) ? transcript : (transcript.segments || []);
-          addItem('captions', segments.slice(0, 40).map((segment) => ({ text: segment.text, start: segment.start, end: segment.end })) as AnyItem, true);
-          notify(`Added ${Math.min(segments.length, 40)} captions.`);
+        if (jobKind === 'captions') {
+          const transcript = (job.result?.segments || job.result?.transcript) as { segments?: Array<{ start: number; end: number; text: string }> } | undefined;
+          if (transcript) {
+            const segments = Array.isArray(transcript) ? transcript : (transcript.segments || []);
+            addItem('captions', segments.slice(0, 80).map((segment) => ({ text: segment.text, start: segment.start, end: segment.end, kind: 'caption' })) as AnyItem, true);
+            notify(`Added ${Math.min(segments.length, 80)} captions.`);
+          }
         }
         setBusy(false);
+        setJobId(null);
+        setJobKind(null);
       }
-      if (job.status === 'error') { notify(job.error || job.message); setBusy(false); }
-      if (job.status === 'cancelled') { notify('Operation cancelled.'); setBusy(false); }
+      if (job.status === 'error') { notify(job.error || job.message); setBusy(false); setJobId(null); setJobKind(null); }
+      if (job.status === 'cancelled') { notify('Operation cancelled.'); setBusy(false); setJobId(null); setJobKind(null); }
     });
-  }, [jobId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [jobId, jobKind]);
 
   useEffect(() => {
     if (!exportJob) return;
     return pollJob(exportJob, (job) => {
-      if (job.status === 'done' && job.result?.output) { setExportOutput(String(job.result.output)); notify('Export ready — download it from here.'); }
-      if (job.status === 'error') notify(job.error || job.message);
-      if (job.status === 'cancelled') notify('Export cancelled.');
+      if (job.status === 'done') {
+        if (job.result?.output) { setExportOutput(String(job.result.output)); notify('Export ready — download it from here.'); }
+        setExportJob(null);
+      }
+      if (job.status === 'error') { notify(job.error || job.message); setExportJob(null); }
+      if (job.status === 'cancelled') { notify('Export cancelled.'); setExportJob(null); }
     });
   }, [exportJob, notify]);
 
@@ -124,45 +172,63 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     return pollJob(autoJob, (job) => {
       if (job.status === 'done') {
         void refreshClips();
-        setAutoJob(null);
         const outputs = Array.isArray(job.result?.outputs) ? job.result.outputs.length : 0;
+        const edits = Array.isArray(job.result?.edits) ? job.result.edits as AutoEditTimelineEdit[] : [];
         const warnings = Array.isArray(job.result?.warnings) ? job.result.warnings as string[] : [];
         const warningSummary = warnings.length
           ? ` ${warnings.length} warning(s): ${warnings[0]}${warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}`
           : '';
-        notify(`Auto Edit exported ${outputs} clip(s).${warningSummary}`);
+        if (edits.length) {
+          void applyAutoEditEdits(edits).then(() => {
+            notify(`Auto Edit applied to ${edits.length} clip(s): editable video, captions and audio are now on the timeline; ${outputs} MP4(s) rendered.${warningSummary}`);
+          }).catch((error) => notify(`MP4s rendered, but the editable timeline could not be saved: ${String(error)}${warningSummary}`))
+            .finally(() => setAutoJob(null));
+        } else {
+          setAutoJob(null);
+          notify(`Auto Edit finished with no clips to add to the timeline.${warningSummary}`);
+        }
       }
       if (job.status === 'error') { setAutoJob(null); notify(job.error || job.message); }
       if (job.status === 'cancelled') { setAutoJob(null); notify('Automatic editing cancelled.'); }
     });
   }, [autoJob, notify, refreshClips]);
 
+  async function applyAutoEditEdits(edits: AutoEditTimelineEdit[]) {
+    const current = timelineStateRef.current;
+    const { timeline: next, start } = appendAutoEditTimeline(current, edits);
+    const project = projectStateRef.current;
+    let projectId = project.id;
+    let projectName = project.name || 'Auto Edit';
+    if (projectId) {
+      await api.saveProject(projectId, next, projectName);
+    } else {
+      const created = await api.createProject({ name: 'Auto Edit', template: next });
+      projectId = created.project.id;
+      projectName = created.project.name;
+    }
+    projectStateRef.current = { id: projectId, name: projectName };
+    timelineStateRef.current = next;
+    setProjectId(projectId);
+    setProjectName(projectName);
+    setTimeline(next);
+    setPlayhead(start);
+    setExportOutput('');
+    const firstAutoClip = next.tracks.video.findIndex((item) => item.auto_edit && edits.some((edit) => edit.clip_id === item.clip_id));
+    if (firstAutoClip >= 0) setSelected({ track: 'video', index: firstAutoClip });
+  }
+
   const runAutoEdit = async () => {
     const ids = clips.map((clip) => clip.id || '').filter(Boolean);
     if (!ids.length) { notify('Generate clips with AI Clipper first.'); return; }
     try {
-      const result = await api.autoEdit(ids, autoStyle, timeline.aspect, timeline.resolution);
+      const result = await api.autoEdit(ids, autoEditOptions);
       setAutoJob(result.job_id);
-      notify(`Auto-editing ${ids.length} clip(s) with captions, images, motion and SFX…`);
-    } catch (error) { notify(String(error)); }
-  };
-
-  const renderAutoClip = async (clip: Candidate) => {
-    if (!clip.id) return;
-    try {
-      const result = await api.renderClip(clip.id, {
-        aspect: timeline.aspect, resolution: timeline.resolution, title: clip.title,
-        caption_style: { preset: autoStyle },
-        sfx: ['whoosh', 'pop'], speed: 1.04, brightness: 0.02,
-        contrast: 1.05, saturation: 1.08, blur_background: true,
-        region: clip.region, regions: clip.regions, region_layout: clip.region_layout,
-      });
-      setExportJob(result.job_id);
-      notify('Rendering this clip with the same automatic edit stack.');
+      notify(`Applying Auto Edit to ${ids.length} clip(s); finished videos will be added as editable timeline tracks.`);
     } catch (error) { notify(String(error)); }
   };
 
   const mutate = (fn: (draft: Timeline) => void) => {
+    setExportOutput('');
     setTimeline((current) => {
       const next = structuredClone(current);
       fn(next);
@@ -181,7 +247,16 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
 
   const removeSelected = () => {
     if (!selected) return;
-    mutate((draft) => { (draft.tracks[selected.track] as unknown as AnyItem[]).splice(selected.index, 1); });
+    const item = (timeline.tracks[selected.track] as unknown as AnyItem[])[selected.index];
+    mutate((draft) => {
+      (draft.tracks[selected.track] as unknown as AnyItem[]).splice(selected.index, 1);
+      if (selected.track === 'video' && item?.auto_edit && item.clip_id
+        && !draft.tracks.video.some((entry) => entry.clip_id === item.clip_id)) {
+        draft.tracks.captions = draft.tracks.captions.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
+        draft.tracks.stickers = draft.tracks.stickers.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
+        draft.tracks.audio = draft.tracks.audio.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
+      }
+    });
     setSelected(null);
   };
 
@@ -193,8 +268,21 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     if (offset <= 0.2 || offset >= item.duration - 0.2) { notify('Move the playhead inside the selected clip before splitting.'); return; }
     mutate((draft) => {
       const first = draft.tracks.video[selected.index];
-      const second = { ...first, id: undefined, sourceStart: first.sourceStart + offset, duration: first.duration - offset, label: `${first.label || 'Clip'} B` };
-      first.duration = offset;
+      const speed = Math.max(0.25, Math.min(4, Number(first.effects?.speed || 1)));
+      const originalSourceDuration = Math.max(0.05, Number(first.sourceDuration ?? first.duration * speed));
+      const minimumSourceSlice = Math.min(0.2 * speed, originalSourceDuration / 2);
+      const sourceOffset = Math.max(
+        minimumSourceSlice,
+        Math.min(originalSourceDuration - minimumSourceSlice, offset * speed),
+      );
+      const firstDuration = sourceOffset / speed;
+      const second = {
+        ...first, id: undefined, sourceStart: Number(first.sourceStart || 0) + sourceOffset,
+        sourceDuration: originalSourceDuration - sourceOffset, duration: first.duration - firstDuration,
+        label: `${first.label || 'Clip'} B`,
+      };
+      first.duration = firstDuration;
+      first.sourceDuration = sourceOffset;
       draft.tracks.video.splice(selected.index + 1, 0, second);
     });
     notify('Clip split at playhead.');
@@ -203,9 +291,13 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   const seekTo = (seconds: number) => {
     const next = Math.max(0, Math.min(total, seconds));
     setPlayhead(next);
-    if (videoRef.current && Number.isFinite(next)) {
+    if (videoRef.current && activeVideo && Number.isFinite(next)) {
       const offset = Math.max(0, next - activeVideoStart);
-      videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration || offset, offset + (activeVideo?.sourceStart || 0)));
+      const speed = Math.max(0.25, Math.min(4, Number(activeVideo.effects?.speed || 1)));
+      const sourceStart = Number(activeVideo.sourceStart || 0);
+      const sourceEnd = sourceStart + (activeVideo.sourceDuration || activeVideo.duration * speed);
+      const target = sourceStart + offset * speed;
+      videoRef.current.currentTime = Math.max(0, Math.min(videoRef.current.duration || sourceEnd, Math.min(sourceEnd, target)));
     }
   };
 
@@ -245,13 +337,14 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
 
   const save = async () => {
     if (!projectId) { notify('Create a project first.'); return; }
-    try { await api.saveProject(projectId, timeline, projectName); notify('Project saved locally.'); }
+    try { await api.saveProject(projectId, timeline, projectName); notify('Project saved.'); }
     catch (error) { notify(String(error)); }
   };
 
   const exportVideo = async () => {
     if (!projectId || !timeline.tracks.video.length) { notify('Add a video clip to the timeline first.'); return; }
     try {
+      setExportOutput('');
       await save();
       const result = await api.exportProject(projectId, timeline.aspect, timeline.resolution);
       setExportJob(result.job_id);
@@ -264,11 +357,12 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     if (!source) { notify('Add a library video to the timeline first.'); return; }
     setBusy(true);
     setTab('media');
+    setJobKind('captions');
     try {
       const result = await api.transcribe(source.id);
       setJobId(result.job_id);
       notify('Generating word-timed captions with Whisper…');
-    } catch (error) { notify(String(error)); setBusy(false); }
+    } catch (error) { notify(String(error)); setBusy(false); setJobKind(null); }
   };
 
   const searchStock = async () => {
@@ -289,14 +383,21 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   const generateArt = async () => {
     if (!prompt.trim()) { notify('Describe the sticker or image you want.'); return; }
     setBusy(true);
-    try { setJobId((await api.generateImage(prompt, provider, '1:1')).job_id); }
-    catch (error) { notify(String(error)); setBusy(false); }
+    setJobKind('art');
+    setImageResults([]);
+    try { setJobId((await api.generateImage(prompt, provider, '1:1', 3)).job_id); }
+    catch (error) { notify(String(error)); setBusy(false); setJobKind(null); }
+  };
+
+  const addGeneratedImage = (image: ImageOption) => {
+    addItem('stickers', { path: image.path, start: playhead, end: playhead + 3, x: 0.7, y: 0.15, scale: 0.22, label: 'AI art' });
+    notify(`${image.provider === 'local' ? 'Offline graphic' : 'Generated image'} added to the sticker track.`);
   };
 
   const addSfx = async (name: string) => {
     try {
       const result = await api.sfxPath(name);
-      addItem('audio', { path: result.path, start: playhead, end: playhead + 1.2, volume: 0.8, label: name });
+      addItem('audio', { path: result.path, start: playhead, end: playhead + 1.2, volume: 0.8, label: name, kind: 'sfx' });
       notify(`${name} added at ${formatClock(playhead)}.`);
     } catch (error) { notify(String(error)); }
   };
@@ -305,6 +406,8 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     if (!projectId) {
       try {
         const created = await api.createProject({ name: item.title, media_id: item.id });
+        projectStateRef.current = { id: created.project.id, name: created.project.name };
+        timelineStateRef.current = created.project.timeline || emptyTimeline();
         setProjectId(created.project.id);
         setProjectName(created.project.name);
         setTimeline(created.project.timeline || emptyTimeline());
@@ -315,6 +418,25 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     notify(`${item.title} added to the timeline.`);
   };
 
+  const removeMediaFromLibrary = async (item: Media) => {
+    const fileNote = item.source_url
+      ? 'If no saved clip, project, or library item uses this download, its file may also be deleted.'
+      : 'The original imported file will remain on disk.';
+    if (!window.confirm(`Remove “${item.title}” from the media library? ${fileNote}`)) return;
+    setDeletingMediaId(item.id);
+    try {
+      const result = await api.deleteMedia(item.id, true);
+      setMedia((current) => current.filter((entry) => entry.id !== item.id));
+      setMediaSelection((current) => current.filter((id) => id !== item.id));
+      setNewMedia((current) => current === item.id ? '' : current);
+      if (result.file_error) notify(`Removed from the library, but the source file could not be deleted: ${result.file_error}`);
+      else if (result.file_deleted) notify('Video removed from the library and downloaded file deleted.');
+      else if (result.file_kept_shared) notify('Video removed from the library; its source is kept because another clip or project uses it.');
+      else notify('Video removed from the library. The original file was kept.');
+    } catch (error) { notify(String(error)); }
+    finally { setDeletingMediaId(null); }
+  };
+
   const addClipToTimeline = async (clip: Candidate) => {
     if (!clip.id) { notify('This AI clip has no saved clip ID yet.'); return; }
     const sourceMedia = media.find((item) => item.id === clip.media_id);
@@ -322,6 +444,8 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     if (!projectId) {
       try {
         const created = await api.createProject({ name: clip.title.slice(0, 60), clip_id: clip.id });
+        projectStateRef.current = { id: created.project.id, name: created.project.name };
+        timelineStateRef.current = created.project.timeline || emptyTimeline();
         setProjectId(created.project.id);
         setProjectName(created.project.name);
         setTimeline(created.project.timeline || emptyTimeline());
@@ -343,7 +467,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
       if (event.code === 'Space') {
         event.preventDefault();
         if (videoRef.current) {
-          if (videoRef.current.paused) { void videoRef.current.play(); setPlaying(true); }
+          if (videoRef.current.paused) { void videoRef.current.play().catch(() => setPlaying(false)); setPlaying(true); }
           else { videoRef.current.pause(); setPlaying(false); }
         }
       }
@@ -367,9 +491,30 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !activeVideo) return;
-    const target = activeVideo.sourceStart + playhead - activeVideoStart;
-    if (Math.abs(video.currentTime - target) > 0.45 && Number.isFinite(target)) video.currentTime = Math.max(0, target);
+    const speed = Math.max(0.25, Math.min(4, Number(activeVideo.effects?.speed || 1)));
+    const sourceStart = Number(activeVideo.sourceStart || 0);
+    const sourceEnd = sourceStart + Math.max(0.05, Number(activeVideo.sourceDuration ?? activeVideo.duration * speed));
+    const clipOffset = Math.max(0, Math.min(activeVideo.duration, playhead - activeVideoStart));
+    const target = Math.max(sourceStart, Math.min(sourceEnd, sourceStart + clipOffset * speed));
+    if (video.playbackRate !== speed) video.playbackRate = speed;
+    const activeSource = video.getAttribute('src');
+    const expectedSource = mediaUrl(`/media/file?path=${encodeURIComponent(activeVideo.path)}`);
+    if (activeSource !== expectedSource) return;
+    if (Math.abs(video.currentTime - target) > 0.45 && Number.isFinite(target)) {
+      video.currentTime = Math.max(0, Math.min(video.duration || sourceEnd, Math.min(sourceEnd, target)));
+    }
   }, [playhead, activeVideo, activeVideoStart]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!playing || !activeVideo) {
+      if (!video.paused) video.pause();
+      if (!activeVideo && playing) setPlaying(false);
+      return;
+    }
+    if (video.paused) void video.play().catch(() => setPlaying(false));
+  }, [activeVideo, activeVideoStart, playing]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -387,6 +532,9 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
         regions: activeVideo.regions,
         layout: activeVideo.region_layout,
         fit: 'cover',
+        brightness: Number(activeVideo.effects?.brightness ?? 0),
+        contrast: Number(activeVideo.effects?.contrast ?? 1),
+        saturation: Number(activeVideo.effects?.saturation ?? 1),
       });
     };
     if (!video || !activeVideo) { draw(); return; }
@@ -419,39 +567,16 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   return (
     <div className="editor">
       <header className="editor-toolbar">
-        <div className="project-title">
-          <input value={projectName} onChange={(event) => setProjectName(event.target.value)} />
-          {projectId && <Pill tone="muted">Saved locally</Pill>}
-        </div>
-        <Pill tone="violet">Timeline editor</Pill>
-      </header>
-
-      <div className="auto-edit-strip">
-        <div className="auto-edit-head">
-          <strong><Sparkles size={14} /> Auto Edit</strong>
-          <span>{clips.length} AI clip(s) ready</span>
-          <select aria-label="Auto Edit export quality" value={timeline.resolution} onChange={(event) => mutate((draft) => { draft.resolution = event.target.value as Timeline['resolution']; })}>
-            <option value="source">Source quality</option><option value="1080p">1080p</option><option value="720p">720p</option>
-          </select>
-          <select aria-label="Auto Edit style" value={autoStyle} onChange={(event) => setAutoStyle(event.target.value as typeof autoStyle)}>
-            <option value="hype">High energy</option><option value="minimal">Minimal</option><option value="premium">Premium</option>
-          </select>
-          <button className="primary" disabled={!clips.length || Boolean(autoJob)} onClick={() => void runAutoEdit()}>
-            {autoJob ? <LoaderCircle size={14} className="spin" /> : <WandSparkles size={14} />} Auto edit &amp; render all
+        <div className="editor-toolbar-actions">
+          <button className="primary" disabled={!clips.length || !autoEditSettingsLoaded || Boolean(autoJob)} title={!autoEditSettingsLoaded ? 'Loading Auto Edit settings' : clips.length ? 'Apply edits to all saved AI clips and add them to the timeline' : 'Run AI Clipper first'} onClick={() => void runAutoEdit()}>
+            {autoJob ? <LoaderCircle size={15} className="spin" /> : <WandSparkles size={15} />} Auto Edit
           </button>
+          <button className="ghost-btn" disabled={!projectId || !timeline.tracks.video.length || Boolean(exportJob) || Boolean(autoJob)} onClick={() => void exportVideo()}>
+            {exportJob ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />} Export MP4
+          </button>
+          <button className="icon-btn" title="Save project" aria-label="Save project" disabled={!projectId} onClick={() => void save()}><Save size={15} /></button>
         </div>
-        {autoJob && <JobTracker jobId={autoJob} label="Automatic editing" />}
-        <div className="auto-edit-clips">
-          {clips.length === 0 && <span className="hint">Generate clips in AI Clipper — they will appear here automatically.</span>}
-          {clips.map((clip) => (
-            <div className="auto-edit-clip" key={clip.id}>
-              <div><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small></div>
-              <button className="icon-btn" title="Render with auto edit" aria-label="Render with auto edit" onClick={() => void renderAutoClip(clip)}><Download size={14} /></button>
-              {clip.output && <a className="icon-btn" title="Download rendered MP4" aria-label="Download rendered MP4" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output) + '&download=true')} download><Check size={14} /></a>}
-            </div>
-          ))}
-        </div>
-      </div>
+      </header>
 
       <div className="editor-body">
         <aside className="asset-panel">
@@ -475,11 +600,21 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
                 )}
                 <div className="asset-list">
                   {media.map((item) => (
-                    <button key={item.id} className="asset-row" onClick={() => addMediaToTimeline(item)}>
-                      {item.thumbnail ? <img src={mediaUrl(item.thumbnail)} alt="" /> : <Film size={20} />}
-                      <span><strong>{item.title}</strong><small>{formatClock(item.duration)} · click to add</small></span>
-                    </button>
+                    <div key={item.id} className="asset-row-group">
+                      <button className="asset-row" onClick={() => void addMediaToTimeline(item)} aria-label={`Add ${item.title} to the timeline`}>
+                        {item.thumbnail ? <img src={mediaUrl(item.thumbnail)} alt="" /> : <Film size={20} />}
+                        <span><strong>{item.title}</strong><small>{formatClock(item.duration)} · Add to timeline</small></span>
+                      </button>
+                      <button
+                        className="icon-btn asset-row-remove"
+                        title="Remove from media library"
+                        aria-label={`Remove ${item.title} from the media library`}
+                        disabled={deletingMediaId === item.id}
+                        onClick={() => void removeMediaFromLibrary(item)}
+                      >{deletingMediaId === item.id ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />}</button>
+                    </div>
                   ))}
+                  {!media.length && <p className="hint">No source videos in the library. Import or download a video first.</p>}
                 </div>
               </>
             )}
@@ -520,15 +655,23 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
             )}
             {tab === 'art' && (
               <div className="art-panel">
-                <h3>Generate on the spot</h3>
-                <p>Nano Banana (Gemini key) or local SDXL via ComfyUI — no watermark.</p>
-                <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} placeholder="A glowing neon sticker that says EPIC, transparent background, cartoon style" />
+                <h3>Generate AI art</h3>
+                <p>Generate three alternatives, then choose the one to add. Auto uses Nano Banana with a Gemini key or a running ComfyUI SDXL model. Offline decorative art is a simple graphic, not prompt-generated AI.</p>
+                <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} placeholder="Describe the subject, mood, lighting, style, and composition you want…" />
                 <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-                  <option value="auto">Auto (best available)</option><option value="nano-banana">Nano Banana</option><option value="comfyui">Local ComfyUI (SDXL)</option><option value="local">Offline instant art</option>
+                  <option value="auto">Auto (best available AI)</option><option value="nano-banana">Nano Banana</option><option value="comfyui">Local ComfyUI (SDXL)</option><option value="local">Offline decorative graphic</option>
                 </select>
-                <button className="primary" disabled={busy} onClick={generateArt}><Sparkles size={15} /> Generate image</button>
-                {imageResult && <img className="generated-preview" src={mediaUrl('/api/assets/file?path=' + encodeURIComponent(imageResult))} alt="Generated asset" />}
-                {jobId && <JobTracker jobId={jobId} label="Image generation" />}
+                <button className="primary" disabled={busy} onClick={generateArt}><Sparkles size={15} /> Generate 3 variations</button>
+                {jobId && jobKind === 'art' && <JobTracker jobId={jobId} label="Generating image options" />}
+                {imageResults.length > 0 && <div className="generated-options">
+                  {imageResults.map((image, index) => (
+                    <article className="generated-option" key={image.path}>
+                      <img src={mediaUrl('/api/assets/file?path=' + encodeURIComponent(image.path))} alt={`Generated option ${index + 1}`} />
+                      <small>Option {index + 1} · {image.provider || 'AI image'}</small>
+                      <button className="chip-btn" onClick={() => addGeneratedImage(image)}><Plus size={13} /> Add to timeline</button>
+                    </article>
+                  ))}
+                </div>}
               </div>
             )}
             {tab === 'sfx' && (
@@ -563,11 +706,36 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
                 className="stage-source-video"
                 ref={videoRef}
                 src={mediaUrl(`/media/file?path=${encodeURIComponent(activeVideo.path)}`)}
+                playsInline
+                preload="auto"
+                onLoadStart={(event) => { event.currentTarget.pause(); }}
+                onCanPlay={(event) => {
+                  const video = event.currentTarget;
+                  if (video.getAttribute('src') !== mediaUrl(`/media/file?path=${encodeURIComponent(activeVideo.path)}`)) return;
+                  if (playing && video.paused) void video.play().catch(() => setPlaying(false));
+                }}
+                onPlay={() => setPlaying(true)}
                 onTimeUpdate={(event) => {
                   const video = event.currentTarget;
-                  setPlayhead(Math.max(0, Math.min(total, activeVideoStart + video.currentTime - activeVideo.sourceStart)));
+                  const speed = Math.max(0.25, Math.min(4, Number(activeVideo.effects?.speed || 1)));
+                  const sourceStart = Number(activeVideo.sourceStart || 0);
+                  const elapsed = Math.max(0, (video.currentTime - sourceStart) / speed);
+                  const clipPosition = Math.min(activeVideo.duration, elapsed);
+                  const next = Math.max(0, Math.min(total, activeVideoStart + clipPosition));
+                  const sourceDuration = Math.max(0.05, Number(activeVideo.sourceDuration ?? activeVideo.duration * speed));
+                  if (elapsed >= activeVideo.duration - 0.04 || video.currentTime >= sourceStart + sourceDuration - 0.04) {
+                    video.pause();
+                    setPlayhead(activeVideoStart + activeVideo.duration);
+                    if (activeVideoIndex >= timeline.tracks.video.length - 1) setPlaying(false);
+                    return;
+                  }
+                  setPlayhead(next);
                 }}
-                onEnded={() => setPlaying(false)}
+                onEnded={() => {
+                  const next = Math.min(total, activeVideoStart + activeVideo.duration);
+                  setPlayhead(next);
+                  if (activeVideoIndex >= timeline.tracks.video.length - 1) setPlaying(false);
+                }}
               />
             ) : <div className="stage-empty"><Film size={38} /><p>Add a video from the media panel to start editing</p></div>}
             {activeVideo?.clip_id && playhead - activeVideoStart <= activeTitleDuration && <div className="stage-title-preview">{activeVideo.label}</div>}
@@ -593,7 +761,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
               aria-label={playing ? 'Pause' : 'Play'}
               onClick={() => {
                 if (!videoRef.current) return;
-                if (videoRef.current.paused) { void videoRef.current.play(); setPlaying(true); }
+                if (videoRef.current.paused) { void videoRef.current.play().catch(() => setPlaying(false)); setPlaying(true); }
                 else { videoRef.current.pause(); setPlaying(false); }
               }}
             >{playing ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button>
@@ -635,8 +803,6 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
               <button className="icon-btn" title="Sound effects" aria-label="Sound effects" onClick={() => setTab('sfx')}><Volume2 size={15} /></button>
               <button className="icon-btn" title="Split clip at playhead" aria-label="Split clip" onClick={splitSelected}><Split size={15} /></button>
               <button className="icon-btn" title="Delete selected item" aria-label="Delete selected item" onClick={removeSelected}><Trash2 size={15} /></button>
-              <button className="icon-btn" title="Save project" aria-label="Save project" onClick={() => void save()}><Save size={15} /></button>
-              <button className="icon-btn primary-icon" title="Export video" aria-label="Export video" onClick={() => void exportVideo()}><Download size={15} /></button>
             </div>
             <label>Zoom <input type="range" min="8" max="90" value={zoom} onChange={(event) => setZoom(Number(event.target.value))} /></label>
           </div>

@@ -205,6 +205,20 @@ def _normalise_contrast(value: Any) -> float:
     return max(0.0, min(2.0, contrast))
 
 
+def _atempo_filter(speed: float) -> str:
+    """Build an FFmpeg atempo chain for speeds outside its 0.5–2.0 range."""
+    remaining = max(0.25, min(float(speed), 4.0))
+    factors: list[float] = []
+    while remaining < 0.5:
+        factors.append(0.5)
+        remaining /= 0.5
+    while remaining > 2.0:
+        factors.append(2.0)
+        remaining /= 2.0
+    factors.append(remaining)
+    return ",".join(f"atempo={factor:.3f}" for factor in factors)
+
+
 def _normalise_region(region: Any, expand_small: bool = True) -> tuple[float, float, float, float] | None:
     """Clamp a normalized focus box and optionally expand tiny focus crops."""
     if not isinstance(region, dict):
@@ -493,7 +507,7 @@ def build_clip_args(
     video_parts.append(f"[{current}]scale=in_range=auto:out_range=tv,setsar=1,format=yuv420p[vout]")
 
     audio_inputs: list[str] = []
-    tempo = f",atempo={speed:.3f}" if abs(speed - 1.0) > 0.01 else ""
+    tempo = f",{_atempo_filter(speed)}" if abs(speed - 1.0) > 0.01 else ""
     if silent_index is not None:
         audio_parts = [f"[{silent_index}:a]atrim=0:{duration:.3f},asetpts=PTS-STARTPTS{tempo}[a0]"]
     else:
@@ -595,15 +609,18 @@ async def render_timeline(
         (int(best_source.get("width") or 1080), int(best_source.get("height") or 1920)),
     )
 
-    music_items = [item for item in (tracks.get("audio") or []) if Path(str(item.get("path", ""))).exists()]
-    for item in music_items:
-        args += ["-stream_loop", "-1", "-i", str(item["path"])]
-    sticker_items = [item for item in (tracks.get("stickers") or []) if Path(str(item.get("path", ""))).exists()]
+    audio_items = [item for item in (tracks.get("audio") or []) if Path(str(item.get("path", ""))).is_file()]
+    for item in audio_items:
+        if item.get("kind") == "sfx":
+            args += ["-i", str(item["path"])]
+        else:
+            args += ["-stream_loop", "-1", "-i", str(item["path"])]
+    sticker_items = [item for item in (tracks.get("stickers") or []) if Path(str(item.get("path", ""))).is_file()]
     for item in sticker_items:
         args += ["-loop", "1", "-i", str(item["path"])]
     watermark_index = None
     if watermark_path and Path(watermark_path).is_file():
-        watermark_index = len(indexed_video) + len(music_items) + len(sticker_items)
+        watermark_index = len(indexed_video) + len(audio_items) + len(sticker_items)
         args += ["-loop", "1", "-i", watermark_path]
 
     filters: list[str] = []
@@ -611,19 +628,27 @@ async def render_timeline(
     alabels: list[str] = []
     timeline_titles: list[dict[str, Any]] = []
     timeline_cursor = 0.0
-    video_base = len(indexed_video)
-    music_base = video_base
-    sticker_base = music_base + len(music_items)
+    audio_base = len(indexed_video)
+    sticker_base = audio_base + len(audio_items)
     for position, (item, idx) in enumerate(indexed_video):
         source_in = float(item.get("sourceStart", 0))
         duration = max(0.2, float(item.get("duration", 5)))
+        effects = item.get("effects") if isinstance(item.get("effects"), dict) else {}
+        try:
+            speed = max(0.25, min(float(effects.get("speed", 1)), 4))
+        except (TypeError, ValueError):
+            speed = 1.0
+        source_duration = max(0.05, float(item.get("sourceDuration") or duration * speed))
         if item.get("clip_id") and str(item.get("label") or "").strip():
             title_end = timeline_cursor + min(duration, max(1.4, min(2.8, duration * 0.22)))
             timeline_titles.append({
                 "text": str(item["label"])[:100], "start": timeline_cursor,
                 "end": title_end, "kind": "title",
             })
-        trim = f"trim=start={source_in:.3f}:duration={duration:.3f},setpts=PTS-STARTPTS,fps=30"
+        trim = (
+            f"trim=start={source_in:.3f}:duration={source_duration:.3f},"
+            f"setpts=(PTS-STARTPTS)/{speed:.3f},fps=30"
+        )
         regions = item.get("regions") or []
         layout = item.get("region_layout")
         composed = _compose_regions(f"{idx}:v", trim, regions, layout, width, height, f"timeline{position}")
@@ -633,21 +658,33 @@ async def render_timeline(
         else:
             focus = item.get("region") or (regions[0] if regions else None)
             crop = _crop_filter(focus)
-            video_filter = f"trim=start={source_in:.3f}:duration={duration:.3f}"
+            video_filter = f"trim=start={source_in:.3f}:duration={source_duration:.3f}"
             if crop:
                 video_filter += "," + crop
             video_filter += (
-                ",setpts=PTS-STARTPTS,"
+                f",setpts=(PTS-STARTPTS)/{speed:.3f},"
                 f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,crop={width}:{height},fps=30"
             )
             video_label = f"v{position}"
             filters.append(f"[{idx}:v]{video_filter}[{video_label}]")
-        vlabels.append(f"[{video_label}]")
+        try:
+            brightness = float(effects.get("brightness", 0))
+            saturation = float(effects.get("saturation", 1))
+        except (TypeError, ValueError):
+            brightness, saturation = 0.0, 1.0
+        contrast = _normalise_contrast(effects.get("contrast", 1))
+        graded = f"v{position}_graded"
+        filters.append(
+            f"[{video_label}]eq=brightness={brightness:.3f}:contrast={contrast:.3f}:saturation={saturation:.3f}[{graded}]"
+        )
+        vlabels.append(f"[{graded}]")
         media = source_info[position]
         if media.get("audio_codec"):
-            filters.append(
-                f"[{idx}:a]atrim=start={source_in:.3f}:duration={duration:.3f},asetpts=PTS-STARTPTS[a{position}]"
-            )
+            audio_filter = f"atrim=start={source_in:.3f}:duration={source_duration:.3f},asetpts=PTS-STARTPTS"
+            if abs(speed - 1.0) > 0.01:
+                audio_filter += f",{_atempo_filter(speed)}"
+            audio_filter += f",atrim=0:{duration:.3f}"
+            filters.append(f"[{idx}:a]{audio_filter}[a{position}]")
         else:
             filters.append(f"anullsrc=r=48000:cl=stereo,atrim=0:{duration:.3f}[a{position}]")
         alabels.append(f"[a{position}]")
@@ -668,11 +705,17 @@ async def render_timeline(
     for offset, item in enumerate(sticker_items):
         start = float(item.get("start", 0))
         end = float(item.get("end", min(total, start + 3)))
-        x = float(item.get("x", 0.72)) * (width - 200)
-        y = float(item.get("y", 0.16)) * (height - 200)
+        try:
+            sticker_scale = float(item.get("scale", 0))
+        except (TypeError, ValueError):
+            sticker_scale = 0
+        sticker_width = max(24, int(width * min(0.8, max(0.05, sticker_scale)))) if sticker_scale else 240
+        x = max(0.0, min(1.0, float(item.get("x", 0.72))))
+        y = max(0.0, min(1.0, float(item.get("y", 0.16))))
         filters.append(
-            f"[{sticker_base + offset}:v]scale=240:-1[st{offset}];"
-            f"[{current}][st{offset}]overlay=x={x:.0f}:y={y:.0f}:enable='between(t,{start:.2f},{end:.2f})'[stuck{offset}]"
+            f"[{sticker_base + offset}:v]scale={sticker_width}:-1[st{offset}];"
+            f"[{current}][st{offset}]overlay=x='{x:.3f}*(W-w)':y='{y:.3f}*(H-h)':"
+            f"enable='between(t,{start:.2f},{end:.2f})'[stuck{offset}]"
         )
         current = f"stuck{offset}"
     if watermark_index is not None:
@@ -682,13 +725,17 @@ async def render_timeline(
         )
         current = "branded"
     audio_sources = ["[acat]"]
-    for offset, item in enumerate(music_items):
-        start = float(item.get("start", 0))
-        volume = float(item.get("volume", 0.2))
+    for offset, item in enumerate(audio_items):
+        start = max(0.0, float(item.get("start", 0)))
+        end = min(total, max(start + 0.05, float(item.get("end", total))))
+        duration = max(0.05, end - start)
+        volume = max(0.0, min(2.0, float(item.get("volume", 0.2))))
+        label = f"audio{offset}"
         filters.append(
-            f"[{music_base + offset}:a]atrim=0:{total:.3f},asetpts=PTS-STARTPTS,volume={volume},adelay={int(start*1000)}|{int(start*1000)}[music{offset}]"
+            f"[{audio_base + offset}:a]atrim=0:{duration:.3f},asetpts=PTS-STARTPTS,"
+            f"volume={volume:.3f},adelay={int(start * 1000)}|{int(start * 1000)}[{label}]"
         )
-        audio_sources.append(f"[music{offset}]")
+        audio_sources.append(f"[{label}]")
     filters.append(
         "".join(audio_sources)
         + f"amix=inputs={len(audio_sources)}:duration=first:normalize=0,apad,atrim=0:{total:.3f}[aout]"

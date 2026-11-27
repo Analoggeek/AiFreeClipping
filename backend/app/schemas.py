@@ -38,6 +38,12 @@ class AutoEditRequest(BaseModel):
     style: Literal["hype", "minimal", "premium"] = "hype"
     aspect: Literal["9:16", "1:1", "16:9"] = "9:16"
     resolution: Literal["720p", "1080p", "source"] = "source"
+    captions: bool = True
+    sound_effects: bool = True
+    stickers: bool = True
+    blur_background: bool = True
+    music: str | None = None
+    music_volume: float = Field(default=0.18, ge=0, le=1)
 
 
 class MediaInfo(BaseModel):
@@ -162,6 +168,7 @@ class ImageRequest(BaseModel):
     aspect: str = "9:16"
     reference_path: str | None = None
     negative_prompt: str = "text, watermark, logo, blurry, low quality"
+    count: int = Field(default=3, ge=1, le=4)
 
 
 class AssetSearchRequest(BaseModel):

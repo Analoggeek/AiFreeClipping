@@ -35,7 +35,7 @@ export default function App() {
   const [page, setPage] = useState<PageId>('overview');
   const [toast, setToast] = useState('');
   const [online, setOnline] = useState(false);
-  const [version, setVersion] = useState('5.1.7');
+  const [version, setVersion] = useState('5.1.8');
   const [mediaSelection, setMediaSelection] = useState<string[]>([]);
   const [clipSelection, setClipSelection] = useState<string[]>([]);
   const [folder, setFolder] = useState('');
@@ -89,7 +89,7 @@ export default function App() {
     case 'downloads': content = <Downloads {...common} />; break;
     case 'playlists': content = <Playlists {...common} />; break;
     case 'clipper': content = <Clipper {...common} mediaSelection={mediaSelection} setMediaSelection={setMediaSelection} />; break;
-    case 'editor': content = <Editor {...common} clipSelection={clipSelection} />; break;
+    case 'editor': content = <Editor {...common} clipSelection={clipSelection} setMediaSelection={setMediaSelection} />; break;
     case 'publish': content = <Publish {...common} clipSelection={clipSelection} setClipSelection={setClipSelection} />; break;
     case 'models': content = <ModelsPage notify={notify} />; break;
     case 'settings': content = <SettingsPage notify={notify} />; break;

@@ -1,4 +1,4 @@
-import type { Capabilities, Candidate, HardwareInfo, Job, Media, ModelInfo, Project, Timeline } from './types';
+import type { AutoEditOptions, Capabilities, Candidate, HardwareInfo, Job, Media, ModelInfo, Project, Timeline } from './types';
 
 const query = new URLSearchParams(window.location.search);
 const token = window.desktop?.token?.() || query.get('token') || localStorage.getItem('aifreeclip.token') || '';
@@ -68,8 +68,8 @@ export const api = {
     post<{ results: Array<Record<string, string>> }>('/api/assets/search', { query, source, kind }),
   downloadAsset: (url: string, name: string, source: string) =>
     post<{ asset: { path: string; url: string } }>('/api/assets/download', { url, name, source }),
-  generateImage: (prompt: string, provider: string, aspect: string) =>
-    post<{ job_id: string }>('/api/images/generate', { prompt, provider, aspect }),
+  generateImage: (prompt: string, provider: string, aspect: string, count = 3) =>
+    post<{ job_id: string }>('/api/images/generate', { prompt, provider, aspect, count }),
   sfx: () => request<{ sfx: string[] }>('/api/sfx'),
   sfxPath: (name: string) => request<{ path: string }>(`/api/sfx/${name}/path`),
 
@@ -79,7 +79,7 @@ export const api = {
   installRecommendedModels: () => post<{ job_id: string }>('/api/models/install-recommended', {}),
   autoSetupModels: () => post<{ job_id: string; skipped?: boolean; message?: string }>('/api/models/auto-setup', {}),
   setFolder: (key: string, path: string) => request<{ folders: Record<string, string> }>('/api/folders', { method: 'PUT', body: JSON.stringify({ key, path }) }),
-  autoEdit: (clip_ids: string[], style = 'hype', aspect = '9:16', resolution = 'source') => post<{ job_id: string }>('/api/auto-edit', { clip_ids, style, aspect, resolution }),
+  autoEdit: (clip_ids: string[], options: AutoEditOptions) => post<{ job_id: string }>('/api/auto-edit', { clip_ids, ...options }),
 
   youtubeStatus: () => request<{ authorized: boolean; available: boolean; clientSecretConfigured: boolean }>('/api/youtube/status'),
   youtubeAuthorize: () => post<{ job_id: string }>('/api/youtube/authorize'),

@@ -113,6 +113,9 @@ export function drawVideoComposition(
     regions?: NormalizedBox[];
     layout?: string | null;
     fit?: 'blur-contain' | 'cover';
+    brightness?: number;
+    contrast?: number;
+    saturation?: number;
   } = {},
 ) {
   const context = canvas.getContext('2d');
@@ -124,9 +127,19 @@ export function drawVideoComposition(
     canvas.width = width;
     canvas.height = height;
   }
+  context.filter = 'none';
   context.fillStyle = '#05070e';
   context.fillRect(0, 0, width, height);
   if (!video.videoWidth || !video.videoHeight || video.readyState < 2) return;
+  const brightness = Math.max(0, 1 + Number(options.brightness || 0));
+  const contrastValue = Number(options.contrast ?? 1);
+  const contrast = Number.isFinite(contrastValue)
+    ? contrastValue >= 0 && contrastValue <= 0.1
+      ? 1 + contrastValue
+      : Math.max(0, Math.min(2, contrastValue))
+    : 1;
+  const saturation = Math.max(0, Number(options.saturation ?? 1));
+  context.filter = `brightness(${brightness * 100}%) contrast(${contrast * 100}%) saturate(${saturation * 100}%)`;
 
   const regions = (options.regions || []).filter(Boolean);
   const layout = options.layout || '';

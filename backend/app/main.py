@@ -627,14 +627,20 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
 
 @app.post("/api/auto-edit")
 async def auto_edit(payload: AutoEditRequest):
-    """Transcribe, compose, caption, title and render selected clips in one job."""
+    """Apply an edit recipe, render it, and return the matching editable timeline tracks."""
     async def work(job_id: str, p: dict[str, Any]):
         req = AutoEditRequest(**(p or {}))
         clip_ids = list(dict.fromkeys(req.clip_ids))
         total = max(len(clip_ids), 1)
         outputs: list[dict[str, Any]] = []
+        edits: list[dict[str, Any]] = []
         warnings: list[str] = []
         watermark_path = configured_watermark_path()
+        styles = {
+            "hype": {"speed": 1.04, "brightness": 0.02, "contrast": 1.05, "saturation": 1.08},
+            "minimal": {"speed": 1.0, "brightness": 0.0, "contrast": 1.0, "saturation": 1.0},
+            "premium": {"speed": 1.0, "brightness": 0.01, "contrast": 1.08, "saturation": 1.04},
+        }
         for index, clip_id in enumerate(clip_ids):
             row = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
             if not row:
@@ -645,117 +651,174 @@ async def auto_edit(payload: AutoEditRequest):
                 warnings.append(f"{row.get('title') or clip_id}: source media is missing; clip was skipped.")
                 continue
             metadata = _clip_metadata(row)
-            analysis = last_analysis(row["media_id"], "transcript") or {}
-            if not isinstance(analysis, dict):
-                analysis = {}
-            if not analysis.get("segments"):
-                jobs.update(
-                    job_id,
-                    progress=round(index / total * 100, 1),
-                    message=f"Generating captions for clip {index + 1}/{total}…",
-                )
-                try:
-                    analysis = await transcribe(
-                        media["path"], word_timestamps=True,
-                        on_progress=lambda pct, msg, i=index: jobs.update(
-                            job_id,
-                            progress=round((i + min(35, pct * 0.35)) / total * 100, 1),
-                            message=f"Clip {i + 1}/{total}: {msg}",
-                        ),
-                    )
-                    save_analysis(row["media_id"], "transcript", analysis)
-                except Exception as exc:
-                    warnings.append(f"{row.get('title') or clip_id}: captions unavailable ({exc}).")
-                    analysis = {"segments": []}
-            if not isinstance(analysis, dict):
-                analysis = {}
-
-            captions: list[dict[str, Any]] = []
             clip_start, clip_end = float(row["start"]), float(row["end"])
-            segments = analysis.get("segments")
-            for segment in segments if isinstance(segments, list) else []:
-                if not isinstance(segment, dict):
-                    continue
-                try:
-                    segment_start = float(segment.get("start", clip_start))
-                    segment_end = float(segment.get("end", segment_start))
-                except (TypeError, ValueError):
-                    continue
-                words = segment.get("words")
-                selected_words = []
-                for word in words if isinstance(words, list) else []:
-                    if not isinstance(word, dict):
-                        continue
-                    try:
-                        word_start = float(word.get("start", 0))
-                        word_end = float(word.get("end", word_start))
-                    except (TypeError, ValueError):
-                        continue
-                    if word_start <= clip_end and word_end >= clip_start:
-                        selected_words.append(word)
-                if selected_words:
-                    captions.extend(selected_words)
-                elif segment_start <= clip_end and segment_end >= clip_start:
-                    text = str(segment.get("text") or "").strip()
-                    if text:
-                        captions.append({
-                            "text": text,
-                            "start": max(clip_start, segment_start),
-                            "end": min(clip_end, segment_end),
-                        })
-            # The deterministic proposal may already have a transcript even if
-            # Whisper wasn't available; use it as a single timed caption instead
-            # of silently exporting a clip with no readable text layer.
-            if not captions and metadata.get("transcript"):
-                captions = [{
-                    "text": str(metadata["transcript"])[:240],
-                    "start": float(row["start"]), "end": float(row["end"]),
-                }]
-            if not captions:
-                warnings.append(f"{row.get('title') or clip_id}: rendered with a title card; no speech transcript was available.")
-
-            regions = metadata.get("regions") or []
-            focus = metadata.get("region") or (regions[0] if regions else None)
+            source_duration = max(0.2, clip_end - clip_start)
             effects = metadata.get("effects")
             if not isinstance(effects, dict):
                 effects = {}
-            styles = {
-                "hype": {"speed": 1.04, "brightness": 0.02, "contrast": 1.05, "saturation": 1.08},
-                "minimal": {"speed": 1.0, "brightness": 0.0, "contrast": 1.0, "saturation": 1.0},
-                "premium": {"speed": 1.0, "brightness": 0.01, "contrast": 1.08, "saturation": 1.04},
-            }
+
+            captions: list[dict[str, Any]] = []
+            if req.captions:
+                analysis = last_analysis(row["media_id"], "transcript") or {}
+                if not isinstance(analysis, dict):
+                    analysis = {}
+                if not analysis.get("segments"):
+                    jobs.update(
+                        job_id,
+                        progress=round(index / total * 100, 1),
+                        message=f"Generating captions for clip {index + 1}/{total}…",
+                    )
+                    try:
+                        analysis = await transcribe(
+                            media["path"], word_timestamps=True,
+                            on_progress=lambda pct, msg, i=index: jobs.update(
+                                job_id,
+                                progress=round((i + min(35, pct * 0.35)) / total * 100, 1),
+                                message=f"Clip {i + 1}/{total}: {msg}",
+                            ),
+                        )
+                        save_analysis(row["media_id"], "transcript", analysis)
+                    except Exception as exc:
+                        warnings.append(f"{row.get('title') or clip_id}: captions unavailable ({exc}).")
+                        analysis = {"segments": []}
+                if not isinstance(analysis, dict):
+                    analysis = {}
+                segments = analysis.get("segments")
+                for segment in segments if isinstance(segments, list) else []:
+                    if not isinstance(segment, dict):
+                        continue
+                    try:
+                        segment_start = float(segment.get("start", clip_start))
+                        segment_end = float(segment.get("end", segment_start))
+                    except (TypeError, ValueError):
+                        continue
+                    words = segment.get("words")
+                    selected_words = []
+                    for word in words if isinstance(words, list) else []:
+                        if not isinstance(word, dict):
+                            continue
+                        try:
+                            word_start = float(word.get("start", 0))
+                            word_end = float(word.get("end", word_start))
+                        except (TypeError, ValueError):
+                            continue
+                        if word_start <= clip_end and word_end >= clip_start:
+                            selected_words.append(word)
+                    if selected_words:
+                        captions.extend(selected_words)
+                    elif segment_start <= clip_end and segment_end >= clip_start:
+                        text = str(segment.get("text") or "").strip()
+                        if text:
+                            captions.append({
+                                "text": text,
+                                "start": max(clip_start, segment_start),
+                                "end": min(clip_end, segment_end),
+                            })
+                # A saved candidate transcript remains a useful fallback when
+                # local ASR weights are unavailable or only returned empty text.
+                if not captions and metadata.get("transcript"):
+                    captions = [{
+                        "text": str(metadata["transcript"])[:240],
+                        "start": clip_start, "end": clip_end,
+                    }]
+                if not captions:
+                    warnings.append(f"{row.get('title') or clip_id}: rendered with a title card; no speech transcript was available.")
+
+            regions = metadata.get("regions") or []
+            focus = metadata.get("region") or (regions[0] if regions else None)
+            requested_music = req.music if req.music is not None else effects.get("music")
+            music = str(requested_music or "").strip() or None
+            if music:
+                music_path = Path(music).expanduser()
+                if music_path.is_file():
+                    music = str(music_path)
+                else:
+                    warnings.append(f"{row.get('title') or clip_id}: selected music file was not found and was skipped.")
+                    music = None
+            saved_sfx = effects.get("sfx")
+            sfx_names = saved_sfx if isinstance(saved_sfx, list) and saved_sfx else ["whoosh", "pop"]
+            sfx_items = []
+            if req.sound_effects:
+                for item in sfx_names:
+                    name = item.get("name") if isinstance(item, dict) else item
+                    try:
+                        sfx_path = sfx.sfx_path(str(name))
+                    except ValueError:
+                        warnings.append(f"{row.get('title') or clip_id}: unknown sound effect {name!r} was skipped.")
+                        continue
+                    default_at = 0.0 if not sfx_items else min(0.45, max(0, source_duration - 0.2))
+                    at = float(item.get("at", default_at)) if isinstance(item, dict) else default_at
+                    effect_duration = float(probe(sfx_path).get("duration") or (0.7 if name in ("whoosh", "riser") else 0.35))
+                    sfx_items.append({"name": str(name), "at": max(0, at), "path": str(sfx_path), "duration": effect_duration})
+
+            sticker = (metadata.get("sticker") or effects.get("sticker")) if req.stickers else None
+            if sticker:
+                sticker_path = Path(str(sticker)).expanduser()
+                sticker = str(sticker_path) if sticker_path.is_file() else None
+            sticker_position = effects.get("sticker_position") or {"x": 0.72, "y": 0.16, "scale": 0.22}
             title = str(row.get("title") or metadata.get("title") or "Untitled clip").strip()[:100]
+            style_effects = styles[req.style]
+            timeline_duration = source_duration / float(style_effects["speed"])
             options = {
                 "aspect": req.aspect, "resolution": req.resolution,
                 "caption_style": {"preset": req.style, "position": "bottom"},
                 "captions": captions[:180], "title": title,
-                "sfx": [
-                    {"name": "whoosh", "at": 0.0},
-                    {"name": "pop", "at": min(0.45, max(0, float(row["end"]) - float(row["start"]) - 0.2))},
-                ],
-                "music": effects.get("music"), "music_volume": effects.get("music_volume", 0.18),
-                "sticker": metadata.get("sticker") or effects.get("sticker"),
-                "sticker_position": effects.get("sticker_position") or {"x": 0.72, "y": 0.16, "scale": 0.22},
-                **styles[req.style],
-                "blur_background": req.aspect == "9:16",
+                "sfx": [{"name": item["name"], "at": item["at"]} for item in sfx_items],
+                "sfx_volume": effects.get("sfx_volume", 0.5),
+                "music": music,
+                "music_volume": req.music_volume if req.music is not None else effects.get("music_volume", req.music_volume),
+                "sticker": sticker, "sticker_position": sticker_position,
+                **style_effects,
+                "blur_background": req.blur_background,
                 "watermark": bool(watermark_path), "watermark_path": watermark_path,
                 "region": focus, "regions": regions,
                 "region_layout": metadata.get("region_layout"),
             }
             output = render.export_path(f"{row.get('title') or 'clip'}_auto_edited_{clip_id}")
-            jobs.update(job_id, progress=round(index / total * 100, 1), message=f"Auto-editing clip {index + 1}/{total}…")
+            jobs.update(job_id, progress=round(index / total * 100, 1), message=f"Applying edit to clip {index + 1}/{total}…")
             await render.render_clip(
-                media["path"], float(row["start"]), float(row["end"]), output, options,
+                media["path"], clip_start, clip_end, output, options,
                 on_progress=lambda pct, msg, i=index: jobs.update(
                     job_id,
                     progress=round((i + (pct or 0) / 100) / total * 100, 1),
                     message=f"Clip {i + 1}/{total}: {msg}",
                 ),
             )
+            auto_audio: list[dict[str, Any]] = []
+            if music:
+                auto_audio.append({
+                    "path": str(Path(music).expanduser()), "start": 0, "end": timeline_duration,
+                    "volume": float(options["music_volume"]), "label": "Music", "kind": "music",
+                })
+            for item in sfx_items:
+                auto_audio.append({
+                    "path": item["path"], "start": item["at"],
+                    "end": min(timeline_duration, item["at"] + item["duration"]),
+                    "volume": float(options["sfx_volume"]), "label": item["name"], "kind": "sfx",
+                })
+            auto_stickers = []
+            if sticker:
+                auto_stickers.append({
+                    "path": str(sticker), "start": 0,
+                    "end": min(4.0, timeline_duration * 0.35),
+                    "x": float(sticker_position.get("x", 0.72)),
+                    "y": float(sticker_position.get("y", 0.16)),
+                    "scale": float(sticker_position.get("scale", 0.22)),
+                    "label": "Auto Edit sticker",
+                })
             metadata.update({"effects": options, "hardware": hardware_info(), "auto_edited": True})
             db.update("clips", "id", clip_id, {"status": "auto_edited", "output": output, "metadata": dumps(metadata)})
             outputs.append({"clip_id": clip_id, "output": output})
-        return {"outputs": outputs, "count": len(outputs), "warnings": warnings, "hardware": hardware_info()}
+            edits.append({
+                "clip_id": clip_id, "media_id": row["media_id"], "source_path": media["path"],
+                "source_start": clip_start, "source_duration": source_duration,
+                "duration": timeline_duration, "title": title, "aspect": req.aspect,
+                "resolution": req.resolution, "region": focus, "regions": regions,
+                "region_layout": metadata.get("region_layout"),
+                "captions": captions[:180] if req.captions else [],
+                "audio": auto_audio, "stickers": auto_stickers, "effects": options,
+            })
+        return {"outputs": outputs, "edits": edits, "count": len(outputs), "warnings": warnings, "hardware": hardware_info()}
 
     return ok(job_id=jobs.run("auto-edit", work, payload.model_dump()))
 
@@ -951,7 +1014,10 @@ async def generate_image_endpoint(payload: ImageRequest):
         req = ImageRequest(**(p or {}))
         jobs.update(job_id, progress=10, message="Generating visual…")
         result = await asyncio.to_thread(
-            images.generate, req.prompt, req.provider, req.aspect, req.reference_path, req.negative_prompt
+            images.generate_variations,
+            req.prompt, req.provider, req.aspect, req.reference_path, req.negative_prompt,
+            count=req.count,
+            on_progress=lambda pct, message: jobs.update(job_id, progress=max(10, pct), message=message),
         )
         return result
 

@@ -97,7 +97,9 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       const boxes = existing.boxes.some((item) => item.id === regionId)
         ? existing.boxes.map((item) => item.id === regionId ? { ...item, box } : item)
         : [...existing.boxes, { id: regionId, label: regionId, box, color: COLORS[existing.boxes.length % COLORS.length] }];
-      return { ...current, [preview.id]: { preset: 'custom', boxes } };
+      // Editing the crop geometry must not discard the chosen composition. The
+      // preset defines panel order (player/gameplay); this only updates a crop.
+      return { ...current, [preview.id]: { preset: existing.preset, boxes } };
     });
   };
 
@@ -106,7 +108,10 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     setRegions((current) => {
       const existing = current[preview.id] || { preset: 'full', boxes: [] };
       const boxes = existing.boxes.filter((item) => item.id !== regionId);
-      return { ...current, [preview.id]: { preset: boxes.length ? 'custom' : 'full', boxes } };
+      const preset = boxes.length >= 2 && existing.preset !== 'custom'
+        ? existing.preset
+        : boxes.length ? 'custom' : 'full';
+      return { ...current, [preview.id]: { preset, boxes } };
     });
   };
 
