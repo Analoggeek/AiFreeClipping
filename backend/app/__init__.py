@@ -4,7 +4,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-FALLBACK_VERSION = "5.2.3"
+FALLBACK_VERSION = "5.2.4"
 
 
 def _package_version() -> str:

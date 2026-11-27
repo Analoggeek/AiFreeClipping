@@ -1,6 +1,6 @@
 {
   "name": "ai-clipper-pro",
-  "version": "5.2.3",
+  "version": "5.2.4",
   "description": "Local-first AI video clipping, editing and publishing studio — made by analoggeek",
   "author": "analoggeek",
   "license": "MIT",
@@ -120,7 +120,7 @@
     },
     "dmg": {
       "sign": false,
-      "format": "UDZO"
+      "format": "UDRO"
     },
     "linux": {
       "target": [

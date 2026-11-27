@@ -1,5 +1,23 @@
 # Release notes
 
+## v5.2.4 — macOS disk-image reliability hotfix
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.2.4-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/AI-Clipper-Pro-5.2.4-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.2.4-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/AI-Clipper-Pro-5.2.4-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/AI-Clipper-Pro-5.2.4-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/AI-Clipper-Pro-5.2.4-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/AI-Clipper-Pro-5.2.4-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/AI-Clipper-Pro-5.2.4-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.2.4-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/AI-Clipper-Pro-5.2.4-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.2.4-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/AI-Clipper-Pro-5.2.4-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.4/manifest.json)
+
+### Changes
+
+- Rebuild macOS disk images as **read-only, uncompressed UDRO** images, removing the compression layer and adding stricter mount-time verification for the reported unreadable-disk issue.
+- Keep the signed-off install path explicit: CI checks the DMG format, verifies and mounts the image, copies the `.app`, and validates the matching ZIP for both Intel and Apple Silicon builds.
+- Publish both macOS ZIPs as first-class alternatives, with direct links and checksum guidance. If a DMG still fails to mount, verify the downloaded SHA-256 and use the matching ZIP.
+
 ## v5.2.3 — composition controls, editable captions and hardware-matched models
 
 ### Download the installers
