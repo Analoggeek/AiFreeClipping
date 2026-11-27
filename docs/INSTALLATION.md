@@ -12,9 +12,11 @@ Installers are produced by `scripts/release-all.sh` / `release.yml` and contain:
 | OS / arch | Artifact | Notes |
 |---|---|---|
 | Windows x64 / ARM64 | `.exe` (NSIS) | Per-user install by default; SmartScreen warning until signed |
-| macOS Intel (x64) | `.dmg` | Right-click → Open if unsigned |
-| macOS Apple Silicon (arm64) | `.dmg` | Native ARM build, no Rosetta needed |
+| macOS Intel (x64) | `.dmg` or `.zip` | Read-only DMG; ZIP is a direct alternate install path |
+| macOS Apple Silicon (arm64) | `.dmg` or `.zip` | Native ARM build, no Rosetta needed; ZIP is an alternate path |
 | Linux x64 | `.AppImage`, `.deb` | AppImage needs `chmod +x`; deb installs via `sudo apt install ./…` |
+
+If Finder reports that an attached disk is unreadable, verify the DMG against the release's `SHA256SUMS.txt` with `shasum -a 256 -c SHA256SUMS.txt`. If the checksum passes but the DMG still will not mount, use the matching macOS ZIP, unzip it, and move `AI Clipper Pro.app` to Applications.
 
 Data lives in `~/.AiFreeClipping/` (`%USERPROFILE%\.AiFreeClipping` on Windows):
 

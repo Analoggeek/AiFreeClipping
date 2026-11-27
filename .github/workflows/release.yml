@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 5.2.3)'
+        description: 'Release version (e.g. 5.2.4)'
         required: true
-        default: '5.2.3'
+        default: '5.2.4'
       only_platform:
         description: 'Build only one platform (leave all for the full matrix)'
         required: false
@@ -107,6 +107,13 @@ jobs:
           DMG="$(find release -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           test -n "$DMG"
           echo "Verifying image: $DMG"
+          test -s "$DMG"
+          IMAGE_INFO="$(hdiutil imageinfo "$DMG")"
+          printf '%s\n' "$IMAGE_INFO"
+          if ! printf '%s\n' "$IMAGE_INFO" | grep -q 'UDRO'; then
+            echo "Expected read-only uncompressed UDRO image" >&2
+            exit 1
+          fi
           hdiutil verify "$DMG"
           MOUNT="$(mktemp -d /tmp/aifreeclip-dmg.XXXXXX)"
           COPY="$(mktemp -d /tmp/aifreeclip-copy.XXXXXX)"
@@ -123,9 +130,13 @@ jobs:
             exit 1
           fi
           ZIP="$(find release -maxdepth 1 -type f -name '*.zip' -print -quit)"
-          test -n "$ZIP"
+          test -s "$ZIP"
           unzip -tq "$ZIP"
-          echo "macOS artifacts verified: DMG mounts, .app copies cleanly, ZIP is intact."
+          if ! unzip -Z1 "$ZIP" | grep -E 'app/Contents/MacOS/[^/]+$' >/dev/null; then
+            echo "ZIP archive is missing its executable app bundle" >&2
+            exit 1
+          fi
+          echo "macOS artifacts verified: UDRO DMG mounts, .app copies cleanly, ZIP bundle is intact."
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -167,6 +178,31 @@ jobs:
           gh release create "v$VERSION" release/installers/* --target "$GITHUB_SHA" --notes-file docs/RELEASE_NOTES.md --title "AI Clipper Pro v$VERSION" || \
             (gh release upload "v$VERSION" release/installers/* --clobber && \
              gh release edit "v$VERSION" --notes-file docs/RELEASE_NOTES.md --title "AI Clipper Pro v$VERSION")
+
+      - name: Verify published macOS disk image checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          VERIFY_DIR="release/verify-published-macos"
+          mkdir -p "$VERIFY_DIR"
+          gh release download "v$VERSION" --pattern '*-macOS-*.dmg' --dir "$VERIFY_DIR"
+          count="$(find "$VERIFY_DIR" -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d '[:space:]')"
+          test "$count" = "2"
+          for dmg in "$VERIFY_DIR"/*.dmg; do
+            name="$(basename "$dmg")"
+            expected="$(awk -v name="$name" '$2 == name || $2 == "./" name { print $1; exit }' release/installers/SHA256SUMS.txt)"
+            actual="$(sha256sum "$dmg" | awk '{ print $1 }')"
+            test -n "$expected"
+            if [ "$expected" != "$actual" ]; then
+              echo "Published DMG checksum mismatch: $name" >&2
+              exit 1
+            fi
+            echo "Published DMG checksum verified: $name"
+          done
 
   publish_existing:
     name: Publish from existing runs

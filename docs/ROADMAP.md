@@ -1,5 +1,10 @@
 # Roadmap
 
+## Shipped in v5.2.4
+
+- macOS installers use read-only uncompressed UDRO disk images with format, mount, and app-copy verification; matching SHA-256 checksums are published
+- Intel and Apple Silicon macOS ZIP installers are linked as direct alternatives; documentation explains checksum recovery for unreadable images
+
 ## Shipped in v5.2.3
 
 - Player/gameplay split proportions and clean/neon/double/none outlines shared across browser composition preview and FFmpeg renders
