@@ -124,10 +124,73 @@ def _encoder() -> str:
     return _ENCODER
 
 
+def _video_codec_args() -> list[str]:
+    """Choose encoder flags that produce a broadly playable MP4 on every OS."""
+    encoder = _encoder()
+    if encoder == "libx264":
+        args = [
+            "-c:v", encoder, "-preset", "veryfast", "-crf", "18", "-profile:v", "high",
+            "-x264-params", "colorprim=bt709:transfer=bt709:colormatrix=bt709",
+        ]
+    elif encoder == "h264_videotoolbox":
+        args = ["-c:v", encoder, "-b:v", "8M", "-profile:v", "high"]
+    elif encoder == "h264_nvenc":
+        args = ["-c:v", encoder, "-preset", "p5", "-cq", "19", "-b:v", "0", "-profile:v", "high"]
+    else:
+        args = ["-c:v", encoder]
+    if encoder.startswith("h264") or encoder == "libx264":
+        args.extend([
+            "-pix_fmt", "yuv420p", "-tag:v", "avc1", "-level:v", "4.1",
+            "-color_range", "tv", "-colorspace", "bt709",
+            "-color_primaries", "bt709", "-color_trc", "bt709",
+        ])
+    return args
+
+
 def _thread_args() -> list[str]:
     """Use all available cores for software filters without oversubscribing."""
     workers = max(1, min(8, int(os.getenv("RENDER_WORKERS") or (os.cpu_count() or 4))))
     return ["-threads", str(workers), "-filter_threads", str(workers)]
+
+
+def _normalise_contrast(value: Any) -> float:
+    """Fix legacy UI values where zero/0.05 were meant to be neutral/slight."""
+    try:
+        contrast = float(value)
+    except (TypeError, ValueError):
+        return 1.0
+    if 0.0 <= contrast <= 0.1:
+        return 1.0 + contrast
+    return max(0.0, min(2.0, contrast))
+
+
+def _normalise_region(region: Any) -> tuple[float, float, float, float] | None:
+    """Clamp a normalized focus box and expand tiny boxes to a usable crop."""
+    if not isinstance(region, dict):
+        return None
+    try:
+        x = min(0.95, max(0.0, float(region.get("x", 0))))
+        y = min(0.95, max(0.0, float(region.get("y", 0))))
+        width = max(0.05, min(1.0 - x, float(region.get("w", 1))))
+        height = max(0.05, min(1.0 - y, float(region.get("h", 1))))
+    except (TypeError, ValueError):
+        return None
+    if width * height < 0.25:
+        scale = (0.25 / max(1e-6, width * height)) ** 0.5
+        scale = min(scale, 1.0 / max(width, height))
+        new_width, new_height = min(1.0, width * scale), min(1.0, height * scale)
+        x = max(0.0, min(x - (new_width - width) / 2, 1.0 - new_width))
+        y = max(0.0, min(y - (new_height - height) / 2, 1.0 - new_height))
+        width, height = new_width, new_height
+    return x, y, width, height
+
+
+def _crop_filter(region: Any) -> str | None:
+    box = _normalise_region(region)
+    if box is None:
+        return None
+    x, y, width, height = box
+    return f"crop=iw*{width:.4f}:ih*{height:.4f}:iw*{x:.4f}:ih*{y:.4f}"
 
 
 async def encode(args: list[str], duration: float, on_progress=None) -> Path:
@@ -137,21 +200,33 @@ async def encode(args: list[str], duration: float, on_progress=None) -> Path:
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
     assert process.stdout is not None
-    while True:
-        line = await process.stdout.readline()
-        if not line:
-            break
-        text = line.decode("utf-8", "ignore").strip()
-        if text.startswith("out_time_ms=") and duration > 0:
+    try:
+        while True:
+            line = await process.stdout.readline()
+            if not line:
+                break
+            text = line.decode("utf-8", "ignore").strip()
+            if text.startswith("out_time_ms=") and duration > 0:
+                try:
+                    current = int(text.split("=", 1)[1]) / 1_000_000
+                    if on_progress:
+                        on_progress(min(95, current / duration * 100), f"Rendering {current:.1f}s / {duration:.1f}s")
+                except ValueError:
+                    pass
+        stderr = (await process.stderr.read()).decode("utf-8", "ignore") if process.stderr else ""
+        code = await process.wait()
+    except asyncio.CancelledError:
+        if process.returncode is None:
+            process.terminate()
             try:
-                current = int(text.split("=", 1)[1]) / 1_000_000
-                if on_progress:
-                    on_progress(min(95, current / duration * 100), f"Rendering {current:.1f}s / {duration:.1f}s")
-            except ValueError:
-                pass
-    stderr = (await process.stderr.read()).decode("utf-8", "ignore") if process.stderr else ""
-    code = await process.wait()
-    if code != 0 or not output.exists():
+                await asyncio.wait_for(process.communicate(), timeout=5)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.communicate()
+        output.unlink(missing_ok=True)
+        raise
+    if code != 0 or not output.exists() or output.stat().st_size == 0:
+        output.unlink(missing_ok=True)
         raise RuntimeError(f"ffmpeg failed ({code}): {stderr[-1200:]}")
     return output
 
@@ -208,24 +283,15 @@ def build_clip_args(
 
     video_parts: list[str] = []
     speed = max(0.25, min(float(options.get("speed", 1)), 4))
-    trim = f"trim=start={start:.3f}:end={end:.3f},setpts=(PTS-STARTPTS)/{speed:.3f},fps=30"
     focus = options.get("region") or ((options.get("regions") or [None])[0] if options.get("regions") else None)
-    if isinstance(focus, dict):
-        fx, fy = max(0.0, min(1.0, float(focus.get("x", 0)))), max(0.0, min(1.0, float(focus.get("y", 0))))
-        fw = max(0.05, min(1.0 - fx, float(focus.get("w", 1))))
-        fh = max(0.05, min(1.0 - fy, float(focus.get("h", 1))))
-        # A tiny focus box would produce an unusable, pixelated crop. Always
-        # keep at least a quarter of the frame around the selected subject.
-        if fw * fh < 0.25:
-            scale = (0.25 / max(1e-6, fw * fh)) ** 0.5
-            scale = min(scale, 1.0 / max(fw, fh))
-            nw, nh = min(1.0, fw * scale), min(1.0, fh * scale)
-            fx = max(0.0, min(fx - (nw - fw) / 2, 1.0 - nw))
-            fy = max(0.0, min(fy - (nh - fh) / 2, 1.0 - nh))
-            fw, fh = nw, nh
-        trim = (
-            f"crop=iw*{fw:.4f}:ih*{fh:.4f}:iw*{fx:.4f}:ih*{fy:.4f}," + trim
-        )
+    trim_parts = [f"trim=start={start:.3f}:end={end:.3f}"]
+    crop = _crop_filter(focus)
+    if crop:
+        # Crop after trimming: the coordinates are relative to the source frame,
+        # while avoiding crop work on frames outside the selected clip interval.
+        trim_parts.append(crop)
+    trim_parts.extend([f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30"])
+    trim = ",".join(trim_parts)
     if options.get("blur_background", True) and options.get("aspect", "9:16") != "source":
         video_parts.append(f"[0:v]{trim},split=2[bg][fg]")
         video_parts.append(
@@ -243,7 +309,7 @@ def build_clip_args(
         current = "base"
     eq_values = [
         f"brightness={float(options.get('brightness', 0)):.3f}",
-        f"contrast={float(options.get('contrast', 0)):.3f}",
+        f"contrast={_normalise_contrast(options.get('contrast', 1)):.3f}",
         f"saturation={float(options.get('saturation', 1)):.3f}",
     ]
     video_parts.append(f"[{current}]eq={':'.join(eq_values)}[graded]")
@@ -269,13 +335,16 @@ def build_clip_args(
         )
         current = "stuck"
     watermark = options.get("watermark_path")
-    if watermark and Path(str(watermark)).exists():
-        wm_index = add_input("-i", str(watermark))
+    if watermark and Path(str(watermark)).is_file():
+        wm_index = add_input("-loop", "1", "-i", str(watermark))
         video_parts.append(
-            f"[{wm_index}:v]scale=100:-1[wm];[{current}][wm]overlay=W-w-28:H-h-28:alpha=0.85[branded]"
+            f"[{wm_index}:v]scale=100:-1,format=rgba,colorchannelmixer=aa=0.85[wm];"
+            f"[{current}][wm]overlay=W-w-28:H-h-28[branded]"
         )
         current = "branded"
-    video_parts.append(f"[{current}]format=yuv420p[vout]")
+    # Explicitly normalize the encoded range/aspect and tell QuickTime the
+    # filtered 8-bit MP4 is Rec.709 rather than relying on source metadata.
+    video_parts.append(f"[{current}]scale=in_range=auto:out_range=tv,setsar=1,format=yuv420p[vout]")
 
     audio_inputs: list[str] = []
     tempo = f",atempo={speed:.3f}" if abs(speed - 1.0) > 0.01 else ""
@@ -300,14 +369,26 @@ def build_clip_args(
     audio_parts.append(
         f"{mix_inputs}amix=inputs={1 + len(audio_inputs)}:duration=first:normalize=0,apad,atrim=0:{duration / speed:.3f}[aout]"
     )
-    codec_args = ["-c:v", _encoder(), "-preset", "veryfast", "-crf", "18", "-b:v", "0"] if _encoder() == "libx264" else ["-c:v", _encoder()]
     args += [
         "-filter_complex", ";".join(video_parts + audio_parts),
-        "-map", "[vout]", "-map", "[aout]", *_thread_args(), *codec_args,
+        "-map", "[vout]", "-map", "[aout]", *_thread_args(), *_video_codec_args(),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
         "-t", f"{duration / speed:.3f}", "-progress", "pipe:1", "-nostats", output,
     ]
     return args
+
+
+def _validate_mp4(path: str | Path) -> None:
+    """Reject empty, non-video, or non-H.264 outputs before marking a clip ready."""
+    target = Path(path)
+    if not target.exists() or target.stat().st_size < 128:
+        raise RuntimeError("Render finished without producing a valid MP4 file.")
+    info = probe(target)
+    codec = str(info.get("video_codec") or "").lower()
+    if codec and codec != "h264":
+        raise RuntimeError(f"Render produced {codec}, not broadly compatible H.264 video.")
+    if not codec or not info.get("width") or not info.get("height"):
+        raise RuntimeError("Render output could not be verified as a playable video. Check the local FFmpeg installation.")
 
 
 async def render_clip(
@@ -325,11 +406,16 @@ async def render_clip(
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     args = build_clip_args(media_path, start, end, output, options, has_audio=bool(info.get("audio_codec")))
     await encode(args, max(0.5, end - start), on_progress)
+    try:
+        _validate_mp4(output)
+    except Exception:
+        Path(output).unlink(missing_ok=True)
+        raise
     return output
 
 
 async def render_timeline(
-    timeline: dict[str, Any], output: str, on_progress=None
+    timeline: dict[str, Any], output: str, on_progress=None, watermark_path: str | None = None
 ) -> str:
     """Render a full CapCut-style multi-track project to a single MP4."""
     tracks = timeline.get("tracks") or {}
@@ -360,6 +446,10 @@ async def render_timeline(
     sticker_items = [item for item in (tracks.get("stickers") or []) if Path(str(item.get("path", ""))).exists()]
     for item in sticker_items:
         args += ["-loop", "1", "-i", str(item["path"])]
+    watermark_index = None
+    if watermark_path and Path(watermark_path).is_file():
+        watermark_index = len(indexed_video) + len(music_items) + len(sticker_items)
+        args += ["-loop", "1", "-i", watermark_path]
 
     filters: list[str] = []
     vlabels: list[str] = []
@@ -370,10 +460,16 @@ async def render_timeline(
     for position, (item, idx) in enumerate(indexed_video):
         source_in = float(item.get("sourceStart", 0))
         duration = max(0.2, float(item.get("duration", 5)))
-        filters.append(
-            f"[{idx}:v]trim=start={source_in:.3f}:duration={duration:.3f},setpts=PTS-STARTPTS,"
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=30[v{position}]"
+        video_filter = f"trim=start={source_in:.3f}:duration={duration:.3f}"
+        focus = item.get("region") or ((item.get("regions") or [None])[0] if item.get("regions") else None)
+        crop = _crop_filter(focus)
+        if crop:
+            video_filter += "," + crop
+        video_filter += (
+            ",setpts=PTS-STARTPTS,"
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=30"
         )
+        filters.append(f"[{idx}:v]{video_filter}[v{position}]")
         vlabels.append(f"[v{position}]")
         media = probe(str(item.get("path")))
         if media.get("audio_codec"):
@@ -403,6 +499,12 @@ async def render_timeline(
             f"[{current}][st{offset}]overlay=x={x:.0f}:y={y:.0f}:enable='between(t,{start:.2f},{end:.2f})'[stuck{offset}]"
         )
         current = f"stuck{offset}"
+    if watermark_index is not None:
+        filters.append(
+            f"[{watermark_index}:v]scale=100:-1,format=rgba,colorchannelmixer=aa=0.85[wm];"
+            f"[{current}][wm]overlay=W-w-28:H-h-28[branded]"
+        )
+        current = "branded"
     audio_sources = ["[acat]"]
     for offset, item in enumerate(music_items):
         start = float(item.get("start", 0))
@@ -415,14 +517,19 @@ async def render_timeline(
         "".join(audio_sources)
         + f"amix=inputs={len(audio_sources)}:duration=first:normalize=0,apad,atrim=0:{total:.3f}[aout]"
     )
-    filters.append(f"[{current}]format=yuv420p[vout]")
+    filters.append(f"[{current}]scale=in_range=auto:out_range=tv,setsar=1,format=yuv420p[vout]")
     args += [
         "-filter_complex", ";".join(filters), "-map", "[vout]", "-map", "[aout]",
-        *_thread_args(), "-c:v", _encoder(), "-preset", "veryfast", "-crf", "18",
+        *_thread_args(), *_video_codec_args(),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
         "-t", f"{total:.3f}", "-progress", "pipe:1", "-nostats", output,
     ]
     await encode(args, total, on_progress)
+    try:
+        _validate_mp4(output)
+    except Exception:
+        Path(output).unlink(missing_ok=True)
+        raise
     return output
 
 

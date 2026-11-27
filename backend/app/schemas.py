@@ -20,6 +20,14 @@ class ImportRequest(BaseModel):
     paths: list[str]
 
 
+class DeleteClipsRequest(BaseModel):
+    clip_ids: list[str] = Field(default_factory=list)
+
+
+class ComfyCheckpointRequest(BaseModel):
+    path: str
+
+
 class FolderPatch(BaseModel):
     key: str
     path: str
@@ -105,7 +113,7 @@ class RenderRequest(BaseModel):
     sfx_volume: float = 0.5
     speed: float = 1.0
     brightness: float = 0.0
-    contrast: float = 0.0
+    contrast: float = 1.0
     saturation: float = 1.0
     blur_background: bool = True
     watermark: bool = True

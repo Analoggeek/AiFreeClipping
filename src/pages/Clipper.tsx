@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowLeft, ArrowRight, BoxSelect, Check, Clapperboard, Copy, Cpu, Download, Film, ImagePlus,
-  LoaderCircle, WandSparkles, Play, Plus, Scissors, Send, Sparkles, Volume2,
+  LoaderCircle, WandSparkles, Pause, Play, Plus, Scissors, Send, Sparkles, Volume2,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
 import { EmptyState, formatClock, JobTracker, Panel, Pill } from '../components/common';
@@ -66,6 +66,10 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   const [batchJob, setBatchJob] = useState<string | null>(null);
   const [hardwareByClip, setHardwareByClip] = useState<Record<string, Record<string, unknown>>>({});
   const [busy, setBusy] = useState(false);
+  const [previewTime, setPreviewTime] = useState(0);
+  const [previewPlaying, setPreviewPlaying] = useState(false);
+  const regionVideoRef = useRef<HTMLVideoElement>(null);
+  const cropCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const refresh = useCallback(() => {
     api.media().then((result) => setMedia(result.media)).catch(() => undefined);
@@ -104,6 +108,103 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       return { ...current, [preview.id]: { preset: boxes.length ? 'custom' : 'full', boxes } };
     });
   };
+
+  const addCustomRegion = () => {
+    if (!preview) return;
+    const index = layout.boxes.length + 1;
+    const region: RegionItem = {
+      id: `custom-${Date.now()}`, label: `Custom focus ${index}`,
+      box: { x: 0.2, y: 0.2, w: 0.6, h: 0.6 }, color: COLORS[(index - 1) % COLORS.length],
+    };
+    setRegions((current) => ({ ...current, [preview.id]: { preset: 'custom', boxes: [...layout.boxes, region] } }));
+    setActiveRegionId(region.id);
+  };
+
+  const copyRegionToSelected = () => {
+    if (!preview || selectedMedia.length < 2) return;
+    setRegions((current) => {
+      const selectedLayout = current[preview.id] || { preset: 'full', boxes: [] };
+      const next = { ...current };
+      for (const item of selectedMedia) {
+        if (item.id !== preview.id) {
+          next[item.id] = {
+            preset: selectedLayout.preset,
+            boxes: selectedLayout.boxes.map((box) => ({ ...box, box: { ...box.box } })),
+          };
+        }
+      }
+      return next;
+    });
+    notify(`Region layout copied to ${selectedMedia.length - 1} other selected video(s).`);
+  };
+
+  const cropBox = activeRegion?.box || FULL;
+  const cropAspect = settings.platform === 'landscape' ? 16 / 9 : 9 / 16;
+  useEffect(() => {
+    const video = regionVideoRef.current;
+    const canvas = cropCanvasRef.current;
+    if (!canvas) return;
+    const context = canvas.getContext('2d');
+    canvas.width = 480;
+    canvas.height = Math.round(480 / cropAspect);
+    if (!video || !context) return;
+    const draw = () => {
+      const frameWidth = video.videoWidth;
+      const frameHeight = video.videoHeight;
+      if (!frameWidth || !frameHeight) return;
+      let x = Math.max(0, Math.min(0.95, cropBox.x));
+      let y = Math.max(0, Math.min(0.95, cropBox.y));
+      let width = Math.max(0.05, Math.min(1 - x, cropBox.w));
+      let height = Math.max(0.05, Math.min(1 - y, cropBox.h));
+      if (width * height < 0.25) {
+        const scale = Math.min(Math.sqrt(0.25 / Math.max(1e-6, width * height)), 1 / Math.max(width, height));
+        const expandedWidth = Math.min(1, width * scale);
+        const expandedHeight = Math.min(1, height * scale);
+        x = Math.max(0, Math.min(x - (expandedWidth - width) / 2, 1 - expandedWidth));
+        y = Math.max(0, Math.min(y - (expandedHeight - height) / 2, 1 - expandedHeight));
+        width = expandedWidth;
+        height = expandedHeight;
+      }
+      const sx = x * frameWidth;
+      const sy = y * frameHeight;
+      const sw = Math.max(1, width * frameWidth);
+      const sh = Math.max(1, height * frameHeight);
+      const outWidth = canvas.width;
+      const outHeight = canvas.height;
+      context.clearRect(0, 0, outWidth, outHeight);
+      context.fillStyle = '#05070e';
+      context.fillRect(0, 0, outWidth, outHeight);
+      const cover = Math.max(outWidth / sw, outHeight / sh);
+      const bgWidth = sw * cover;
+      const bgHeight = sh * cover;
+      context.save();
+      context.filter = 'blur(18px)';
+      context.drawImage(video, sx, sy, sw, sh, (outWidth - bgWidth) / 2, (outHeight - bgHeight) / 2, bgWidth, bgHeight);
+      context.restore();
+      const contain = Math.min(outWidth / sw, outHeight / sh);
+      const fgWidth = sw * contain;
+      const fgHeight = sh * contain;
+      context.drawImage(video, sx, sy, sw, sh, (outWidth - fgWidth) / 2, (outHeight - fgHeight) / 2, fgWidth, fgHeight);
+    };
+    let animation = 0;
+    const tick = () => {
+      draw();
+      if (!video.paused && !video.ended) animation = window.requestAnimationFrame(tick);
+    };
+    const start = () => { draw(); if (!video.paused) animation = window.requestAnimationFrame(tick); };
+    video.addEventListener('loadeddata', start);
+    video.addEventListener('seeked', draw);
+    video.addEventListener('timeupdate', draw);
+    video.addEventListener('play', start);
+    draw();
+    return () => {
+      video.removeEventListener('loadeddata', start);
+      video.removeEventListener('seeked', draw);
+      video.removeEventListener('timeupdate', draw);
+      video.removeEventListener('play', start);
+      if (animation) window.cancelAnimationFrame(animation);
+    };
+  }, [preview?.id, cropBox.x, cropBox.y, cropBox.w, cropBox.h, cropAspect]);
 
   const importFiles = async () => {
     if (!window.desktop) { notify('Local file picker works inside the desktop app.'); return; }
@@ -147,20 +248,23 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
         notify('Viral moments are ready for review.');
       }
       if (job.status === 'error') notify(job.error || job.message);
+      if (job.status === 'cancelled') notify('AI analysis cancelled.');
     });
   }, [jobId, notify]);
 
-  const effectPayload = () => {
+  const effectPayload = (clip?: Candidate) => {
     const preset = ({ hype: 'hype', story: 'minimal', clean: 'minimal', cinematic: 'premium' } as const)[settings.style as 'hype' | 'story' | 'clean' | 'cinematic'] || 'hype';
     return {
       aspect: settings.platform === 'landscape' ? '16:9' : '9:16',
       resolution: '1080p',
       caption_style: { preset: settings.captions ? preset : 'none' },
       sfx: settings.sound_effects ? ['whoosh', 'pop'] : [],
-      speed: 1, brightness: 0, contrast: 0, saturation: 1,
+      speed: 1, brightness: 0, contrast: 1, saturation: 1,
       blur_background: true, watermark: true,
-      region: preview ? regions[preview.id]?.boxes?.[0]?.box || null : null,
-      regions: preview ? (regions[preview.id]?.boxes || []).map((item) => item.box) : [],
+      // A candidate keeps the exact region chosen when it was analyzed; never
+      // let the currently previewed source silently override that saved crop.
+      region: clip ? clip.region || null : null,
+      regions: clip ? clip.regions || [] : [],
     };
   };
 
@@ -177,7 +281,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     const clipId = clip.id || '';
     if (!clipId) return;
     try {
-      const result = await api.renderClip(clipId, effectPayload());
+      const result = await api.renderClip(clipId, effectPayload(clip));
       setRenderJobs((current) => ({ ...current, [clipId]: result.job_id }));
     } catch (error) { notify(String(error)); }
   };
@@ -226,14 +330,45 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
           <div className="region-layout">
             <div className="region-preview">
               {preview ? (
-                <div className="video-stage">
-                  <video src={mediaUrl(`/api/media/${preview.id}/stream`)} controls playsInline />
-                  <RegionOverlay
-                    boxes={layout.boxes}
-                    activeId={activeRegion?.id || ''}
-                    onChange={(box) => activeRegion && updateBox(activeRegion.id, box)}
-                  />
-                </div>
+                <>
+                  <div className="video-stage">
+                    <video
+                      ref={regionVideoRef}
+                      src={mediaUrl(`/api/media/${preview.id}/stream`)}
+                      playsInline
+                      preload="metadata"
+                      onTimeUpdate={(event) => setPreviewTime(event.currentTarget.currentTime)}
+                      onPlay={() => setPreviewPlaying(true)}
+                      onPause={() => setPreviewPlaying(false)}
+                      onEnded={() => setPreviewPlaying(false)}
+                    />
+                    <RegionOverlay
+                      boxes={layout.boxes}
+                      activeId={activeRegion?.id || ''}
+                      sourceAspect={preview.width && preview.height ? preview.width / preview.height : 16 / 9}
+                      onChange={(box) => activeRegion && updateBox(activeRegion.id, box)}
+                    />
+                  </div>
+                  <div className="region-transport">
+                    <button className="icon-btn" title={previewPlaying ? 'Pause source preview' : 'Play source preview'} onClick={() => {
+                      const video = regionVideoRef.current;
+                      if (!video) return;
+                      if (video.paused) void video.play().catch((error) => notify(String(error)));
+                      else video.pause();
+                    }}>{previewPlaying ? <Pause size={15} /> : <Play size={15} />}</button>
+                    <input
+                      aria-label="Source video preview position"
+                      type="range" min="0" max={Math.max(0.1, preview.duration || 0.1)} step="0.1"
+                      value={Math.min(previewTime, preview.duration || 0)}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        setPreviewTime(value);
+                        if (regionVideoRef.current) regionVideoRef.current.currentTime = value;
+                      }}
+                    />
+                    <span>{previewTime.toFixed(1)}s / {(preview.duration || 0).toFixed(1)}s</span>
+                  </div>
+                </>
               ) : <EmptyState icon={<BoxSelect size={28} />} title="No video selected" detail="Go back and select a video." />}
             </div>
             <div className="region-side">
@@ -243,17 +378,32 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                   <b>{preset.icon}</b>{preset.label}
                 </button>
               ))}
+              <button className="chip-btn add-region" disabled={!preview} onClick={addCustomRegion}><Plus size={14} /> Add custom region</button>
               <h3 className="region-subhead">Areas in this clip</h3>
-              {layout.boxes.length === 0 && <p className="hint">Full frame — nothing cropped. Pick a preset above or draw a box.</p>}
+              {layout.boxes.length === 0 && <p className="hint">Full frame is selected. Add a custom region, choose an area, then drag on the video to crop to it.</p>}
               {layout.boxes.map((item) => (
                 <div key={item.id} className={`region-chip ${activeRegion?.id === item.id ? 'active' : ''}`}>
-                  <button onClick={() => setActiveRegionId(item.id)}><i style={{ background: item.color }} />{item.label}</button>
+                  <button onClick={() => setActiveRegionId(item.id)}><i style={{ background: item.color }} />{item.label} · {Math.round(item.box.w * 100)}×{Math.round(item.box.h * 100)}%</button>
                   <button className="region-remove" title={`Remove ${item.label}`} onClick={() => removeBox(item.id)}>×</button>
                 </div>
               ))}
-              <p className="hint">Pick an area above, then drag on the video to redraw just that area. Press “Full frame” to clear all.</p>
-              {selectedMedia.length > 1 && <Pill tone="amber">{selectedMedia.length} videos selected — first one shown</Pill>}
+              <p className="hint">Choose an area above, then drag on the source video to redraw it. The rendered MP4 and the preview at right use the same crop.</p>
+              {selectedMedia.length > 1 && (
+                <div className="region-copy-row">
+                  <Pill tone="amber">{selectedMedia.length} videos selected</Pill>
+                  <button className="chip-btn" onClick={copyRegionToSelected}>Use this region for all</button>
+                </div>
+              )}
               <div className="panel-actions"><button className="ghost-btn" onClick={() => setStep(0)}><ArrowLeft size={15} /> Back</button><button className="primary" onClick={() => setStep(2)}>Next <ArrowRight size={16} /></button></div>
+            </div>
+            <div className="crop-preview-card">
+              <h3>Live crop preview</h3>
+              <p className="hint">This is the current frame after the selected crop and platform framing.</p>
+              <div className={`crop-preview-frame ${settings.platform === 'landscape' ? 'landscape' : 'portrait'}`}>
+                <canvas ref={cropCanvasRef} aria-label="Live preview of the selected crop" />
+              </div>
+              <Pill tone={activeRegion ? 'green' : 'muted'}>{activeRegion ? `${activeRegion.label} · ${Math.round(activeRegion.box.w * 100)}×${Math.round(activeRegion.box.h * 100)}%` : 'Full frame'}</Pill>
+              <small className="crop-preview-time">Preview frame: {previewTime.toFixed(1)}s</small>
             </div>
           </div>
         </Panel>
@@ -336,7 +486,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                           <button className="chip-btn" onClick={() => { void api.createProject({ name: clip.title.slice(0, 40), clip_id: clipId }).then(() => openEditor(clipId)); }}><Scissors size={14} /> Edit</button>
                           <button className="chip-btn" onClick={() => renderOne(clip)}><Download size={14} /> Render</button>
                           <button className="chip-btn" onClick={() => openPublish([clipId])}><Send size={14} /> Publish</button>
-                          {clip.output && <a className="chip-btn" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output))} download><Check size={14} /> Download</a>}
+                          {clip.output && <a className="chip-btn" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output) + '&download=true')} download><Check size={14} /> Download MP4</a>}
                         </div>
                         {renderJobs[clipId] && <JobTracker jobId={renderJobs[clipId]} label="Rendering clip" onDone={(job) => {
                           if (job.status === 'done') {
@@ -368,14 +518,37 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   );
 }
 
-function RegionOverlay({ boxes, activeId, onChange }: { boxes: RegionItem[]; activeId: string; onChange: (box: Box) => void }) {
-  const ref = useRef<HTMLDivElement>(null);
+function RegionOverlay({ boxes, activeId, sourceAspect, onChange }: {
+  boxes: RegionItem[]; activeId: string; sourceAspect: number; onChange: (box: Box) => void;
+}) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [contentRect, setContentRect] = useState({ left: 0, top: 0, width: 100, height: 100 });
   const [drawing, setDrawing] = useState(false);
   const [start, setStart] = useState({ x: 0, y: 0 });
   const [draft, setDraft] = useState<Box | null>(null);
 
+  useEffect(() => {
+    const element = outerRef.current;
+    if (!element) return;
+    const update = () => {
+      const bounds = element.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const aspect = Number.isFinite(sourceAspect) && sourceAspect > 0 ? sourceAspect : 16 / 9;
+      const containerAspect = bounds.width / bounds.height;
+      const width = containerAspect > aspect ? bounds.height * aspect : bounds.width;
+      const height = containerAspect > aspect ? bounds.height : bounds.width / aspect;
+      setContentRect({ left: (bounds.width - width) / 2, top: (bounds.height - height) / 2, width, height });
+    };
+    update();
+    const observer = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    observer?.observe(element);
+    window.addEventListener('resize', update);
+    return () => { observer?.disconnect(); window.removeEventListener('resize', update); };
+  }, [sourceAspect]);
+
   const point = (event: React.PointerEvent) => {
-    const rect = ref.current?.getBoundingClientRect();
+    const rect = contentRef.current?.getBoundingClientRect();
     if (!rect) return { x: 0, y: 0 };
     return {
       x: Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width)),
@@ -385,40 +558,40 @@ function RegionOverlay({ boxes, activeId, onChange }: { boxes: RegionItem[]; act
   const normalise = (a: { x: number; y: number }, b: { x: number; y: number }): Box => ({
     x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y),
   });
-
   const rectStyle = (box: Box) => ({
     left: `${box.x * 100}%`, top: `${box.y * 100}%`, width: `${box.w * 100}%`, height: `${box.h * 100}%`,
   });
 
   return (
-    <div
-      className="region-overlay"
-      ref={ref}
-      onPointerDown={(event) => {
-        if (!activeId) return;
-        setDrawing(true);
-        const p = point(event);
-        setStart(p);
-        setDraft({ ...p, w: 0, h: 0 });
-        (event.target as HTMLElement).setPointerCapture(event.pointerId);
-      }}
-      onPointerMove={(event) => { if (drawing) setDraft(normalise(start, point(event))); }}
-      onPointerUp={() => {
-        setDrawing(false);
-        if (draft && draft.w > 0.03 && draft.h > 0.03) onChange(draft);
-        setDraft(null);
-      }}
-    >
-      {boxes.map((item) => (
-        <div
-          key={item.id}
-          className={`region-box ${item.id === activeId ? 'active' : ''}`}
-          style={{ ...rectStyle(item.box), borderColor: item.color }}
-        >
-          <span style={{ background: item.color }}>{item.label} · {Math.round(item.box.w * 100)}×{Math.round(item.box.h * 100)}</span>
-        </div>
-      ))}
-      {draft && draft.w > 0 && <div className="region-box draft" style={rectStyle(draft)}><span>Drawing…</span></div>}
+    <div className="region-overlay" ref={outerRef}>
+      <div
+        className="region-content"
+        ref={contentRef}
+        style={{ left: contentRect.left, top: contentRect.top, width: contentRect.width, height: contentRect.height }}
+        onPointerDown={(event) => {
+          if (!activeId || event.button !== 0) return;
+          event.preventDefault();
+          setDrawing(true);
+          const p = point(event);
+          setStart(p);
+          setDraft({ ...p, w: 0, h: 0 });
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={(event) => { if (drawing) setDraft(normalise(start, point(event))); }}
+        onPointerUp={() => {
+          setDrawing(false);
+          if (draft && draft.w > 0.03 && draft.h > 0.03) onChange(draft);
+          setDraft(null);
+        }}
+        onPointerCancel={() => { setDrawing(false); setDraft(null); }}
+      >
+        {boxes.map((item) => (
+          <div key={item.id} className={`region-box ${item.id === activeId ? 'active' : ''}`} style={{ ...rectStyle(item.box), borderColor: item.color }}>
+            <span style={{ background: item.color }}>{item.label} · {Math.round(item.box.w * 100)}×{Math.round(item.box.h * 100)}%</span>
+          </div>
+        ))}
+        {draft && draft.w > 0 && <div className="region-box draft" style={rectStyle(draft)}><span>Drawing…</span></div>}
+      </div>
     </div>
   );
 }

@@ -7,7 +7,6 @@ import os
 import secrets
 import shutil
 import subprocess
-import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -26,8 +25,9 @@ from .db import db, dumps, now, uid
 from .jobs import jobs
 from .schemas import (
     ApplyEffectsRequest, AssetDownloadRequest, AssetSearchRequest, AutoEditRequest, ClipProposalRequest,
-    DownloadRequest, ExportAllRequest, ExportRequest, FolderPatch, ImageRequest, ImportRequest,
-    ModelInstallRequest, ProjectCreate, ProjectUpdate, RegionSelection, RenderRequest, SettingsPatch,
+    ComfyCheckpointRequest, DeleteClipsRequest, DownloadRequest, ExportAllRequest, ExportRequest,
+    FolderPatch, ImageRequest, ImportRequest, ModelInstallRequest, ProjectCreate, ProjectUpdate,
+    RegionSelection, RenderRequest, SettingsPatch,
     TranscribeRequest, VisionRequest, YouTubeUploadRequest,
 )
 from .services import assets, downloader, images, llm, models, render, scoring, sfx, vision, youtube
@@ -105,16 +105,18 @@ def save_analysis(media_id: str, kind: str, data: dict[str, Any]) -> None:
     )
 
 
-def brand_asset(name: str) -> str | None:
-    candidates = [
-        Path(os.getenv("AIFREECLIP_ASSET_DIR", "")).expanduser() / name if os.getenv("AIFREECLIP_ASSET_DIR") else None,
-        Path(__file__).resolve().parents[2] / "brand" / name,
-        Path(getattr(sys, "_MEIPASS", ".")) / "brand" / name,
-    ]
-    for candidate in candidates:
-        if candidate and candidate.exists():
-            return str(candidate)
-    return None
+def configured_watermark_path() -> str | None:
+    """Return the optional user-selected channel logo; never inject app branding."""
+    configured = db.get_setting("watermark_path", "").strip()
+    if not configured:
+        return None
+    path = Path(configured).expanduser()
+    if path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"} or not path.is_file():
+        return None
+    try:
+        return str(path.resolve())
+    except (OSError, RuntimeError):
+        return None
 
 
 # --- health / system -----------------------------------------------------
@@ -137,8 +139,9 @@ def system_hardware():
 
 
 @app.get("/api/jobs")
-def list_jobs(limit: int = 50):
-    return {"jobs": jobs.list(limit)}
+def list_jobs(limit: int | None = None):
+    bounded_limit = max(1, min(limit, 10000)) if limit is not None else None
+    return {"jobs": jobs.list(bounded_limit)}
 
 
 @app.get("/api/jobs/{job_id}")
@@ -147,6 +150,15 @@ def get_job(job_id: str):
     if not job:
         return JSONResponse({"detail": "Job not found"}, status_code=404)
     return job
+
+
+@app.post("/api/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    if not jobs.get(job_id):
+        return JSONResponse({"detail": "Job not found"}, status_code=404)
+    if not jobs.cancel(job_id):
+        return JSONResponse({"detail": "This operation is already finished."}, status_code=409)
+    return ok(cancelled=True)
 
 
 @app.get("/api/jobs/{job_id}/events")
@@ -191,9 +203,31 @@ def get_media(media_id: str):
 
 
 @app.delete("/api/media/{media_id}")
-def delete_media(media_id: str):
+def delete_media(media_id: str, delete_file: bool = False):
+    row = db.one("SELECT * FROM media WHERE id=?", (media_id,))
+    if not row:
+        return JSONResponse({"detail": "Video not found"}, status_code=404)
+    file_deleted = False
+    file_error = None
+    source_path = Path(row.get("path") or "").expanduser()
+    file_kept_shared = False
+    # Only delete files that were registered as yt-dlp downloads. Imported files
+    # can be anywhere on disk and are always kept safe from an accidental delete.
+    # A source file stays on disk if another library entry or saved project uses it.
+    if delete_file and row.get("source_url") and source_path.is_file():
+        try:
+            if _file_is_referenced(source_path, exclude_media_id=media_id):
+                file_kept_shared = True
+            else:
+                source_path.unlink()
+                file_deleted = True
+        except OSError as exc:
+            file_error = str(exc)
+    db.execute("DELETE FROM analyses WHERE media_id=?", (media_id,))
+    db.execute("DELETE FROM clips WHERE media_id=? AND (output IS NULL OR output='')", (media_id,))
+    (CACHE / "thumbs" / f"{media_id}.jpg").unlink(missing_ok=True)
     db.delete("media", "id", media_id)
-    return ok()
+    return ok(file_deleted=file_deleted, file_error=file_error, file_kept_shared=file_kept_shared)
 
 
 @app.get("/api/media/{media_id}/stream")
@@ -214,13 +248,19 @@ def media_thumbnail(media_id: str):
 
 
 @app.get("/media/file")
-def stream_file(request: Request, path: str):
+def stream_file(request: Request, path: str, download: bool = False):
     target = Path(path).expanduser()
-    if not target.exists():
+    if not target.exists() or not target.is_file():
         return Response("Not found", status_code=404)
     suffix = target.suffix.lower()
-    mime = "video/mp4" if suffix in {".mp4", ".mov", ".m4v"} else "image/jpeg" if suffix in {".jpg", ".jpeg"} else "application/octet-stream"
-    return file_stream(target, request, mime)
+    mime = (
+        "video/mp4" if suffix in {".mp4", ".m4v"}
+        else "video/quicktime" if suffix == ".mov"
+        else "video/webm" if suffix == ".webm"
+        else "image/jpeg" if suffix in {".jpg", ".jpeg"}
+        else "application/octet-stream"
+    )
+    return file_stream(target, request, mime, download=download)
 
 
 @app.get("/api/playlists")
@@ -279,6 +319,12 @@ def get_vision(media_id: str):
     return ok(vision=last_analysis(media_id, "vision"))
 
 
+def _region_boxes(region: RegionSelection) -> list[dict[str, float]]:
+    # The UI sends both `box` (for older API clients) and `boxes` (multi-region).
+    # Prefer the latter so the first focus area is not analyzed twice.
+    return region.boxes if region.boxes else ([region.box] if region.box else [])
+
+
 @app.post("/api/clips/propose")
 async def propose_clips(payload: ClipProposalRequest):
     async def work(job_id: str, p: dict[str, Any]):
@@ -289,7 +335,7 @@ async def propose_clips(payload: ClipProposalRequest):
         region_map: dict[str, list[dict[str, float]]] = {}
         layout_map: dict[str, str] = {}
         for region in req.regions:
-            boxes = [box for box in ([*region.boxes, region.box] if region.box else region.boxes) if box]
+            boxes = [box for box in _region_boxes(region) if box]
             region_map[region.media_id] = boxes if region.kind in ("custom", "player", "gameplay") else []
             if region.layout:
                 layout_map[region.media_id] = region.layout
@@ -354,6 +400,37 @@ async def propose_clips(payload: ClipProposalRequest):
     return ok(job_id=jobs.run("clips", work, payload.model_dump()))
 
 
+def _clip_metadata(row: dict[str, Any] | None) -> dict[str, Any]:
+    if not row:
+        return {}
+    loaded = db.loads(row, "metadata") or {}
+    metadata = loaded.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    # Flatten rows written by older apply-effects versions, which accidentally
+    # nested the original metadata object inside a second metadata wrapper.
+    while isinstance(metadata.get("metadata"), dict):
+        nested = metadata["metadata"]
+        metadata = {**nested, **{key: value for key, value in metadata.items() if key != "metadata"}}
+    return metadata
+
+
+def _clip_response(row: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not row:
+        return None
+    loaded = db.loads(row, "metadata") or {}
+    metadata = _clip_metadata(loaded)
+    result = {**metadata, **loaded, "metadata": metadata}
+    if not isinstance(result.get("reasons"), list):
+        result["reasons"] = [result["reason"]] if result.get("reason") else []
+    result.setdefault("hook", "")
+    result.setdefault("hashtags", [])
+    result.setdefault("transcript", "")
+    if not isinstance(result.get("regions"), list):
+        result["regions"] = []
+    return result
+
+
 @app.get("/api/clips")
 def list_clips(project_id: str | None = None):
     sql = "SELECT * FROM clips"
@@ -362,7 +439,7 @@ def list_clips(project_id: str | None = None):
         sql += " WHERE project_id=?"
         params = (project_id,)
     sql += " ORDER BY score DESC"
-    return {"clips": [db.loads(row, "metadata") for row in db.query(sql, params)]}
+    return {"clips": [_clip_response(row) for row in db.query(sql, params)]}
 
 
 class ClipPatch(BaseModel):
@@ -375,8 +452,10 @@ class ClipPatch(BaseModel):
 
 @app.patch("/api/clips/{clip_id}")
 def patch_clip(clip_id: str, payload: ClipPatch):
+    if not db.one("SELECT id FROM clips WHERE id=?", (clip_id,)):
+        return JSONResponse({"detail": "Clip not found"}, status_code=404)
     db.update("clips", "id", clip_id, payload.model_dump(exclude_none=True))
-    return ok(clip=db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata"))
+    return ok(clip=_clip_response(db.one("SELECT * FROM clips WHERE id=?", (clip_id,))))
 
 
 @app.post("/api/clips/apply-effects")
@@ -387,17 +466,108 @@ def apply_effects(payload: ApplyEffectsRequest):
         row = db.one("SELECT * FROM clips WHERE id=?", (clip_id,))
         if not row:
             continue
-        document = db.loads(row, "metadata")
-        document["effects"] = payload.effects
-        db.update("clips", "id", clip_id, {"metadata": dumps(document)})
+        metadata = _clip_metadata(row)
+        metadata["effects"] = payload.effects
+        db.update("clips", "id", clip_id, {"metadata": dumps(metadata)})
         changed += 1
     return ok(changed=changed, effects=payload.effects)
 
 
+def _same_file(left: str | Path, right: str | Path) -> bool:
+    try:
+        return Path(left).expanduser().resolve() == Path(right).expanduser().resolve()
+    except (OSError, RuntimeError):
+        return False
+
+
+def _paths_in_project(value: Any):
+    if isinstance(value, dict):
+        path = value.get("path")
+        if isinstance(path, str) and path:
+            yield path
+        for child in value.values():
+            yield from _paths_in_project(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _paths_in_project(child)
+
+
+def _file_is_referenced(
+    path: str | Path,
+    *,
+    exclude_media_id: str | None = None,
+    exclude_clip_id: str | None = None,
+) -> bool:
+    """Keep a shared source/export file while any other record or project uses it."""
+    target = Path(path).expanduser()
+    for row in db.query("SELECT id,path FROM media WHERE path IS NOT NULL"):
+        if row.get("id") != exclude_media_id and row.get("path") and _same_file(target, row["path"]):
+            return True
+    # Rendered clip records survive library-media removal; keep their source
+    # available so the clip can still be reopened or re-rendered later.
+    for row in db.query(
+        "SELECT media.path FROM clips JOIN media ON media.id=clips.media_id "
+        "WHERE clips.output IS NOT NULL AND clips.output!='' AND media.path IS NOT NULL"
+    ):
+        if row.get("path") and _same_file(target, row["path"]):
+            return True
+    for row in db.query("SELECT id,output FROM clips WHERE output IS NOT NULL AND output!=''"):
+        if row.get("id") != exclude_clip_id and row.get("output") and _same_file(target, row["output"]):
+            return True
+    for row in db.query("SELECT data FROM projects"):
+        try:
+            document = json.loads(row.get("data") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            continue
+        if any(_same_file(target, candidate) for candidate in _paths_in_project(document)):
+            return True
+    return False
+
+
+def _delete_clip_record(clip_id: str, delete_output: bool = True) -> tuple[bool, bool]:
+    row = db.one("SELECT * FROM clips WHERE id=?", (clip_id,))
+    if not row:
+        return False, False
+    file_deleted = False
+    output = row.get("output")
+    if delete_output and output:
+        target = Path(output).expanduser()
+        roots = [EXPORTS]
+        for setting in ("exports_folder", "clips_folder"):
+            configured = db.get_setting(setting, "")
+            if configured:
+                roots.append(Path(configured).expanduser())
+        try:
+            resolved = target.resolve()
+            allowed = any(resolved.is_relative_to(root.resolve()) for root in roots)
+            shared = _file_is_referenced(resolved, exclude_clip_id=clip_id)
+            if allowed and not shared and resolved.is_file() and resolved.suffix.lower() in {".mp4", ".m4v", ".mov"}:
+                resolved.unlink()
+                file_deleted = True
+        except (OSError, RuntimeError):
+            # Never fail removal of the library record over an inaccessible file.
+            pass
+    db.delete("clips", "id", clip_id)
+    return True, file_deleted
+
+
+@app.delete("/api/clips/bulk-delete")
+def delete_clips(payload: DeleteClipsRequest):
+    deleted = 0
+    files_deleted = 0
+    for clip_id in dict.fromkeys(payload.clip_ids):
+        removed, file_removed = _delete_clip_record(clip_id)
+        deleted += int(removed)
+        files_deleted += int(file_removed)
+    return ok(deleted=deleted, files_deleted=files_deleted)
+
+
 @app.delete("/api/clips/{clip_id}")
 def delete_clip(clip_id: str):
-    db.delete("clips", "id", clip_id)
-    return ok()
+    removed, file_deleted = _delete_clip_record(clip_id)
+    if not removed:
+        return JSONResponse({"detail": "Clip not found"}, status_code=404)
+    return ok(file_deleted=file_deleted)
 
 
 @app.post("/api/clips/{clip_id}/render")
@@ -409,8 +579,8 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
             raise RuntimeError("Clip not found")
         media = media_row(clip["media_id"])
         options = req.model_dump()
-        document = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata") or {}
-        focus = (document.get("regions") or [document.get("region")] or [None])[0]
+        metadata = _clip_metadata(clip)
+        focus = (metadata.get("regions") or [metadata.get("region")] or [None])[0]
         if focus and not options.get("region"):
             options["region"] = focus
         if req.captions is None:
@@ -420,23 +590,23 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
                     if clip["start"] <= word["start"] <= clip["end"]:
                         words.append(word)
             options["captions"] = words
-        options["watermark_path"] = brand_asset("icon.png") if req.watermark else None
-        output = req.output or render.export_path(clip.get("title") or clip_id)
+        options["watermark_path"] = configured_watermark_path() if req.watermark else None
+        output = req.output or render.export_path(f"{clip.get('title') or 'clip'}_{clip_id}")
         await render.render_clip(
             media["path"], float(clip["start"]), float(clip["end"]), output, options,
             on_progress=lambda pct, msg: jobs.update(job_id, progress=pct, message=msg),
         )
-        document = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata") or {}
-        document["effects"] = {k: v for k, v in options.items() if k in {
+        metadata = _clip_metadata(db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata"))
+        metadata["effects"] = {k: v for k, v in options.items() if k in {
             "aspect", "resolution", "caption_style", "sfx", "speed", "brightness", "contrast", "saturation", "blur_background", "watermark"
         }}
-        document["hardware"] = hardware_info()
+        metadata["hardware"] = hardware_info()
         db.update("clips", "id", clip_id, {
-            "status": "rendered", "output": output, "metadata": dumps(document),
+            "status": "rendered", "output": output, "metadata": dumps(metadata),
         })
         return {
             "output": output, "url": "/media/file?path=" + output, "clip_id": clip_id,
-            "hardware": document["hardware"], "effects": document["effects"],
+            "hardware": metadata["hardware"], "effects": metadata["effects"],
         }
 
     return ok(job_id=jobs.run("render", work, payload.model_dump()))
@@ -449,13 +619,14 @@ async def auto_edit(payload: AutoEditRequest):
         req = AutoEditRequest(**(p or {}))
         total = max(len(req.clip_ids), 1)
         outputs: list[dict[str, Any]] = []
+        watermark_path = configured_watermark_path()
         for index, clip_id in enumerate(req.clip_ids):
             row = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
             if not row:
                 jobs.update(job_id, progress=round((index + 1) / total * 100, 1), message=f"Clip {index + 1}: not found")
                 continue
             media = media_row(row["media_id"])
-            metadata = row.get("metadata") or {}
+            metadata = _clip_metadata(row)
             analysis = last_analysis(row["media_id"], "transcript") or {}
             captions = []
             for segment in analysis.get("segments", []):
@@ -474,14 +645,14 @@ async def auto_edit(payload: AutoEditRequest):
                 "captions": captions[:140],
                 "sfx": ["whoosh", "pop"],
                 "sticker": metadata.get("sticker"),
-                "speed": 1.04, "brightness": 0.02, "contrast": 0.05, "saturation": 1.08,
-                "blur_background": req.aspect == "9:16", "watermark": True,
-                "watermark_path": brand_asset("icon.png"),
+                "speed": 1.04, "brightness": 0.02, "contrast": 1.05, "saturation": 1.08,
+                "blur_background": req.aspect == "9:16",
+                "watermark": bool(watermark_path), "watermark_path": watermark_path,
                 "region": focus,
                 "source_width": media.get("width") or 1080,
                 "source_height": media.get("height") or 1920,
             }
-            output = render.export_path(f"{row.get('title') or clip_id}_auto_edited")
+            output = render.export_path(f"{row.get('title') or 'clip'}_auto_edited_{clip_id}")
             jobs.update(job_id, progress=round(index / total * 100, 1), message=f"Auto-editing clip {index + 1}/{total}…")
             await render.render_clip(
                 media["path"], float(row["start"]), float(row["end"]), output, options,
@@ -491,12 +662,9 @@ async def auto_edit(payload: AutoEditRequest):
                     message=f"Clip {i + 1}/{total}: {msg}",
                 ),
             )
-            document = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata") or {}
-            document.update({
-                "status": "auto_edited", "output": output, "effects": options,
-                "hardware": hardware_info(), "auto_edited": True,
-            })
-            db.update("clips", "id", clip_id, {"status": "auto_edited", "output": output, "metadata": dumps(document)})
+            metadata = _clip_metadata(db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata"))
+            metadata.update({"effects": options, "hardware": hardware_info(), "auto_edited": True})
+            db.update("clips", "id", clip_id, {"status": "auto_edited", "output": output, "metadata": dumps(metadata)})
             outputs.append({"clip_id": clip_id, "output": output})
         return {"outputs": outputs, "count": len(outputs), "hardware": hardware_info()}
 
@@ -520,21 +688,22 @@ async def export_batch(payload: ExportAllRequest):
                     progress[index] = 1.0
                     return None
                 media = media_row(clip["media_id"])
-                output = render.export_path(f"{clip.get('title', clip_id)}_{index+1}")
-                effects = clip.get("effects") or {}
+                metadata = _clip_metadata(clip)
+                output = render.export_path(f"{clip.get('title', 'clip')}_{clip_id}_{index+1}")
+                effects = metadata.get("effects") or {}
                 options = {
                     "aspect": effects.get("aspect", req.aspect),
                     "resolution": effects.get("resolution", req.resolution),
                     "caption_style": effects.get("caption_style", {"preset": "hype"}),
                     "captions": [],
-                    "watermark_path": brand_asset("icon.png"),
+                    "watermark_path": configured_watermark_path(),
                     "sfx": effects.get("sfx", ["whoosh", "pop"]),
                     "speed": effects.get("speed", 1),
                     "brightness": effects.get("brightness", 0),
-                    "contrast": effects.get("contrast", 0),
+                    "contrast": render._normalise_contrast(effects.get("contrast", 1.0)),
                     "saturation": effects.get("saturation", 1),
                     "blur_background": effects.get("blur_background", True),
-                    "region": (clip.get("regions") or [clip.get("region")] or [None])[0],
+                    "region": (metadata.get("regions") or [metadata.get("region")] or [None])[0],
                 }
                 await render.render_clip(
                     media["path"], float(clip["start"]), float(clip["end"]), output, options,
@@ -571,9 +740,16 @@ def create_project(payload: ProjectCreate):
     timeline = payload.template or {"tracks": {"video": [], "captions": [], "stickers": [], "audio": []}, "aspect": "9:16", "resolution": "1080p"}
     if payload.clip_id:
         clip = db.loads(db.one("SELECT * FROM clips WHERE id=?", (payload.clip_id,)), "metadata") or {}
+        clip_metadata = _clip_metadata(clip)
         media = media_row(clip.get("media_id", ""))
         timeline["tracks"]["video"].append(
-            {"path": media["path"], "sourceStart": clip.get("start", 0), "duration": clip.get("end", 0) - clip.get("start", 0)}
+            {
+                "id": clip.get("id"), "clip_id": clip.get("id"), "path": media["path"],
+                "sourceStart": clip.get("start", 0),
+                "duration": clip.get("end", 0) - clip.get("start", 0),
+                "label": clip.get("title") or media.get("title", "Clip"),
+                "region": clip_metadata.get("region"), "regions": clip_metadata.get("regions") or [],
+            }
         )
     elif payload.media_id:
         media = media_row(payload.media_id)
@@ -615,10 +791,11 @@ async def export_project(project_id: str, payload: ExportRequest):
         timeline = dict(row.get("timeline") or {})
         timeline["aspect"] = req.aspect
         timeline["resolution"] = req.resolution
-        output = req.output or render.export_path(row.get("name", "project"))
+        output = req.output or render.export_path(f"{str(row.get('name') or 'project')[:100]}_{project_id}")
         await render.render_timeline(
             timeline, output,
             on_progress=lambda pct, msg: jobs.update(job_id, progress=pct, message=msg),
+            watermark_path=configured_watermark_path(),
         )
         return {"output": output, "url": "/media/file?path=" + output}
 
@@ -679,6 +856,14 @@ async def tts_endpoint(payload: dict[str, str]):
 @app.get("/api/models")
 async def list_models():
     return {"models": await models.status()}
+
+
+@app.post("/api/models/comfyui-checkpoint")
+def select_comfy_checkpoint(payload: ComfyCheckpointRequest):
+    try:
+        return ok(checkpoint=models.configure_comfy_checkpoint(payload.path))
+    except (OSError, RuntimeError) as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
 
 
 @app.post("/api/models/install")

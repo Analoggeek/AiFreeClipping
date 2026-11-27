@@ -15,6 +15,9 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
   const [busy, setBusy] = useState<string | null>(null);
   const [recommendedJob, setRecommendedJob] = useState<string | null>(null);
   const [modelFolder, setModelFolder] = useState('');
+  const [checkpointFolder, setCheckpointFolder] = useState('');
+  const [checkpointPath, setCheckpointPath] = useState('');
+  const [checkpointBusy, setCheckpointBusy] = useState(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -28,6 +31,10 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
     api.folders().then((result) => setModelFolder(result.folders?.models || '')).catch(() => undefined);
+    api.settings().then((result) => {
+      setCheckpointFolder(result.values?.comfy_checkpoint_folder || '');
+      setCheckpointPath(result.values?.comfy_checkpoint_path || '');
+    }).catch(() => undefined);
   }, []);
 
   const openLink = (url?: string) => {
@@ -57,6 +64,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
     return pollJob(recommendedJob, (job) => {
       if (job.status === 'done') { void refresh(); setRecommendedJob(null); notify('All recommended models are ready and saved.'); }
       if (job.status === 'error') { setRecommendedJob(null); notify(job.error || job.message); }
+      if (job.status === 'cancelled') { setRecommendedJob(null); notify('Recommended model setup cancelled.'); }
     });
   }, [recommendedJob, refresh, notify]);
 
@@ -80,17 +88,56 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
     } catch (error) { notify(String(error)); }
   };
 
+  const pickCheckpointFolder = async () => {
+    if (!window.desktop?.selectDirectory) { notify('Choose the ComfyUI models/checkpoints folder in the desktop app.'); return; }
+    const selected = await window.desktop.selectDirectory();
+    if (!selected) return;
+    try {
+      await api.saveSettings({ comfy_checkpoint_folder: selected });
+      setCheckpointFolder(selected);
+      if (checkpointPath) {
+        const result = await api.selectComfyCheckpoint(checkpointPath);
+        setCheckpointPath(result.checkpoint.path);
+        notify('ComfyUI folder saved and the selected checkpoint registered there.');
+      } else {
+        notify('ComfyUI checkpoint folder saved. Select an existing checkpoint file next.');
+      }
+      await refresh();
+    } catch (error) { notify(String(error)); }
+  };
+
+  const selectCheckpoint = async () => {
+    if (!window.desktop?.selectFiles) { notify('Checkpoint file picker works in the desktop app.'); return; }
+    const paths = await window.desktop.selectFiles([{ name: 'SDXL checkpoint', extensions: ['safetensors', 'ckpt'] }]);
+    if (!paths.length) return;
+    setCheckpointBusy(true);
+    try {
+      const result = await api.selectComfyCheckpoint(paths[0]);
+      setCheckpointPath(result.checkpoint.path);
+      await refresh();
+      notify(`SDXL checkpoint ready: ${result.checkpoint.filename}`);
+    } catch (error) { notify(String(error)); }
+    finally { setCheckpointBusy(false); }
+  };
+
   useEffect(() => {
-    Object.entries(jobs).forEach(([id, jobId]) => {
-      pollJob(jobId, (job) => {
-        if (job.status === 'done') {
-          void refresh();
-          setBusy(null);
-          notify(`${models.find((model) => model.id === id)?.name || id} installed — ready to use offline.`);
-        }
-        if (job.status === 'error') { setBusy(null); notify(job.error || job.message); }
+    const stops = Object.entries(jobs).map(([id, jobId]) => pollJob(jobId, (job) => {
+      const forget = () => setJobs((current) => {
+        if (current[id] !== jobId) return current;
+        const next = { ...current };
+        delete next[id];
+        return next;
       });
-    });
+      if (job.status === 'done') {
+        void refresh();
+        setBusy(null);
+        forget();
+        notify(`${models.find((model) => model.id === id)?.name || id} installed — ready to use offline.`);
+      }
+      if (job.status === 'error') { setBusy(null); forget(); notify(job.error || job.message); }
+      if (job.status === 'cancelled') { setBusy(null); forget(); notify('Model installation cancelled.'); }
+    }));
+    return () => stops.forEach((stop) => stop());
   }, [jobs, refresh, notify, models]);
 
   const grouped = GROUPS.map((kind) => ({
@@ -135,6 +182,8 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
                     </div>
                     <p>{model.use}</p>
                     {model.setupNote && <p className="model-note">{model.setupNote}</p>}
+                    {model.id === 'sdxl-1.0' && checkpointPath && <p className="model-checkpoint-path" title={checkpointPath}>Selected SDXL checkpoint: {checkpointPath}</p>}
+                    {model.id === 'sdxl-1.0' && checkpointFolder && <p className="model-checkpoint-path" title={checkpointFolder}>ComfyUI checkpoints folder: {checkpointFolder}</p>}
                     <div className="model-foot">
                       {model.installed
                         ? <Pill tone="green"><CheckCircle2 size={13} /> Ready</Pill>
@@ -150,9 +199,18 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
                               {busy === model.id ? <LoaderCircle size={14} className="spin" /> : <Download size={14} />} Download &amp; install
                             </button>
                           )}
+                          {model.id === 'sdxl-1.0' && !model.installed && (
+                            <button className="chip-btn primary" disabled={busy === model.id} onClick={() => install(model.id)}>
+                              {busy === model.id ? <LoaderCircle size={14} className="spin" /> : <Download size={14} />} Download &amp; install SDXL
+                            </button>
+                          )}
+                          {model.id === 'sdxl-1.0' && <>
+                            <button className="chip-btn" onClick={() => void pickCheckpointFolder()} title="Select ComfyUI/models/checkpoints"><FolderOpen size={14} /> Set checkpoints folder</button>
+                            <button className="chip-btn" disabled={checkpointBusy} onClick={() => void selectCheckpoint()}>{checkpointBusy ? <LoaderCircle size={14} className="spin" /> : <FolderOpen size={14} />} {checkpointBusy ? 'Registering checkpoint…' : 'Select downloaded file'}</button>
+                          </>}
                           {model.downloadUrl && (
                             <button className="chip-btn" title="Open the official download page" onClick={() => openLink(model.downloadUrl)}>
-                              <ExternalLink size={14} /> {model.autoInstall ? 'Open page' : 'Download'}
+                              <ExternalLink size={14} /> {model.autoInstall ? 'Open page' : 'Official download'}
                             </button>
                           )}
                         </>

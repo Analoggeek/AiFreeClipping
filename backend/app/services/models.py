@@ -100,7 +100,7 @@ CATALOG: list[dict[str, Any]] = [
         "size": "6.9 GB", "use": "100% local stickers/thumbnails via ComfyUI",
         "downloadUrl": SDXL_CHECKPOINT, "docsUrl": "https://github.com/comfyanonymous/ComfyUI",
         "providerUrl": "https://github.com/comfyanonymous/ComfyUI/releases", "autoInstall": False,
-        "setupNote": "Download the checkpoint and place it in ~/.AiFreeClipping/models/checkpoints.",
+        "setupNote": "Install SDXL here or select a checkpoint you already downloaded. For ComfyUI, set its checkpoints folder below.",
     },
     {
         "id": "nano-banana", "kind": "Cloud", "name": "Nano Banana (Gemini image)", "provider": "Google Gemini",
@@ -287,6 +287,60 @@ def _models_root() -> Path:
     return Path(configured).expanduser() if configured else CACHE
 
 
+def _comfy_checkpoints_dir() -> Path:
+    configured = db.get_setting("comfy_checkpoint_folder", "")
+    return Path(configured).expanduser() if configured else Path(
+        env("COMFY_CHECKPOINTS", str(_models_root() / "checkpoints"))
+    ).expanduser()
+
+
+def configure_comfy_checkpoint(path: str) -> dict[str, Any]:
+    """Register an existing SDXL checkpoint in the folder ComfyUI searches.
+
+    A hard link or symlink avoids duplicating multi-gigabyte weights where the
+    OS permits it; copying is the final cross-volume/Windows fallback.
+    """
+    source = Path(path).expanduser()
+    if not source.is_file() or source.suffix.lower() not in {".safetensors", ".ckpt"}:
+        raise RuntimeError("Choose an existing .safetensors or .ckpt checkpoint file.")
+    if source.stat().st_size == 0:
+        raise RuntimeError("The selected checkpoint file is empty.")
+    source = source.resolve()
+    folder = _comfy_checkpoints_dir()
+    folder.mkdir(parents=True, exist_ok=True)
+    target = folder / source.name
+    if target.resolve(strict=False) != source:
+        if target.exists() or target.is_symlink():
+            try:
+                if not target.samefile(source):
+                    raise RuntimeError(f"A different checkpoint named {source.name} already exists in {folder}.")
+            except OSError as exc:
+                raise RuntimeError(f"Cannot use the selected checkpoint: {exc}") from exc
+        else:
+            try:
+                os.link(source, target)
+            except OSError:
+                try:
+                    target.symlink_to(source)
+                except OSError:
+                    free = shutil.disk_usage(folder).free
+                    if free < source.stat().st_size + 64 * 1024 * 1024:
+                        raise RuntimeError(
+                            "This drive cannot link to the selected checkpoint and does not have enough free space to copy it. "
+                            "Choose the ComfyUI checkpoints folder or select a file on the same drive."
+                        )
+                    try:
+                        shutil.copy2(source, target)
+                    except OSError as exc:
+                        target.unlink(missing_ok=True)
+                        raise RuntimeError(f"Could not copy the checkpoint into {folder}: {exc}") from exc
+    db.set_setting("comfy_checkpoint", target.name)
+    db.set_setting("comfy_checkpoint_path", str(target))
+    model = next(item for item in CATALOG if item["id"] == "sdxl-1.0")
+    _activate(model)
+    return {"filename": target.name, "path": str(target), "installed": True}
+
+
 def _path(model: dict[str, Any]) -> Path | None:
     name = model.get("file")
     if not name:
@@ -306,7 +360,9 @@ def _whisper_dir(model_id: str) -> Path:
 async def status() -> list[dict[str, Any]]:
     installed_llm = {item["name"] for item in await tags()}
     persisted = _installed_ids()
-    checkpoint_dir = Path(env("COMFY_CHECKPOINTS", str(_models_root() / "checkpoints")))
+    checkpoint_dir = _comfy_checkpoints_dir()
+    configured_checkpoint = db.get_setting("comfy_checkpoint", "sd_xl_base_1.0.safetensors")
+    configured_path = Path(db.get_setting("comfy_checkpoint_path", "")).expanduser()
     result = []
     for model in CATALOG:
         installed = model["id"] in persisted
@@ -324,7 +380,9 @@ async def status() -> list[dict[str, Any]]:
             target = _path(model)
             installed = installed or bool(target and target.exists())
         elif model["provider"] == "comfyui":
-            installed = installed or bool(list(checkpoint_dir.glob("*.safetensors"))) if checkpoint_dir.exists() else installed
+            selected_exists = configured_path.is_file() if str(configured_path) not in {"", "."} else False
+            selected_exists = selected_exists or (checkpoint_dir / configured_checkpoint).is_file()
+            installed = installed or selected_exists
         elif model.get("needsApi"):
             installed = installed or bool(
                 env(API_ENV.get(model["id"], ""))
@@ -440,11 +498,13 @@ async def install(model_id: str, progress: Callable[[float, str], None]) -> dict
                     except Exception:
                         pass
         elif model["provider"] == "comfyui":
-            destination = Path(env("COMFY_CHECKPOINTS", str(_models_root() / "checkpoints")))
+            destination = _comfy_checkpoints_dir()
             destination.mkdir(parents=True, exist_ok=True)
             checkpoint = destination / "sd_xl_base_1.0.safetensors"
             if not checkpoint.exists():
                 _download(str(model["downloadUrl"]), checkpoint, progress, model["name"])
+            db.set_setting("comfy_checkpoint", checkpoint.name)
+            db.set_setting("comfy_checkpoint_path", str(checkpoint))
         else:
             raise RuntimeError(f"Use the download link for {model['name']} to complete setup.")
         _activate(model)

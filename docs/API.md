@@ -66,7 +66,10 @@ curl -s -H "X-AI-Clipper-Token: $TOKEN" "$API/api/jobs" | python -m json.tool
   "music_volume": 0.22,
   "sfx": ["whoosh", "pop"],
   "speed": 1.0,
+  "contrast": 1.0,
   "blur_background": true,
   "watermark": true
 }
 ```
+
+The watermark flag only enables the optional logo selected in **Settings**. If no user logo is configured, exports remain unbranded; the app logo is never burned into video.

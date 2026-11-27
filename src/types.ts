@@ -21,6 +21,7 @@ export type Job = {
   result?: Record<string, unknown> | null;
   error?: string | null;
   created_at?: string;
+  updated_at?: string;
 };
 
 export type Candidate = {
@@ -87,7 +88,11 @@ export type Capabilities = {
   whisperModel?: string;
 };
 
-export type VideoItem = { id?: string; path: string; sourceStart: number; duration: number; label?: string };
+export type VideoItem = {
+  id?: string; clip_id?: string; path: string; sourceStart: number; duration: number;
+  label?: string; region?: { x: number; y: number; w: number; h: number } | null;
+  regions?: Array<{ x: number; y: number; w: number; h: number }>;
+};
 export type CaptionItem = { text: string; start: number; end: number };
 export type StickerItem = { path: string; start: number; end: number; x: number; y: number; label?: string };
 export type AudioItem = { path: string; start: number; end: number; volume: number; label?: string };
