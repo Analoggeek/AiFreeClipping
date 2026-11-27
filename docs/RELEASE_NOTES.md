@@ -1,5 +1,31 @@
 # Release notes
 
+## v5.1.6 — QuickTime-ready exports, custom branding and creator workflow
+
+### Download the installers
+
+Download the installer for your platform from the links below:
+
+- **Windows x64:** [AI-Clipper-Pro-5.1.6-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.1.6-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.1.6-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.1.6-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/manifest.json)
+
+### Changes
+
+- **Region selection is real:** custom focus regions are drawn against the source video's contained frame, shown in a live side crop preview, carried with each generated clip, and applied to both clip and timeline MP4 renders.
+- **Editor clip workflow:** the Editor now lists generated AI clips in its Clips tab; click one to add its source cut and saved focus region straight to the timeline.
+- **Library cleanup:** remove downloaded videos with an explicit confirmation. Imported originals are kept, and downloaded source files are retained when another library item or saved project still references them.
+- **SDXL checkpoint selection:** choose a `.safetensors` or `.ckpt` file already on disk, or point the app at a ComfyUI checkpoints folder, without redownloading large model weights.
+- **QuickTime color fix:** FFmpeg's neutral contrast is now `1.0` (not `0`), and exports declare Rec.709 color with limited-range `yuv420p`; old saved contrast values are normalized so existing clips do not export flat/washed out.
+- **Optional channel watermark:** app branding is no longer burned into exports. Clip, batch, auto-edit and timeline exports stay unbranded unless you select a PNG/JPG/WEBP logo in Settings; remove it any time.
+- **Reliable MP4 downloads:** exports are H.264 High Profile, Rec.709 `yuv420p`, AAC and fast-start MP4s; download responses carry an explicit `.mp4` filename so macOS browsers do not save them as `file.txt`.
+- **Safer clip management:** Publish supports Select all, rendered-only selection, bulk export and bulk deletion. Shared outputs are kept until the last clip/project reference is removed, and new render names include unique clip/project IDs.
+- **Operations widget:** shows the full recent operation list without a border; close completed operations or cancel live ones. Cancellation now stops FFmpeg and removes partial output files.
+
 ## v5.1.4 — crash-proof settings, user folders and automatic editing
 
 ### Download the installers

@@ -8,6 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="$(node -p "require('./package.json').version")"
+CURRENT_BRANCH="$(git branch --show-current)"
 MODE="local"
 SKIP_BACKEND=0
 PUBLISH=0
@@ -60,10 +61,11 @@ fi
 if [ "$MODE" = "ci" ]; then
   echo "== 5/6 Dispatching cross-platform GitHub Actions build =="
   command -v gh >/dev/null || { echo "gh CLI required for --all" >&2; exit 1; }
-  gh workflow run release.yml -f version="$VERSION"
+  [ -n "$CURRENT_BRANCH" ] || { echo "Cannot dispatch a release from a detached HEAD" >&2; exit 1; }
+  gh workflow run release.yml --ref "$CURRENT_BRANCH" -f version="$VERSION"
   echo "Waiting for the workflow to appear…"
   sleep 8
-  RUN_ID="$(gh run list --workflow release.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')"
+  RUN_ID="$(gh run list --workflow release.yml --branch "$CURRENT_BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')"
   [ -n "$RUN_ID" ] || { echo "Could not find the dispatched run" >&2; exit 1; }
   echo "Run ID: $RUN_ID — watch with: gh run view $RUN_ID"
   gh run watch "$RUN_ID" --exit-status
@@ -105,7 +107,7 @@ NODE
 if [ "$PUBLISH" -eq 1 ]; then
   echo "== Publishing GitHub Release =="
   command -v gh >/dev/null || { echo "gh CLI required for --publish" >&2; exit 1; }
-  gh release create "v$VERSION" release/* --generate-notes --title "AI Clipper Pro v$VERSION" || \
+  gh release create "v$VERSION" release/* --target "$(git rev-parse HEAD)" --generate-notes --title "AI Clipper Pro v$VERSION" || \
     gh release upload "v$VERSION" release/* --clobber
 fi
 

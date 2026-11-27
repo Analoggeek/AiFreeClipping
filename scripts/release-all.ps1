@@ -12,6 +12,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-Location (Split-Path -Parent $PSScriptRoot)
+$CurrentBranch = (git branch --show-current).Trim()
 Write-Host "== AI Clipper Pro release v$Version =="
 
 function Invoke-Checked([string]$Command) {
@@ -29,9 +30,10 @@ if ($SkipBackend) { Invoke-Checked "$Python scripts/package-backend.py --skip-py
 else { Invoke-Checked "$Python scripts/package-backend.py" }
 
 if ($All) {
-  Invoke-Checked "gh workflow run release.yml -f version=$Version"
+  if (-not $CurrentBranch) { throw 'Cannot dispatch a release from a detached HEAD' }
+  Invoke-Checked "gh workflow run release.yml --ref $CurrentBranch -f version=$Version"
   Start-Sleep -Seconds 8
-  $runId = (gh run list --workflow release.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')
+  $runId = (gh run list --workflow release.yml --branch $CurrentBranch --limit 1 --json databaseId --jq '.[0].databaseId')
   if (-not $runId) { throw 'Could not find the dispatched GitHub Actions run' }
   Invoke-Checked "gh run watch $runId --exit-status"
   if (Test-Path release) { Remove-Item -Recurse -Force release }
@@ -54,7 +56,7 @@ $lines | Set-Content release\SHA256SUMS.txt
 } | ConvertTo-Json -Depth 4 | Set-Content release\manifest.json
 
 if ($Publish) {
-  try { Invoke-Checked "gh release create v$Version release/* --generate-notes --title 'AI Clipper Pro v$Version'" }
+  try { Invoke-Checked "gh release create v$Version release/* --target HEAD --generate-notes --title 'AI Clipper Pro v$Version'" }
   catch { Invoke-Checked "gh release upload v$Version release/* --clobber" }
 }
 Write-Host 'Done. Installers and checksums are in .\release'

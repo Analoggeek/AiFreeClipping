@@ -11,6 +11,7 @@ from .db import db, dumps, now, uid
 class JobManager:
     def __init__(self) -> None:
         self._subscribers: dict[str, set[asyncio.Queue]] = {}
+        self._tasks: dict[str, asyncio.Task] = {}
 
     def create(self, kind: str, payload: dict[str, Any] | None = None) -> str:
         job_id = uid("job_")
@@ -64,9 +65,25 @@ class JobManager:
         row = db.loads(db.one("SELECT * FROM jobs WHERE id=?", (job_id,)), "payload", "result")
         return row
 
-    def list(self, limit: int = 50) -> list[dict[str, Any]]:
-        rows = db.query("SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?", (limit,))
+    def list(self, limit: int | None = None) -> list[dict[str, Any]]:
+        query = "SELECT * FROM jobs ORDER BY created_at DESC"
+        rows = db.query(query, ()) if limit is None else db.query(f"{query} LIMIT ?", (limit,))
         return [db.loads(row, "payload", "result") for row in rows]
+
+    def cancel(self, job_id: str) -> bool:
+        """Cancel a live coroutine and mark its operation as cancelled."""
+        job = self.get(job_id)
+        if not job or job.get("status") not in {"queued", "running"}:
+            return False
+        task = self._tasks.get(job_id)
+        if task and not task.done():
+            # The HTTP handler can be called from a worker thread; wake the task's
+            # loop safely instead of invoking Task.cancel() cross-thread.
+            task.get_loop().call_soon_threadsafe(task.cancel)
+        # Set the terminal state immediately, including the race where a task is
+        # cancelled before its wrapper gets its first event-loop turn.
+        self.update(job_id, status="cancelled", message="Cancelled by user")
+        return True
 
     def subscribe(self, job_id: str) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue(maxsize=200)
@@ -107,7 +124,9 @@ class JobManager:
             except Exception as exc:  # surfaced in UI, never crashes the API
                 self.update(job_id, status="error", message=str(exc), error=str(exc))
 
-        asyncio.create_task(wrapper(), name=f"job-{job_id}")
+        task = asyncio.create_task(wrapper(), name=f"job-{job_id}")
+        self._tasks[job_id] = task
+        task.add_done_callback(lambda _task, key=job_id: self._tasks.pop(key, None))
         return job_id
 
 

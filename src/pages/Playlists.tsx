@@ -33,6 +33,7 @@ export default function Playlists({ notify, openClipper }: PageProps) {
     return pollJob(jobId, (job) => {
       if (job.status === 'done') { refresh(); notify('Playlist download finished.'); }
       if (job.status === 'error') notify(job.error || job.message);
+      if (job.status === 'cancelled') notify('Playlist download cancelled.');
     });
   }, [jobId, notify, refresh]);
 

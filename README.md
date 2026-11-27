@@ -21,11 +21,13 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 
 - **Everything local after the first model download** — analysis, clipping, captions, rendering and editing stay on your machine.
 - **One connected workflow** — download → analyse → clip → enhance → publish.
-- **Professional editor** — multi-track timeline, captions, stickers, sound effects, stock media and AI image generation.
+- **Professional editor** — multi-track timeline, captions, stickers, sound effects, stock media, AI image generation and a generated-clips list that adds source cuts directly to the timeline.
+- **Region-guided clipping** — draw a source-aware focus region, see the exact crop in a live preview, and carry it through clip rendering and timeline export.
+- **Reliable exports** — neutral-contrast Rec.709 H.264/AAC MP4s with fast-start metadata and real `.mp4` download filenames for QuickTime. Exports have no app watermark by default; add your own channel logo in Settings if you want one.
 - **Hardware aware** — uses NVENC / Apple VideoToolbox when available, otherwise optimized libx264; CPU/RAM/GPU usage lives in the sidebar.
-- **Automatic models** — on first launch the app detects your RAM/GPU and downloads, activates and saves the best offline model pack; API-only services open their key page directly.
-- **Your folders, your rules** — choose where models, downloaded videos and rendered clips go; every download uses the bundled CA store, so certificate errors do not stop setup.
-- **Automatic edit** — cut clips appear in the editor and can be auto-enhanced (captions, focus crops, motion, SFX, stickers) and rendered in one job.
+- **Automatic models** — on first launch the app detects your RAM/GPU and downloads, activates and saves the best offline model pack; API-only services open their key page directly. SDXL can use a checkpoint already on disk.
+- **Your folders, your rules** — choose where models, downloaded videos and rendered clips go; safely remove downloads without deleting imported files or project-shared sources; every download uses the bundled CA store.
+- **Operations & publishing** — see, dismiss or cancel background jobs; select all clips, bulk-export them or delete selected clips and safely unshared outputs.
 
 > The marketing website is the repository root [`index.html`](index.html). The desktop app entry is [`app.html`](app.html).
 
@@ -35,10 +37,10 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 |---|---|
 | **Download** | Paste a YouTube/Instagram/TikTok/Twitch URL (or 1000+ yt-dlp sites), choose max quality, subtitles, and full playlists with item selection. Local file import works too. |
 | **Understand** | faster-whisper word timings, YOLOX Nano ONNX + ByteTrack-style tracking (Torch-free in packaged builds), scene changes and Gemma 2 7B reranking. |
-| **Clip** | Several non-overlapping viral candidates from one source or a batch of videos. Mark multiple regions in one clip — gameplay above/player below, square player over full gameplay, side-by-side — and the AI scores all of them. |
-| **Enhance** | Four caption presets, procedural royalty-free SFX, music beds, stickers, blurred-background 9:16 reframing, speed/color controls and branding. |
-| **Edit** | CapCut-style timeline with video/caption/sticker/audio tracks, split/trim/inspector, external imports, Pexels/Pixabay/Openverse search, Nano Banana / SDXL art and an always-available offline art fallback. |
-| **Publish** | Parallel 1080p exports with `+faststart`, direct downloads, and optional resumable YouTube uploads with your own OAuth app. |
+| **Clip** | Several non-overlapping viral candidates from one source or a batch of videos. Draw source-aware focus regions, inspect the live crop preview, and carry the selected crop into every render. |
+| **Enhance** | Four caption presets, procedural royalty-free SFX, music beds, stickers, blurred-background 9:16 reframing, speed/color controls and an optional user-supplied channel watermark. |
+| **Edit** | CapCut-style timeline with video/caption/sticker/audio tracks, split/trim/inspector, generated clips that add directly to the timeline, stock search and Nano Banana / SDXL art. |
+| **Publish** | Select all, export or delete chosen clips; parallel H.264/AAC 1080p exports with `+faststart`, direct MP4 downloads and optional resumable YouTube uploads. |
 
 ## Quick start
 
@@ -46,20 +48,20 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 
 Download the right installer from the [latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest) and open it. The engine, FFmpeg and icons are bundled. Model weights install from the app's **Local Models** page.
 
-**Direct v5.1.4 downloads** (even if the GitHub **Assets** panel is collapsed, these links go straight to the files):
+**Direct v5.1.6 downloads** (even if the GitHub **Assets** panel is collapsed, these links go straight to the files):
 
 | Platform | Direct installer |
 |---|---|
-| Windows x64 | [AI-Clipper-Pro-5.1.4-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Windows-x64.exe) |
-| Windows ARM64 | [AI-Clipper-Pro-5.1.4-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Windows-arm64.exe) |
-| macOS Intel | [AI-Clipper-Pro-5.1.4-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-macOS-x64.dmg) |
-| macOS Apple Silicon | [AI-Clipper-Pro-5.1.4-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-macOS-arm64.dmg) |
-| Linux AppImage | [AI-Clipper-Pro-5.1.4-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Linux-x86_64.AppImage) |
-| Linux Debian/Ubuntu | [AI-Clipper-Pro-5.1.4-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/AI-Clipper-Pro-5.1.4-Linux-amd64.deb) |
+| Windows x64 | [AI-Clipper-Pro-5.1.6-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-Windows-x64.exe) |
+| Windows ARM64 | [AI-Clipper-Pro-5.1.6-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-Windows-arm64.exe) |
+| macOS Intel | [AI-Clipper-Pro-5.1.6-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-macOS-x64.dmg) |
+| macOS Apple Silicon | [AI-Clipper-Pro-5.1.6-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-macOS-arm64.dmg) |
+| Linux AppImage | [AI-Clipper-Pro-5.1.6-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-Linux-x86_64.AppImage) |
+| Linux Debian/Ubuntu | [AI-Clipper-Pro-5.1.6-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/AI-Clipper-Pro-5.1.6-Linux-amd64.deb) |
 
 A `.zip` build is published alongside each `.dmg` — if Finder ever reports **Error code -36** while copying the app out of the disk image, download the `.zip` instead, unzip it, and drag `AI Clipper Pro.app` to Applications.
 
-Verify a download with [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.4/SHA256SUMS.txt) (`sha256sum -c SHA256SUMS.txt`). If you still want to use the DMG, run `dot_clean /Volumes/AI\ Clipper\ Pro\ 5.1.4` in Terminal and retry the copy. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"`.
+Verify a download with [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.6/SHA256SUMS.txt) (`sha256sum -c SHA256SUMS.txt`). If you still want to use the DMG, run `dot_clean /Volumes/AI\ Clipper\ Pro\ 5.1.6` in Terminal and retry the copy. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"`.
 
 ### 2. Run from source
 
@@ -86,7 +88,7 @@ Open the URL printed in the terminal. The local token is read from `~/.AiFreeCli
 | YOLOX Nano ONNX | OpenCV DNN | 1-click download | Torch-free; used by packaged builds. |
 | YOLO11 Nano | ultralytics | 1-click download | Best in a source install. |
 | Piper Lessac | piper-tts | 1-click download | Offline narration. |
-| SDXL 1.0 | ComfyUI | direct link | Save the checkpoint under `~/.AiFreeClipping/models/checkpoints`. |
+| SDXL 1.0 | ComfyUI | direct link or select existing file | Choose a `.safetensors` / `.ckpt` file or set your ComfyUI checkpoints folder in Local Models. |
 | Nano Banana | Gemini API | Get API key | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
 | YouTube Data API | Google Cloud | Get API key | [APIs & Credentials](https://console.cloud.google.com/apis/credentials) |
 | Pexels / Pixabay | Stock APIs | Get API key | Linked from the Models page. |
@@ -132,7 +134,7 @@ Each rendered clip records the exact hardware used, and **Copy effects to all** 
 ## Build installers
 
 ```bash
-bash scripts/release-all.sh 5.1.4 --all --publish
+bash scripts/release-all.sh 5.1.6 --all --publish
 ```
 
 The script builds Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64 installers on native GitHub runners, then publishes them with `SHA256SUMS.txt`. See [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).

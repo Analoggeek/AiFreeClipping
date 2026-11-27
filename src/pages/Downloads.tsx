@@ -61,8 +61,25 @@ export default function Downloads({ notify, openClipper }: PageProps) {
     return pollJob(jobId, (job) => {
       if (job.status === 'done') { refresh(); setInfo(null); }
       if (job.status === 'error') notify(job.error || job.message);
+      if (job.status === 'cancelled') notify('Download cancelled.');
     });
   }, [jobId, notify, refresh]);
+
+  const removeVideo = async (item: Media) => {
+    const detail = item.source_url
+      ? 'This removes the video from the library and deletes its downloaded source file unless another library item, rendered clip, or saved project still uses it.'
+      : 'This removes the video from the library. The original imported file will stay on disk.';
+    if (!window.confirm(`Remove “${item.title}”?\n\n${detail}`)) return;
+    try {
+      const result = await api.deleteMedia(item.id, true);
+      await refresh();
+      notify(result.file_error
+        ? `Removed from library, but could not delete the source file: ${result.file_error}`
+        : result.file_deleted ? 'Video and downloaded source file deleted.'
+          : result.file_kept_shared ? 'Video removed from the library; its source file was kept because another library item, rendered clip, or saved project uses it.'
+            : 'Video removed from the library.');
+    } catch (error) { notify(String(error)); }
+  };
 
   return (
     <div className="stack">
@@ -122,7 +139,7 @@ export default function Downloads({ notify, openClipper }: PageProps) {
                 <div className="media-actions">
                   <button className="chip-btn" onClick={(event) => { event.stopPropagation(); openClipper([item.id]); }}><Scissors size={14} /> Clip</button>
                   <button className="icon-btn" title="Open file" onClick={(event) => { event.stopPropagation(); window.desktop?.openPath(item.path); }}><ExternalLink size={15} /></button>
-                  <button className="icon-btn danger" title="Remove from library" onClick={(event) => { event.stopPropagation(); api.deleteMedia(item.id).then(refresh).catch((error) => notify(String(error))); }}><Trash2 size={15} /></button>
+                  <button className="icon-btn danger" title="Remove video" aria-label={`Remove ${item.title}`} onClick={(event) => { event.stopPropagation(); void removeVideo(item); }}><Trash2 size={15} /></button>
                 </div>
               </article>
             ))}

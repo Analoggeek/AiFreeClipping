@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cpu, ExternalLink, FolderOpen, HardDrive, KeyRound, ShieldCheck, Sparkles, Youtube } from 'lucide-react';
+import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, ShieldCheck, Sparkles, Trash2, Youtube } from 'lucide-react';
 import { api } from '../api';
 import { Panel } from '../components/common';
 import logo from '../../brand/logo.svg';
@@ -24,8 +24,19 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
   }, []);
 
   const save = async () => {
-    try { await api.saveSettings(values); notify('Settings saved.'); }
-    catch (error) { notify(String(error)); }
+    try {
+      const result = await api.saveSettings(values);
+      setValues(result.values);
+      notify('Settings saved.');
+    } catch (error) { notify(String(error)); }
+  };
+
+  const chooseWatermark = async () => {
+    if (!window.desktop?.selectFiles) { notify('Choose a watermark image in the desktop app.'); return; }
+    const paths = await window.desktop.selectFiles([{ name: 'Channel logo', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]);
+    if (!paths.length) return;
+    setValues((current) => ({ ...current, watermark_path: paths[0] }));
+    notify('Logo selected. Save settings to use it on new exports.');
   };
 
   return (
@@ -41,6 +52,20 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
               </label>
             );
           })}
+        </div>
+        <div className="watermark-settings">
+          <div className="watermark-settings-copy">
+            <strong>Optional channel watermark</strong>
+            <small>No logo is added by default. Choose a transparent PNG or another image to brand future clip, batch and timeline exports.</small>
+          </div>
+          <div className="watermark-settings-controls">
+            <div className="input-row watermark-path" title={values.watermark_path || 'No watermark selected'}>
+              <ImagePlus size={15} />
+              <input readOnly value={values.watermark_path || ''} placeholder="No watermark — exports stay unbranded" aria-label="Selected watermark image path" />
+            </div>
+            <button className="chip-btn" onClick={() => void chooseWatermark()}><ImagePlus size={14} /> Choose logo</button>
+            <button className="chip-btn" disabled={!values.watermark_path} onClick={() => setValues((current) => ({ ...current, watermark_path: '' }))}><Trash2 size={14} /> Remove</button>
+          </div>
         </div>
       </Panel>
 

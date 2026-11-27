@@ -33,13 +33,14 @@ export const api = {
   hardware: () => request<{ ok: boolean } & HardwareInfo>('/api/system/hardware'),
   jobs: () => request<{ jobs: Job[] }>('/api/jobs'),
   job: (id: string) => request<Job>(`/api/jobs/${id}`),
+  cancelJob: (id: string) => request<{ ok: boolean; cancelled: boolean }>(`/api/jobs/${id}/cancel`, { method: 'POST' }),
   folders: () => request<{ folders: Record<string, string> }>('/api/folders'),
 
   inspect: (url: string, mode = 'auto') => post<{ info: Record<string, unknown> }>('/api/downloads/inspect', { url, mode }),
   download: (payload: Record<string, unknown>) => post<{ job_id: string }>('/api/downloads', payload),
   media: () => request<{ media: Media[] }>('/api/media'),
   importMedia: (paths: string[]) => post<{ media: Media[] }>('/api/media/import', { paths }),
-  deleteMedia: (id: string) => request<{ ok: boolean }>(`/api/media/${id}`, { method: 'DELETE' }),
+  deleteMedia: (id: string, deleteFile = true) => request<{ ok: boolean; file_deleted: boolean; file_error?: string | null; file_kept_shared?: boolean }>(`/api/media/${id}?delete_file=${deleteFile}`, { method: 'DELETE' }),
   playlists: () => request<{ playlists: Array<{ id: string; title: string; url: string; items: unknown[] }> }>('/api/playlists'),
   playlist: (id: string) => request<{ playlist: Record<string, unknown>; media: Media[] }>(`/api/playlists/${id}`),
 
@@ -50,7 +51,8 @@ export const api = {
   patchClip: (id: string, patch: Partial<Candidate>) => request<{ clip: Candidate }>(`/api/clips/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   applyEffects: (clip_ids: string[], effects: Record<string, unknown>) =>
     post<{ ok: boolean; changed: number }>('/api/clips/apply-effects', { clip_ids, effects }),
-  deleteClip: (id: string) => request<{ ok: boolean }>(`/api/clips/${id}`, { method: 'DELETE' }),
+  deleteClip: (id: string) => request<{ ok: boolean; file_deleted: boolean }>(`/api/clips/${id}`, { method: 'DELETE' }),
+  deleteClips: (clip_ids: string[]) => request<{ ok: boolean; deleted: number; files_deleted: number }>('/api/clips/bulk-delete', { method: 'DELETE', body: JSON.stringify({ clip_ids }) }),
   renderClip: (id: string, payload: Record<string, unknown>) => post<{ job_id: string }>(`/api/clips/${id}/render`, payload),
   exportBatch: (clip_ids: string[]) => post<{ job_id: string }>('/api/exports/batch', { clip_ids }),
 
@@ -71,6 +73,7 @@ export const api = {
   sfxPath: (name: string) => request<{ path: string }>(`/api/sfx/${name}/path`),
 
   models: () => request<{ models: ModelInfo[] }>('/api/models'),
+  selectComfyCheckpoint: (path: string) => post<{ checkpoint: { filename: string; path: string; installed: boolean } }>('/api/models/comfyui-checkpoint', { path }),
   installModel: (model_id: string) => post<{ job_id: string }>('/api/models/install', { model_id }),
   installRecommendedModels: () => post<{ job_id: string }>('/api/models/install-recommended', {}),
   autoSetupModels: () => post<{ job_id: string; skipped?: boolean; message?: string }>('/api/models/auto-setup', {}),

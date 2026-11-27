@@ -1,5 +1,17 @@
 # Roadmap
 
+## Shipped in v5.1.6
+
+- Live crop preview and source-aspect-aware drag regions applied to clip and timeline renders
+- Generated-clip list in the Editor with click-to-add timeline workflow
+- Explicit download removal with protection for imported, duplicate and project-referenced sources
+- Existing SDXL checkpoint selection and configurable ComfyUI checkpoint folder
+- Neutral-contrast Rec.709 H.264/AAC MP4s, with optional custom channel watermark and no default app logo
+- Explicit MP4 download filenames and QuickTime-friendly output metadata
+- Publish Select all, rendered-only selection, bulk export and shared-file-safe deletion
+- Scrollable borderless Operations widget with cancellation and dismissal controls
+- Cancellation cleanup, unique export names and regression tests for these failure paths
+
 ## Shipped in v5.1.4
 
 - Crash-proof Settings view and normalized folder responses

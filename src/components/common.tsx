@@ -55,7 +55,7 @@ export function JobTracker({ jobId, label, onDone }: { jobId: string | null; lab
     });
   }, [jobId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!jobId) return null;
-  const icon = job?.status === 'done' ? <CheckCircle2 size={16} /> : job?.status === 'error' ? <CircleAlert size={16} /> : <LoaderCircle size={16} className="spin" />;
+  const icon = job?.status === 'done' ? <CheckCircle2 size={16} /> : job?.status === 'error' ? <CircleAlert size={16} /> : job?.status === 'cancelled' ? <X size={16} /> : <LoaderCircle size={16} className="spin" />;
   return (
     <div className="job-tracker">
       <div className="job-tracker-head">{icon}<strong>{label}</strong><span>{job?.message || 'Starting…'}</span></div>
@@ -78,20 +78,43 @@ export function useJobs() {
 }
 
 export function JobProgressList({ jobs }: { jobs: Job[] }) {
-  const recent = [...jobs]
-    .sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')))
-    .slice(0, 3);
-  if (!recent.length) return null;
+  const [dismissed, setDismissed] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('aifreeclip.dismissedJobs') || '[]') as string[]; }
+    catch { return []; }
+  });
+  const visible = [...jobs]
+    .filter((job) => !dismissed.includes(job.id))
+    .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
+  const active = visible.filter((job) => job.status === 'running' || job.status === 'queued').length;
+  if (!visible.length) return null;
+
+  const saveDismissed = (ids: string[]) => {
+    const next = [...new Set([...dismissed, ...ids])];
+    setDismissed(next);
+    try { localStorage.setItem('aifreeclip.dismissedJobs', JSON.stringify(next)); } catch { /* private browsing */ }
+  };
+  const closeJob = (job: Job) => {
+    if (job.status === 'running' || job.status === 'queued') void api.cancelJob(job.id).catch(() => undefined);
+    saveDismissed([job.id]);
+  };
+  const clearFinished = () => saveDismissed(visible.filter((job) => ['done', 'error', 'cancelled'].includes(job.status)).map((job) => job.id));
+
   return (
-    <div className="sidebar-jobs">
-      <span className="nav-label">Operations</span>
-      {recent.map((job) => (
-        <div className={`sidebar-job job-${job.status}`} key={job.id}>
-          <div><strong>{job.kind || 'Working'}</strong><small>{job.message || 'Starting…'}</small></div>
-          <span>{job.status === 'done' ? 'Done' : job.status === 'error' ? 'Failed' : `${Math.round(job.progress || 0)}%`}</span>
-          <Progress value={job.status === 'done' ? 100 : job.progress || 0} />
-        </div>
-      ))}
+    <div className="sidebar-jobs" aria-label="Background operations">
+      <div className="sidebar-jobs-head">
+        <span className="nav-label">Operations · {active} active · {visible.length} total</span>
+        {visible.some((job) => ['done', 'error', 'cancelled'].includes(job.status)) && <button className="sidebar-jobs-clear" onClick={clearFinished}>Clear done</button>}
+      </div>
+      <div className="sidebar-job-list">
+        {visible.map((job) => (
+          <div className={`sidebar-job job-${job.status}`} key={job.id}>
+            <div className="sidebar-job-copy"><strong>{job.kind || 'Working'}</strong><small title={job.message}>{job.message || 'Starting…'}</small></div>
+            <span>{job.status === 'done' ? 'Done' : job.status === 'error' ? 'Failed' : job.status === 'cancelled' ? 'Stopped' : `${Math.round(job.progress || 0)}%`}</span>
+            <button className="sidebar-job-close" aria-label={`${job.status === 'running' || job.status === 'queued' ? 'Cancel' : 'Close'} ${job.kind || 'operation'}`} title={job.status === 'running' || job.status === 'queued' ? 'Cancel and close operation' : 'Close operation'} onClick={() => closeJob(job)}><X size={12} /></button>
+            <Progress value={job.status === 'done' ? 100 : job.progress || 0} />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

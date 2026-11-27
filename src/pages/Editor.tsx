@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Captions, Check, Download, Film, Image as ImageIcon, ImagePlus, Layers3, LoaderCircle,
+  Captions, Check, Clapperboard, Download, Film, Image as ImageIcon, ImagePlus, Layers3, LoaderCircle,
   Mic2, Music2, Pause, Play, Plus, Save, Search, SkipBack, SkipForward, Sparkles,
   Split, Trash2, Volume2, WandSparkles,
 } from 'lucide-react';
@@ -11,8 +11,9 @@ import type { PageProps } from '../App';
 
 type TrackKey = 'video' | 'captions' | 'stickers' | 'audio';
 type AnyItem = {
-  id?: string; path?: string; text?: string; sourceStart?: number; duration?: number;
+  id?: string; clip_id?: string; path?: string; text?: string; sourceStart?: number; duration?: number;
   start?: number; end?: number; volume?: number; x?: number; y?: number; label?: string;
+  region?: Candidate['region']; regions?: Candidate['regions'];
 };
 type Selection = { track: TrackKey; index: number } | null;
 
@@ -31,7 +32,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   const [playing, setPlaying] = useState(false);
   const [media, setMedia] = useState<Media[]>([]);
   const [newMedia, setNewMedia] = useState('');
-  const [tab, setTab] = useState<'media' | 'stock' | 'art' | 'sfx'>('media');
+  const [tab, setTab] = useState<'media' | 'clips' | 'stock' | 'art' | 'sfx'>('media');
   const [query, setQuery] = useState('');
   const [source, setSource] = useState('pexels');
   const [stock, setStock] = useState<Array<Record<string, string>>>([]);
@@ -61,6 +62,10 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
       setPlayhead(0);
     } catch (error) { notify(String(error)); }
   }, [notify]);
+
+  const refreshClips = useCallback(async () => {
+    try { setClips((await api.clips()).clips || []); } catch { /* keep editor usable offline */ }
+  }, []);
 
   useEffect(() => {
     api.media().then((result) => {
@@ -93,6 +98,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
         setBusy(false);
       }
       if (job.status === 'error') { notify(job.error || job.message); setBusy(false); }
+      if (job.status === 'cancelled') { notify('Operation cancelled.'); setBusy(false); }
     });
   }, [jobId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -101,23 +107,28 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     return pollJob(exportJob, (job) => {
       if (job.status === 'done' && job.result?.output) { setExportOutput(String(job.result.output)); notify('Export ready — download it from here.'); }
       if (job.status === 'error') notify(job.error || job.message);
+      if (job.status === 'cancelled') notify('Export cancelled.');
     });
   }, [exportJob, notify]);
 
   useEffect(() => {
-    api.clips().then((result) => setClips(result.clips || [])).catch(() => undefined);
-  }, [autoJob]);
+    void refreshClips();
+    const timer = window.setInterval(() => { void refreshClips(); }, 4000);
+    return () => window.clearInterval(timer);
+  }, [refreshClips]);
 
   useEffect(() => {
     if (!autoJob) return;
     return pollJob(autoJob, (job) => {
       if (job.status === 'done') {
-        void api.clips().then((result) => setClips(result.clips || [])).catch(() => undefined);
+        void refreshClips();
+        setAutoJob(null);
         notify('Automatic editing and rendering finished.');
       }
-      if (job.status === 'error') notify(job.error || job.message);
+      if (job.status === 'error') { setAutoJob(null); notify(job.error || job.message); }
+      if (job.status === 'cancelled') { setAutoJob(null); notify('Automatic editing cancelled.'); }
     });
-  }, [autoJob, notify]);
+  }, [autoJob, notify, refreshClips]);
 
   const runAutoEdit = async () => {
     const ids = clips.map((clip) => clip.id || '').filter(Boolean);
@@ -136,7 +147,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
         aspect: timeline.aspect, resolution: '1080p',
         caption_style: { preset: autoStyle },
         sfx: ['whoosh', 'pop'], speed: 1.04, brightness: 0.02,
-        contrast: 0.05, saturation: 1.08, blur_background: true,
+        contrast: 1.05, saturation: 1.08, blur_background: true,
         region: clip.region, regions: clip.regions,
       });
       setExportJob(result.job_id);
@@ -283,9 +294,39 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     } catch (error) { notify(String(error)); }
   };
 
-  const addMediaToTimeline = (item: Media) => {
-    addItem('video', { path: item.path, sourceStart: 0, duration: Math.min(20, Math.max(3, item.duration || 10)), label: item.title });
+  const addMediaToTimeline = async (item: Media) => {
+    if (!projectId) {
+      try {
+        const created = await api.createProject({ name: item.title, media_id: item.id });
+        setProjectId(created.project.id);
+        setProjectName(created.project.name);
+        setTimeline(created.project.timeline || emptyTimeline());
+      } catch (error) { notify(String(error)); return; }
+    } else {
+      addItem('video', { path: item.path, sourceStart: 0, duration: Math.min(30, Math.max(3, item.duration || 10)), label: item.title });
+    }
     notify(`${item.title} added to the timeline.`);
+  };
+
+  const addClipToTimeline = async (clip: Candidate) => {
+    if (!clip.id) { notify('This AI clip has no saved clip ID yet.'); return; }
+    const sourceMedia = media.find((item) => item.id === clip.media_id);
+    if (!sourceMedia) { notify('The source video for this clip is no longer in your library.'); return; }
+    if (!projectId) {
+      try {
+        const created = await api.createProject({ name: clip.title.slice(0, 60), clip_id: clip.id });
+        setProjectId(created.project.id);
+        setProjectName(created.project.name);
+        setTimeline(created.project.timeline || emptyTimeline());
+      } catch (error) { notify(String(error)); return; }
+    } else {
+      addItem('video', {
+        id: clip.id, clip_id: clip.id, path: sourceMedia.path,
+        sourceStart: clip.start, duration: Math.max(0.2, clip.end - clip.start),
+        label: clip.title, region: clip.region, regions: clip.regions,
+      });
+    }
+    notify(`“${clip.title}” added to the timeline.`);
   };
 
   useEffect(() => {
@@ -339,7 +380,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
       <div className="editor-body">
         <aside className="asset-panel">
           <div className="asset-tabs">
-            {([['media', Film, 'Media'], ['stock', Search, 'Stock'], ['art', WandSparkles, 'AI Art'], ['sfx', Music2, 'SFX']] as const).map(([id, Icon, label]) => (
+            {([['media', Film, 'Media'], ['clips', Clapperboard, 'Clips'], ['stock', Search, 'Stock'], ['art', WandSparkles, 'AI Art'], ['sfx', Music2, 'SFX']] as const).map(([id, Icon, label]) => (
               <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={15} />{label}</button>
             ))}
           </div>
@@ -365,6 +406,21 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
                   ))}
                 </div>
               </>
+            )}
+            {tab === 'clips' && (
+              <div className="asset-list">
+                <p className="hint">Your AI-picked clips refresh here automatically. Click one to add its source cut and focus crop to the timeline.</p>
+                {clips.length === 0 && <p className="hint">No AI clips yet. Run AI Clipper first; you can keep editing here while it works.</p>}
+                {clips.map((clip, index) => {
+                  const sourceMedia = media.find((item) => item.id === clip.media_id);
+                  return (
+                    <button key={clip.id || `${clip.media_id}-${index}`} className="asset-row" disabled={!sourceMedia || !clip.id} onClick={() => void addClipToTimeline(clip)}>
+                      {sourceMedia?.thumbnail ? <img src={mediaUrl(sourceMedia.thumbnail)} alt="" /> : <Clapperboard size={20} />}
+                      <span><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small><small>{clip.output ? 'Rendered MP4 · click to add source cut' : 'Click to add to timeline'}</small></span>
+                    </button>
+                  );
+                })}
+              </div>
             )}
             {tab === 'stock' && (
               <>
@@ -480,7 +536,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
               <button className="ghost-btn" onClick={removeSelected}><Trash2 size={15} /> Remove item</button>
             </div>
           )}
-          {exportOutput && <a className="primary block" href={mediaUrl('/media/file?path=' + encodeURIComponent(exportOutput))} download><Download size={16} /> Download exported MP4</a>}
+          {exportOutput && <a className="primary block" href={mediaUrl('/media/file?path=' + encodeURIComponent(exportOutput) + '&download=true')} download><Download size={16} /> Download exported MP4</a>}
           {exportJob && <JobTracker jobId={exportJob} label="Rendering project" />}
         </aside>
       </div>
@@ -503,7 +559,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
             <div className="auto-edit-clip" key={clip.id}>
               <div><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small></div>
               <button className="icon-btn" title="Render with auto edit" aria-label="Render with auto edit" onClick={() => void renderAutoClip(clip)}><Download size={14} /></button>
-              {clip.output && <a className="icon-btn" title="Download rendered MP4" aria-label="Download rendered MP4" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output))} download><Check size={14} /></a>}
+              {clip.output && <a className="icon-btn" title="Download rendered MP4" aria-label="Download rendered MP4" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output) + '&download=true')} download><Check size={14} /></a>}
             </div>
           ))}
         </div>
