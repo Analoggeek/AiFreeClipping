@@ -12,6 +12,23 @@ from ..config import DEFAULT_MODEL, env, ollama_host
 T = TypeVar("T", bound=BaseModel)
 
 
+def selected_model(explicit: str | None = None) -> str:
+    """Read the selected Ollama model from persistent settings after restart."""
+    if explicit:
+        return explicit
+    from ..db import db
+
+    # The editable Settings value is authoritative over the process environment,
+    # which may still contain a model activated earlier in this same session.
+    return (
+        db.get_setting("ollama_model", "")
+        or db.get_setting("active_llm", "")
+        or env("OLLAMA_MODEL")
+        or db.get_setting("OLLAMA_MODEL", "")
+        or DEFAULT_MODEL
+    )
+
+
 async def reachable() -> bool:
     try:
         async with httpx.AsyncClient(timeout=2.5) as client:
@@ -43,7 +60,7 @@ async def structured(
     Returns None (never raises) so the deterministic heuristics can take over.
     """
     payload = {
-        "model": model or env("OLLAMA_MODEL", DEFAULT_MODEL),
+        "model": selected_model(model),
         "stream": False,
         "format": schema.model_json_schema(),
         "options": {"temperature": temperature},

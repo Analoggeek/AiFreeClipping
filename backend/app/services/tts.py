@@ -17,10 +17,17 @@ async def synthesize(text: str, voice: str | None = None, out: Path | None = Non
         ) from exc
     from piper.download import get_voices  # type: ignore
 
-    voice_id = voice or env("PIPER_VOICE", DEFAULT_VOICE)
-    models_dir = CACHE / "piper"
-    models_dir.mkdir(parents=True, exist_ok=True)
+    from ..db import db
+
+    voice_id = voice or env("PIPER_VOICE") or db.get_setting("tts_voice", DEFAULT_VOICE) or DEFAULT_VOICE
+    models_root = Path(db.get_setting("models_folder", "") or CACHE).expanduser()
+    models_dir = models_root / "piper"
+    # Older installs kept Piper voices directly in the default cache directory.
+    legacy_dir = CACHE / "piper"
     onnx = models_dir / f"{voice_id}.onnx"
+    if not onnx.exists() and (legacy_dir / f"{voice_id}.onnx").exists():
+        models_dir, onnx = legacy_dir, legacy_dir / f"{voice_id}.onnx"
+    models_dir.mkdir(parents=True, exist_ok=True)
     if not onnx.exists():
         available = get_voices(str(models_dir))
         if voice_id not in available:

@@ -6,9 +6,35 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..config import env
+from ..config import CACHE, env
 
 _MODELS: dict[tuple, Any] = {}
+
+
+def _resolve_whisper_model(model: str | None = None) -> str:
+    """Resolve the selected model first, then use matching persisted local weights."""
+    from ..db import db
+
+    selected_setting = model or env("WHISPER_MODEL") or db.get_setting("whisper_model", "")
+    selected = selected_setting or "small"
+    selected_path = Path(selected).expanduser()
+    if selected_path.is_dir() and (selected_path / "model.bin").is_file():
+        return str(selected_path)
+    selected = selected.removeprefix("whisper-")
+
+    models_root = Path(db.get_setting("models_folder", "") or CACHE).expanduser()
+    hf_root = Path(env("HF_HOME", str(models_root / "huggingface"))).expanduser()
+    installed_path = hf_root / f"whisper-{selected}"
+    if installed_path.is_dir() and (installed_path / "model.bin").is_file():
+        return str(installed_path)
+
+    configured = env("WHISPER_MODEL_PATH") or db.get_setting("WHISPER_MODEL_PATH", "")
+    configured_path = Path(configured).expanduser() if configured else None
+    if configured_path and configured_path.is_dir() and (configured_path / "model.bin").is_file():
+        configured_model = configured_path.name.removeprefix("whisper-")
+        if not selected_setting or configured_model == selected:
+            return str(configured_path)
+    return selected
 
 
 def _load(size: str, device: str, compute: str):
@@ -31,10 +57,9 @@ async def transcribe(
     word_timestamps: bool = True,
     on_progress=None,
 ) -> dict[str, Any]:
-    # An installed local weight folder wins over the generic model name so the
-    # downloaded files are actually used instead of re-fetching from the cloud.
-    local_path = env("WHISPER_MODEL_PATH")
-    size = local_path if local_path and Path(local_path).exists() else (model or env("WHISPER_MODEL", "small"))
+    # Resolve activation from the persisted settings database as well as env,
+    # so a downloaded model remains selected after relaunching the desktop app.
+    size = _resolve_whisper_model(model)
     device = "cpu"
     compute = "int8"
     try:

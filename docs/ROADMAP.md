@@ -1,5 +1,15 @@
 # Roadmap
 
+## Shipped in v5.1.7
+
+- Shared crop/composition logic for accurate Editor/Clipper previews and renders
+- Source-quality defaults and configurable resolution/aspect across clip and batch exports
+- Date-organized export folders under the user's selected destination
+- Auto Edit fallbacks for missing sources and transcription errors, with saved captions and effects retained for batch export
+- Persisted local model/voice selections and local weights across app restarts
+- Branded splash screen and automatic dismissal for completed operations
+- No app watermark by default; user-configured channel logos remain optional
+
 ## Shipped in v5.1.6
 
 - Live crop preview and source-aspect-aware drag regions applied to clip and timeline renders

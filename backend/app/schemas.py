@@ -37,6 +37,7 @@ class AutoEditRequest(BaseModel):
     clip_ids: list[str]
     style: Literal["hype", "minimal", "premium"] = "hype"
     aspect: Literal["9:16", "1:1", "16:9"] = "9:16"
+    resolution: Literal["720p", "1080p", "source"] = "source"
 
 
 class MediaInfo(BaseModel):
@@ -102,7 +103,7 @@ class RenderRequest(BaseModel):
     clip_id: str | None = None
     output: str | None = None
     aspect: Literal["9:16", "1:1", "16:9", "source"] = "9:16"
-    resolution: Literal["720p", "1080p", "source"] = "1080p"
+    resolution: Literal["720p", "1080p", "source"] = "source"
     caption_style: CaptionStyle = Field(default_factory=CaptionStyle)
     captions: list[dict[str, Any]] | None = None
     sticker: str | None = None
@@ -118,8 +119,10 @@ class RenderRequest(BaseModel):
     blur_background: bool = True
     watermark: bool = True
     hardware: bool = False
+    title: str | None = None
     region: dict[str, float] | None = None
     regions: list[dict[str, float]] = Field(default_factory=list)
+    region_layout: str | None = None
 
 
 class ProjectCreate(BaseModel):
@@ -138,14 +141,14 @@ class ExportRequest(BaseModel):
     project_id: str | None = None
     output: str | None = None
     aspect: str = "9:16"
-    resolution: str = "1080p"
+    resolution: str = "source"
     hardware: bool = False
 
 
 class ExportAllRequest(BaseModel):
     clip_ids: list[str]
     aspect: str = "9:16"
-    resolution: str = "1080p"
+    resolution: str = "source"
 
 
 class ApplyEffectsRequest(BaseModel):
