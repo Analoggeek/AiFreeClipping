@@ -1,5 +1,22 @@
 # Release notes
 
+## v5.2.1 — stale-media recovery during clip discovery
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.2.1-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/AI-Clipper-Pro-5.2.1-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.2.1-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/AI-Clipper-Pro-5.2.1-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/AI-Clipper-Pro-5.2.1-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/AI-Clipper-Pro-5.2.1-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/AI-Clipper-Pro-5.2.1-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/AI-Clipper-Pro-5.2.1-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.2.1-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/AI-Clipper-Pro-5.2.1-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.2.1-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/AI-Clipper-Pro-5.2.1-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.1/manifest.json)
+
+### Changes
+
+- **Stale media selection recovery:** the Clipper refreshes its selected IDs against the current library and checks again before analysis, so removing a video no longer leaves a dead selection that fails the job.
+- **Partial batch resilience:** clip discovery skips media that disappeared after selection, continues with available videos, and reports a warning. If none remain, it returns a clear refresh-and-select message instead of a raw missing-ID error.
+
 ## v5.2.0 — shot-aware subject tracking for portrait clips
 
 ### Download the installers

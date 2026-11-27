@@ -99,7 +99,7 @@
       const response = await fetch('https://api.github.com/repos/Analoggeek/AiFreeClipping/releases/latest');
       if (!response.ok) throw new Error('release lookup failed');
       const release = await response.json();
-      const tag = release.tag_name || 'v5.2.0';
+      const tag = release.tag_name || 'v5.2.1';
       const versionLine = document.getElementById('version-line');
       if (versionLine) {
         versionLine.textContent = `Latest release ${tag} — direct installer links below (GitHub keeps binaries in the collapsible Assets panel). Includes the app, Python engine and FFmpeg; models install inside the app.`;
@@ -114,7 +114,7 @@
         }
       });
     } catch (_) {
-      // Static fallback links point straight to the latest 5.2.0 installer files.
+      // Static fallback links point straight to the latest 5.2.1 installer files.
     }
   })();
 })();

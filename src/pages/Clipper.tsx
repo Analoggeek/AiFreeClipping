@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   ArrowLeft, ArrowRight, BoxSelect, Check, Clapperboard, Copy, Cpu, Download, Film, ImagePlus,
   LoaderCircle, WandSparkles, Pause, Play, Plus, Scissors, Send, Sparkles, Volume2,
@@ -12,7 +12,10 @@ import type { PageProps } from '../App';
 type Box = { x: number; y: number; w: number; h: number };
 type RegionItem = { id: string; label: string; box: Box; color: string };
 type RegionLayout = { preset: string; boxes: RegionItem[] };
-type Props = PageProps & { mediaSelection: string[]; setMediaSelection: (ids: string[]) => void };
+type Props = PageProps & {
+  mediaSelection: string[];
+  setMediaSelection: Dispatch<SetStateAction<string[]>>;
+};
 
 const STEPS = ['Select videos', 'Mark region', 'Viral settings', 'AI results'];
 
@@ -73,9 +76,13 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   const cropCanvasRef = useRef<HTMLCanvasElement>(null);
 
   const refresh = useCallback(() => {
-    api.media().then((result) => setMedia(result.media)).catch(() => undefined);
+    api.media().then((result) => {
+      setMedia(result.media);
+      const available = new Set(result.media.map((item) => item.id));
+      setMediaSelection((current) => current.filter((id) => available.has(id)));
+    }).catch(() => undefined);
     api.clips().then((result) => setCandidates(result.clips)).catch(() => undefined);
-  }, []);
+  }, [setMediaSelection]);
   useEffect(refresh, [refresh]);
 
   const selectedMedia = media.filter((item) => mediaSelection.includes(item.id));
@@ -192,12 +199,28 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   };
 
   const findMoments = async () => {
-    if (!mediaSelection.length) { notify('Select at least one video first.'); return; }
+    const requestedIds = [...new Set(mediaSelection)];
+    if (!requestedIds.length) { notify('Select at least one video first.'); return; }
     setBusy(true);
     try {
+      // Refresh before starting so selections left behind after a library delete
+      // cannot submit an ID that no longer exists in the local database.
+      const latest = await api.media();
+      setMedia(latest.media);
+      const available = new Set(latest.media.map((item) => item.id));
+      const validIds = requestedIds.filter((id) => available.has(id));
+      const missingCount = requestedIds.length - validIds.length;
+      setMediaSelection(validIds);
+      if (!validIds.length) {
+        notify('The selected video is no longer in your library. Refresh and select a video again.');
+        return;
+      }
+      if (missingCount) {
+        notify(`${missingCount} unavailable selection(s) skipped; analyzing ${validIds.length} available video(s).`);
+      }
       const result = await api.propose({
-        media_ids: mediaSelection,
-        regions: mediaSelection.map((id) => {
+        media_ids: validIds,
+        regions: validIds.map((id) => {
           const selection = regions[id] || { preset: 'full', boxes: [] };
           return {
             media_id: id,
@@ -217,13 +240,18 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     if (!jobId) return;
     return pollJob(jobId, (job) => {
       if (job.status === 'done') {
-        void api.clips().then((result) => setCandidates(result.clips));
-        notify('Viral moments are ready for review.');
+        refresh();
+        const warnings = Array.isArray(job.result?.warnings)
+          ? job.result.warnings.map((warning: unknown) => String(warning))
+          : [];
+        notify(warnings.length
+          ? `Viral moments are ready. ${warnings.join(' ')}`
+          : 'Viral moments are ready for review.');
       }
       if (job.status === 'error') notify(job.error || job.message);
       if (job.status === 'cancelled') notify('AI analysis cancelled.');
     });
-  }, [jobId, notify]);
+  }, [jobId, notify, refresh]);
 
   const effectPayload = (clip?: Candidate) => {
     const preset = ({ hype: 'hype', story: 'minimal', clean: 'minimal', cinematic: 'premium' } as const)[settings.style as 'hype' | 'story' | 'clean' | 'cinematic'] || 'hype';

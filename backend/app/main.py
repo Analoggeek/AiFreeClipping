@@ -329,7 +329,16 @@ def _region_boxes(region: RegionSelection) -> list[dict[str, float]]:
 async def propose_clips(payload: ClipProposalRequest):
     async def work(job_id: str, p: dict[str, Any]):
         req = ClipProposalRequest(**(p or {}))
-        rows = [media_row(mid) for mid in req.media_ids]
+        rows: list[dict[str, Any]] = []
+        missing_media_ids: list[str] = []
+        for media_id in dict.fromkeys(req.media_ids):
+            row = db.loads(db.one("SELECT * FROM media WHERE id=?", (media_id,)), "metadata")
+            if row:
+                rows.append(row)
+            else:
+                missing_media_ids.append(media_id)
+        if not rows:
+            raise ValueError("None of the selected videos are available in the library. Refresh and select a video again.")
         transcripts: dict[str, Any] = {}
         visions: dict[str, Any] = {}
         region_map: dict[str, list[dict[str, float]]] = {}
@@ -408,7 +417,11 @@ async def propose_clips(payload: ClipProposalRequest):
                     "metadata": dumps(candidate.model_dump()), "created_at": now(),
                 },
             )
-        return {"clips": [item.model_dump() for item in candidates]}
+        warnings = (
+            [f"{len(missing_media_ids)} selected video(s) were no longer in the library and were skipped."]
+            if missing_media_ids else []
+        )
+        return {"clips": [item.model_dump() for item in candidates], "warnings": warnings}
 
     return ok(job_id=jobs.run("clips", work, payload.model_dump()))
 

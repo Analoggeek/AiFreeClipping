@@ -1,5 +1,10 @@
 # Roadmap
 
+## Shipped in v5.2.1
+
+- Clipper removes stale media IDs from its selection when the library refreshes and revalidates before analysis
+- Clip proposal skips deleted IDs when other selected sources remain, with actionable warnings or a clear empty-selection error
+
 ## Shipped in v5.2.0
 
 - Optional full-frame portrait reframing from local ByteTrack detections, with steadier subject framing and cut-boundary snaps
