@@ -16,7 +16,8 @@ type AnyItem = {
   id?: string; clip_id?: string; path?: string; text?: string; sourceStart?: number; sourceDuration?: number; duration?: number;
   start?: number; end?: number; volume?: number; x?: number; y?: number; scale?: number; label?: string;
   region?: Candidate['region']; regions?: Candidate['regions']; region_layout?: string | null;
-  effects?: Record<string, unknown>; auto_edit?: boolean; auto_edit_clip_id?: string; kind?: string;
+  crop_path?: Candidate['crop_path']; effects?: Record<string, unknown>;
+  auto_edit?: boolean; auto_edit_clip_id?: string; kind?: string;
 };
 type Selection = { track: TrackKey; index: number } | null;
 type ImageOption = { path: string; url?: string; provider?: string };
@@ -455,6 +456,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
         id: clip.id, clip_id: clip.id, path: sourceMedia.path,
         sourceStart: clip.start, duration: Math.max(0.2, clip.end - clip.start),
         label: clip.title, region: clip.region, regions: clip.regions, region_layout: clip.region_layout,
+        crop_path: clip.crop_path || [],
       });
     }
     notify(`“${clip.title}” added to the timeline.`);
@@ -531,6 +533,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
         region: activeVideo.region,
         regions: activeVideo.regions,
         layout: activeVideo.region_layout,
+        cropPath: activeVideo.crop_path,
         fit: 'cover',
         brightness: Number(activeVideo.effects?.brightness ?? 0),
         contrast: Number(activeVideo.effects?.contrast ?? 1),

@@ -411,6 +411,7 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
             "transcript": "The creator lands an incredible final move.",
             "region": region_a, "regions": [region_a, region_b],
             "region_layout": "top-game-bottom-player",
+            "crop_path": [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]],
             "effects": {"music": str(music), "music_volume": 0.16},
         }),
         "created_at": now(),
@@ -451,11 +452,13 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
         assert recipe["source_start"] == 2.0 and recipe["source_duration"] == 6.0
         assert recipe["duration"] == 6.0 and recipe["region_layout"] == "top-game-bottom-player"
         assert recipe["regions"] == [region_a, region_b]
+        assert recipe["crop_path"] == [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]]
         assert recipe["captions"][0]["text"] == "The creator lands an incredible final move."
         assert [track["kind"] for track in recipe["audio"]] == ["music", "sfx", "sfx"]
         assert auto_options["resolution"] == "source"
         assert auto_options["title"] == "Creator's winning moment"
         assert auto_options["region_layout"] == "top-game-bottom-player"
+        assert auto_options["crop_path"] == [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]]
         assert auto_options["regions"] == [region_a, region_b]
         assert auto_options["captions"][0]["text"] == "The creator lands an incredible final move."
         assert auto_options["music"] == str(music)
@@ -478,6 +481,7 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
         assert batch_options["region"] == region_a
         assert batch_options["regions"] == [region_a, region_b]
         assert batch_options["region_layout"] == "top-game-bottom-player"
+        assert batch_options["crop_path"] == [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]]
         assert batch_options["title"] == "Creator's winning moment"
         assert batch_options["music"] == str(music)
         assert batch_options["watermark_path"] is None

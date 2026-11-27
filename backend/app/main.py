@@ -365,14 +365,20 @@ async def propose_clips(payload: ClipProposalRequest):
             transcripts[row["id"]] = result
             boxes = region_map.get(row["id"], [])
             expected_key = json.dumps(boxes, sort_keys=True)
-            cached_vision = last_analysis(row["id"], "vision")
-            if not cached_vision or cached_vision.get("region_key", json.dumps([], sort_keys=True)) != expected_key:
+            cached_vision = last_analysis(row["id"], "vision") or {}
+            wants_reframe = req.platform in {"shorts", "reels", "tiktok"} and not boxes
+            needs_reframe = wants_reframe and cached_vision.get("reframe_version") != vision.REFRAME_VERSION
+            if (
+                not cached_vision
+                or cached_vision.get("region_key", json.dumps([], sort_keys=True)) != expected_key
+                or needs_reframe
+            ):
                 try:
                     jobs.update(job_id, progress=base + 25, message=f"Analysing visuals of {row['title']}…")
                     vresult = await vision.analyze(
                         row["path"], None, 2.0, "auto",
                         on_progress=lambda pct, msg: jobs.update(job_id, progress=base + 25 + pct / 4, message=msg),
-                        regions=boxes,
+                        regions=boxes, track_reframe=wants_reframe,
                     )
                     vresult["layout"] = layout_map.get(row["id"])
                     save_analysis(row["id"], "vision", vresult)
@@ -593,6 +599,7 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
             options["region"] = focus
         options["regions"] = regions
         options["region_layout"] = req.region_layout or metadata.get("region_layout")
+        options["crop_path"] = metadata.get("crop_path") or []
         options["title"] = req.title or clip.get("title") or metadata.get("title")
         if req.captions is None:
             words: list[dict[str, Any]] = []
@@ -773,6 +780,7 @@ async def auto_edit(payload: AutoEditRequest):
                 "watermark": bool(watermark_path), "watermark_path": watermark_path,
                 "region": focus, "regions": regions,
                 "region_layout": metadata.get("region_layout"),
+                "crop_path": metadata.get("crop_path") or [],
             }
             output = render.export_path(f"{row.get('title') or 'clip'}_auto_edited_{clip_id}")
             jobs.update(job_id, progress=round(index / total * 100, 1), message=f"Applying edit to clip {index + 1}/{total}…")
@@ -806,7 +814,10 @@ async def auto_edit(payload: AutoEditRequest):
                     "scale": float(sticker_position.get("scale", 0.22)),
                     "label": "Auto Edit sticker",
                 })
-            metadata.update({"effects": options, "hardware": hardware_info(), "auto_edited": True})
+            metadata.update({
+                "effects": {key: value for key, value in options.items() if key != "crop_path"},
+                "hardware": hardware_info(), "auto_edited": True,
+            })
             db.update("clips", "id", clip_id, {"status": "auto_edited", "output": output, "metadata": dumps(metadata)})
             outputs.append({"clip_id": clip_id, "output": output})
             edits.append({
@@ -815,8 +826,10 @@ async def auto_edit(payload: AutoEditRequest):
                 "duration": timeline_duration, "title": title, "aspect": req.aspect,
                 "resolution": req.resolution, "region": focus, "regions": regions,
                 "region_layout": metadata.get("region_layout"),
+                "crop_path": metadata.get("crop_path") or [],
                 "captions": captions[:180] if req.captions else [],
-                "audio": auto_audio, "stickers": auto_stickers, "effects": options,
+                "audio": auto_audio, "stickers": auto_stickers,
+                "effects": {key: value for key, value in options.items() if key != "crop_path"},
             })
         return {"outputs": outputs, "edits": edits, "count": len(outputs), "warnings": warnings, "hardware": hardware_info()}
 
@@ -876,6 +889,7 @@ async def export_batch(payload: ExportAllRequest):
                     "region": effects.get("region") or metadata.get("region") or (regions[0] if regions else None),
                     "regions": regions,
                     "region_layout": effects.get("region_layout") or metadata.get("region_layout"),
+                    "crop_path": metadata.get("crop_path") or [],
                     "title": effects.get("title") or clip.get("title"),
                 }
                 await render.render_clip(
@@ -934,6 +948,7 @@ def create_project(payload: ProjectCreate):
                 "label": clip.get("title") or media.get("title", "Clip"),
                 "region": clip_metadata.get("region"), "regions": clip_metadata.get("regions") or [],
                 "region_layout": clip_metadata.get("region_layout"),
+                "crop_path": clip_metadata.get("crop_path") or [],
             }
         )
     elif payload.media_id:

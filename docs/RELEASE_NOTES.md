@@ -1,5 +1,24 @@
 # Release notes
 
+## v5.2.0 — shot-aware subject tracking for portrait clips
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.2.0-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/AI-Clipper-Pro-5.2.0-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.2.0-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/AI-Clipper-Pro-5.2.0-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/AI-Clipper-Pro-5.2.0-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/AI-Clipper-Pro-5.2.0-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/AI-Clipper-Pro-5.2.0-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/AI-Clipper-Pro-5.2.0-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.2.0-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/AI-Clipper-Pro-5.2.0-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.2.0-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/AI-Clipper-Pro-5.2.0-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.0/manifest.json)
+
+### Changes
+
+- **Smart portrait framing:** when a portrait clip uses the full frame and the local detector finds a subject, the crop follows one stable tracked subject, resists small detector jitter and snaps on scene cuts instead of panning across them. Manually marked regions and multi-panel layouts keep their existing crop behavior; sources without a usable track retain the existing render fallback.
+- **Consistent saved crop paths:** the analyzed path is clipped to each candidate's exact source-time window and carried through individual render, Auto Edit, batch export, editor preview and timeline export.
+- **Whole-video analysis sampling:** the bounded vision sample budget is distributed over long sources instead of stopping at the first 900 decoded frames.
+- **No interface redesign:** the existing Clipper, region selection and Editor workflows remain in place.
+
 ## v5.1.8 — dependable editor playback, editable Auto Edit and explicit AI art
 
 ### Download the installers

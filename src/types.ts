@@ -37,6 +37,7 @@ export type Candidate = {
   region?: { x: number; y: number; w: number; h: number } | null;
   regions?: Array<{ x: number; y: number; w: number; h: number }>;
   region_layout?: string | null;
+  crop_path?: Array<[number, number]>;
   id?: string;
   output?: string | null;
   effects?: Record<string, unknown>;
@@ -92,7 +93,8 @@ export type VideoItem = {
   id?: string; clip_id?: string; path: string; sourceStart: number; duration: number; sourceDuration?: number;
   label?: string; region?: { x: number; y: number; w: number; h: number } | null;
   regions?: Array<{ x: number; y: number; w: number; h: number }>;
-  region_layout?: string | null; effects?: Record<string, unknown>; auto_edit?: boolean;
+  region_layout?: string | null; crop_path?: Array<[number, number]>;
+  effects?: Record<string, unknown>; auto_edit?: boolean;
 };
 export type CaptionItem = {
   text: string; start: number; end: number; kind?: 'title' | 'caption'; auto_edit_clip_id?: string;
@@ -130,6 +132,7 @@ export type AutoEditTimelineEdit = {
   region?: VideoItem['region'];
   regions?: VideoItem['regions'];
   region_layout?: string | null;
+  crop_path?: VideoItem['crop_path'];
   captions: Array<{ text?: string; word?: string; start: number; end: number; kind?: 'title' | 'caption' }>;
   audio: AudioItem[];
   stickers: StickerItem[];

@@ -46,6 +46,48 @@ class Candidate(BaseModel):
     region: dict[str, float] | None = None
     regions: list[dict[str, float]] = Field(default_factory=list)
     region_layout: str | None = None
+    crop_path: list[list[float]] = Field(default_factory=list)
+
+
+def _crop_path_window(vision: dict[str, Any] | None, start: float, end: float) -> list[list[float]]:
+    """Keep a clip-local slice of the source's subject path, including exact clip edges."""
+    raw = (vision or {}).get("crop_path") or []
+    points: list[tuple[float, float]] = []
+    for item in raw:
+        try:
+            t, x = float(item[0]), float(item[1])
+        except (IndexError, TypeError, ValueError, OverflowError):
+            continue
+        if math.isfinite(t) and math.isfinite(x):
+            points.append((t, max(0.0, min(1.0, x))))
+    points.sort(key=lambda item: item[0])
+    if not points or end <= start:
+        return []
+    compact: list[tuple[float, float]] = []
+    for point in points:
+        if compact and point[0] <= compact[-1][0]:
+            compact[-1] = point
+        else:
+            compact.append(point)
+    points = compact
+
+    def at(t: float) -> float:
+        if t <= points[0][0]:
+            return points[0][1]
+        if t >= points[-1][0]:
+            return points[-1][1]
+        for (t0, x0), (t1, x1) in zip(points, points[1:]):
+            if t0 <= t <= t1:
+                return x0 if t1 <= t0 else x0 + (x1 - x0) * (t - t0) / (t1 - t0)
+        return points[-1][1]
+
+    window = [[round(start, 6), round(at(start), 6)]]
+    window.extend(
+        [round(t, 6), round(x, 6)]
+        for t, x in points if start < t < end
+    )
+    window.append([round(end, 6), round(at(end), 6)])
+    return window
 
 
 def _bins(duration: float, step: float = 0.5) -> list[float]:
@@ -191,13 +233,18 @@ def propose(
                 reasons = list(reasons) or ["steady engagement"]
                 if focus_boxes:
                     reasons.append("focused on your player/gameplay regions")
+                crop_path = (
+                    _crop_path_window(visions.get(media_id), begin, stop)
+                    if platform != "landscape" and not focus_boxes else []
+                )
+                display_reasons = reasons + (["portrait framing follows a tracked subject"] if crop_path else [])
                 candidates.append(
                     Candidate(
                         media_id=media_id,
                         start=round(begin, 2),
                         end=round(stop, 2),
                         score=round(score * (1 + min(len(reasons), 3) * 0.02), 2),
-                        reasons=reasons,
+                        reasons=display_reasons,
                         title=title,
                         hook=hook[:140],
                         hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
@@ -205,6 +252,7 @@ def propose(
                         region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
                         regions=focus_boxes,
                         region_layout=(layouts or {}).get(media_id),
+                        crop_path=crop_path,
                     )
                 )
                 if len(candidates) >= count * 4:
@@ -230,6 +278,12 @@ def propose(
             focus_boxes = (regions or {}).get(media_id) or []
             if focus_boxes:
                 chosen_reasons.append("focused on your player/gameplay regions")
+            crop_path = (
+                _crop_path_window(visions.get(media_id), begin, stop)
+                if platform != "landscape" and not focus_boxes else []
+            )
+            if crop_path:
+                chosen_reasons.append("portrait framing follows a tracked subject")
             candidates.append(Candidate(
                 media_id=media_id, start=round(begin, 2), end=round(stop, 2),
                 score=round(score, 2), reasons=chosen_reasons, title=title,
@@ -237,6 +291,7 @@ def propose(
                 transcript=transcript_text[:600],
                 region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
                 regions=focus_boxes, region_layout=(layouts or {}).get(media_id),
+                crop_path=crop_path,
             ))
             if len(candidates) >= count:
                 break
