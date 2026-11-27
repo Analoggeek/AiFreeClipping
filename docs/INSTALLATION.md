@@ -24,17 +24,17 @@ downloads/  projects/  clips/  assets/  exports/  cache/  models/  db.sqlite3
 
 Set `AIFREECLIP_HOME` to relocate this folder.
 
-## First-run model pack (online once)
+## First-run hardware-matched model setup (online once)
 
-Open **Local Models** in the app and install, in order:
+On first launch, the app detects system RAM and GPU memory, then offers or automatically starts the recommended offline set:
 
-1. **Whisper Small** — captions + transcript-driven scoring. Use Medium/Large v3 for multilingual accuracy.
-2. **Gemma 2 7B** via Ollama — titles/hashtags/reranking. On 8 GB machines choose Gemma 3 4B.
-3. **YOLO11 Nano or YOLOX Nano** — player/gameplay activity with ByteTrack.
-4. **SDXL checkpoint** (optional) — place `sd_xl_base_1.0.safetensors` in `~/.AiFreeClipping/models/checkpoints`, run ComfyUI on port 8188.
-5. **Piper voice** (optional) — offline narration.
+1. **Whisper Small or Medium** — word-timed captions and transcript-driven scoring. Medium is selected from 16 GB RAM for stronger multilingual accuracy; Small keeps low-memory systems lighter.
+2. **Gemma 3 4B, Gemma 2 7B or Gemma 3 12B** — the local writing/reranking model is sized to the available RAM and accelerator. The app downloads and starts Ollama when needed.
+3. **YOLOX Nano ONNX** — a compact detector for player/gameplay tracking with ByteTrack.
 
-Ollama must be installed and running for Gemma. The Model page's install button calls Ollama's `POST /api/pull`; once pulled, no further network access is needed.
+Open **Local Models** to review the per-model recommendation or install it again. SDXL/ComfyUI and Piper remain optional to avoid large or unrelated downloads; an existing SDXL checkpoint can be selected from its current folder.
+
+The initial download needs internet access. Once the weights are installed, the local analysis, rendering and editing pipeline can work offline; cloud APIs and stock-media services remain optional.
 
 ## Fully offline machine
 

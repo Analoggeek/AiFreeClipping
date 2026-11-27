@@ -1,5 +1,13 @@
 # Roadmap
 
+## Shipped in v5.2.3
+
+- Player/gameplay split proportions and clean/neon/double/none outlines shared across browser composition preview and FFmpeg renders
+- Transcript-grounded, user-editable social captions and title hooks, with four selectable burned-in caption styles
+- Per-clip composition, caption and visual settings retained in batch and timeline export paths
+- Persistent day/night theme, in-video Editor playhead overlay and app-icon front-screen branding
+- RAM/GPU-memory-aware Whisper and Gemma recommendations; compact YOLOX remains enabled and SDXL is no longer part of automatic setup
+
 ## Shipped in v5.2.2
 
 - Editor asset panel now contains only Clips and Media, with Stock, AI Art and SFX shortcuts removed

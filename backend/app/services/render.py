@@ -370,8 +370,78 @@ _COMPOSITE_LAYOUTS = {
 
 
 def _even_pair(total: int, fraction: float) -> tuple[int, int]:
-    first = max(2, min(total - 2, int(round(total * fraction / 2)) * 2))
+    safe_fraction = max(0.25, min(0.75, float(fraction)))
+    first = max(2, min(total - 2, int(round(total * safe_fraction / 2)) * 2))
     return first, total - first
+
+
+def _append_outline(
+    filters: list[str],
+    input_label: str,
+    style: str | None,
+    width: int,
+    height: int,
+    prefix: str,
+    *,
+    split_axis: str | None = None,
+    split_at: int | None = None,
+    rect: tuple[int, int, int, int] | None = None,
+) -> str:
+    """Add matching panel outlines to a rendered split or picture-in-picture frame."""
+    if style not in {"clean", "neon", "double"}:
+        return input_label
+    line = max(2, int(round(min(width, height) / 240)))
+    current = input_label
+    sequence = 0
+
+    def add(expression: str) -> None:
+        nonlocal current, sequence
+        label = f"{prefix}_outline{sequence}"
+        filters.append(f"[{current}]{expression}[{label}]")
+        current = label
+        sequence += 1
+
+    x, y, box_width, box_height = rect or (0, 0, width, height)
+
+    def box_expression(color: str, thickness: int, inset: int = 0) -> str:
+        box_x = x + inset
+        box_y = y + inset
+        box_w = max(2, box_width - inset * 2)
+        box_h = max(2, box_height - inset * 2)
+        return f"drawbox=x={box_x}:y={box_y}:w={box_w}:h={box_h}:color={color}:t={thickness}"
+
+    def seam_expression(color: str, thickness: int, offset: int = 0) -> str | None:
+        if split_axis not in {"vertical", "horizontal"} or split_at is None:
+            return None
+        if split_axis == "vertical":
+            top = max(0, min(height - thickness, split_at + offset - thickness // 2))
+            return f"drawbox=x=0:y={top}:w={width}:h={thickness}:color={color}:t=fill"
+        left = max(0, min(width - thickness, split_at + offset - thickness // 2))
+        return f"drawbox=x={left}:y=0:w={thickness}:h={height}:color={color}:t=fill"
+
+    if style == "neon":
+        glow = line * 3
+        add(box_expression("0x22D3EE@0.34", glow))
+        seam = seam_expression("0x22D3EE@0.34", glow)
+        if seam:
+            add(seam)
+        add(box_expression("0x22D3EE@0.98", line))
+        seam = seam_expression("0x22D3EE@0.98", line)
+        if seam:
+            add(seam)
+    elif style == "double":
+        add(box_expression("white@0.96", line))
+        add(box_expression("white@0.96", line, inset=line * 3))
+        for offset in (-line * 2, line * 2):
+            seam = seam_expression("white@0.96", line, offset)
+            if seam:
+                add(seam)
+    else:
+        add(box_expression("white@0.94", line))
+        seam = seam_expression("white@0.94", line)
+        if seam:
+            add(seam)
+    return current
 
 
 def _compose_regions(
@@ -382,6 +452,8 @@ def _compose_regions(
     output_width: int,
     output_height: int,
     prefix: str,
+    split_ratio: float | None = None,
+    outline_style: str | None = "clean",
 ) -> tuple[list[str], str] | None:
     """Create a deterministic FFmpeg composite for the multi-region presets.
 
@@ -392,12 +464,19 @@ def _compose_regions(
     selected = [region for region in (regions or []) if isinstance(region, dict)]
     if layout in _COMPOSITE_LAYOUTS and len(selected) >= 2:
         axis, fractions = _COMPOSITE_LAYOUTS[layout]
+        try:
+            requested_ratio = float(split_ratio) if split_ratio is not None else fractions[0]
+        except (TypeError, ValueError, OverflowError):
+            requested_ratio = fractions[0]
+        if not math.isfinite(requested_ratio):
+            requested_ratio = fractions[0]
+        requested_ratio = max(0.25, min(0.75, requested_ratio))
         if axis == "vertical":
-            first_size, second_size = _even_pair(output_height, fractions[0])
+            first_size, second_size = _even_pair(output_height, requested_ratio)
             targets = [(output_width, first_size), (output_width, second_size)]
             stack = "vstack"
         else:
-            first_size, second_size = _even_pair(output_width, fractions[0])
+            first_size, second_size = _even_pair(output_width, requested_ratio)
             targets = [(first_size, output_height), (second_size, output_height)]
             stack = "hstack"
         source_labels = [f"{prefix}_src0", f"{prefix}_src1"]
@@ -416,6 +495,10 @@ def _compose_regions(
             panel_labels.append(f"[{label}]")
         result = f"{prefix}_composite"
         filters.append("".join(panel_labels) + f"{stack}=inputs=2[{result}]")
+        result = _append_outline(
+            filters, result, outline_style, output_width, output_height, prefix,
+            split_axis=axis, split_at=first_size,
+        )
         return filters, result
 
     if layout == "square-player-full-game" and len(selected) >= 2:
@@ -441,10 +524,13 @@ def _compose_regions(
         x = min(output_width - pip_size - 2, inset)
         y = min(output_height - pip_size - 2, inset)
         filters.append(
-            f"[{prefix}_game][{prefix}_pip]overlay=x={x}:y={y}:eval=init,"
-            f"drawbox=x={x}:y={y}:w={pip_size}:h={pip_size}:color=white@0.9:t=4[{prefix}_composite]"
+            f"[{prefix}_game][{prefix}_pip]overlay=x={x}:y={y}:eval=init[{prefix}_composite]"
         )
-        return filters, f"{prefix}_composite"
+        result = _append_outline(
+            filters, f"{prefix}_composite", outline_style, output_width, output_height,
+            prefix, rect=(x, y, pip_size, pip_size),
+        )
+        return filters, result
     return None
 
 
@@ -550,8 +636,10 @@ def build_clip_args(
         f"trim=start={start:.3f}:end={end:.3f}",
         f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30",
     ])
+    crop: str | None = None
     composed = _compose_regions(
-        "0:v", source_trim, regions, options.get("region_layout"), width, height, "clip"
+        "0:v", source_trim, regions, options.get("region_layout"), width, height, "clip",
+        options.get("split_ratio"), options.get("outline_style", "clean"),
     )
     if composed:
         filters, current = composed
@@ -588,6 +676,15 @@ def build_clip_args(
                 f"[0:v]{trim},scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,crop={width}:{height}[base]"
             )
             current = "base"
+        focus_box = _normalise_region(focus)
+        if crop and focus_box and any(
+            abs(actual - expected) > 1e-4
+            for actual, expected in zip(focus_box, (0.0, 0.0, 1.0, 1.0))
+        ):
+            current = _append_outline(
+                video_parts, current, options.get("outline_style", "clean"),
+                width, height, "clip_focus",
+            )
     eq_values = [
         f"brightness={float(options.get('brightness', 0)):.3f}",
         f"contrast={_normalise_contrast(options.get('contrast', 1)):.3f}",
@@ -780,7 +877,14 @@ async def render_timeline(
         )
         regions = item.get("regions") or []
         layout = item.get("region_layout")
-        composed = _compose_regions(f"{idx}:v", trim, regions, layout, width, height, f"timeline{position}")
+        split_ratio = item.get("split_ratio")
+        if split_ratio is None:
+            split_ratio = effects.get("split_ratio")
+        outline_style = item.get("outline_style") or effects.get("outline_style") or "clean"
+        composed = _compose_regions(
+            f"{idx}:v", trim, regions, layout, width, height, f"timeline{position}",
+            split_ratio, outline_style,
+        )
         if composed:
             composed_filters, video_label = composed
             filters.extend(composed_filters)
@@ -806,6 +910,15 @@ async def render_timeline(
             )
             video_label = f"v{position}"
             filters.append(f"[{idx}:v]{video_filter}[{video_label}]")
+            focus_box = _normalise_region(focus)
+            if crop and focus_box and any(
+                abs(actual - expected) > 1e-4
+                for actual, expected in zip(focus_box, (0.0, 0.0, 1.0, 1.0))
+            ):
+                video_label = _append_outline(
+                    filters, video_label, outline_style, width, height,
+                    f"timeline{position}_focus",
+                )
         try:
             brightness = float(effects.get("brightness", 0))
             saturation = float(effects.get("saturation", 1))

@@ -16,6 +16,7 @@ type AnyItem = {
   id?: string; clip_id?: string; path?: string; text?: string; sourceStart?: number; sourceDuration?: number; duration?: number;
   start?: number; end?: number; volume?: number; x?: number; y?: number; scale?: number; label?: string;
   region?: Candidate['region']; regions?: Candidate['regions']; region_layout?: string | null;
+  split_ratio?: number | null; outline_style?: Candidate['outline_style'];
   crop_path?: Candidate['crop_path']; effects?: Record<string, unknown>;
   auto_edit?: boolean; auto_edit_clip_id?: string; kind?: string;
 };
@@ -457,6 +458,8 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       region: clip.region,
       regions: clip.regions,
       region_layout: clip.region_layout,
+      split_ratio: clip.split_ratio,
+      outline_style: clip.outline_style,
       crop_path: clip.crop_path || [],
     };
     if (!projectId) {
@@ -546,6 +549,8 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
         region: activeVideo.region,
         regions: activeVideo.regions,
         layout: activeVideo.region_layout,
+        splitRatio: activeVideo.split_ratio ?? Number(activeVideo.effects?.split_ratio),
+        outlineStyle: activeVideo.outline_style || String(activeVideo.effects?.outline_style || 'clean') as 'none' | 'clean' | 'neon' | 'double',
         cropPath: activeVideo.crop_path,
         fit: 'cover',
         brightness: Number(activeVideo.effects?.brightness ?? 0),
@@ -669,7 +674,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                 <option value="source">Source quality</option><option value="1080p">1080p</option><option value="720p">720p</option>
               </select>
             </div>
-            <span className="stage-time">{formatClock(playhead)} / {formatClock(total)}</span>
           </div>
           <div className={`stage-frame aspect-${timeline.aspect.replace(':', '-')}`}>
             <canvas ref={stageCanvasRef} className="stage-video-canvas" aria-label="Rendered composition preview" />
@@ -723,6 +727,9 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                 alt="sticker"
               />
             ))}
+            <div className="stage-overlay-time" aria-label={`Playhead ${formatClock(playhead)} of ${formatClock(total)}`}>
+              <span>{formatClock(playhead)}</span><i>/</i><span>{formatClock(total)}</span>
+            </div>
           </div>
           <div className="stage-controls">
             <button className="icon-btn" title="Jump to start" aria-label="Jump to start" onClick={() => seekTo(0)}><SkipBack size={17} /></button>
@@ -739,7 +746,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
             >{playing ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button>
             <button className="icon-btn" title="Forward 5 seconds" aria-label="Forward 5 seconds" onClick={() => seekTo(playhead + 5)}><SkipForward size={17} /></button>
             <button className="icon-btn" title="Jump to end" aria-label="Jump to end" onClick={() => seekTo(total)}><SkipForward size={17} /></button>
-            <span className="stage-time">{formatClock(playhead)} / {formatClock(total)}</span>
           </div>
           <p className="stage-hint">Shortcuts: Space play/pause · S split · Delete remove selected</p>
         </div>

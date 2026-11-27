@@ -1,5 +1,27 @@
 # Release notes
 
+## v5.2.3 — composition controls, editable captions and hardware-matched models
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.2.3-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/AI-Clipper-Pro-5.2.3-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.2.3-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/AI-Clipper-Pro-5.2.3-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/AI-Clipper-Pro-5.2.3-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/AI-Clipper-Pro-5.2.3-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/AI-Clipper-Pro-5.2.3-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/AI-Clipper-Pro-5.2.3-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.2.3-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/AI-Clipper-Pro-5.2.3-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.2.3-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/AI-Clipper-Pro-5.2.3-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.3/manifest.json)
+
+### Changes
+
+- **Adjustable compositions:** resize player/gameplay split panels and choose no, clean, neon or double outlines; the Clipper, Editor, individual renders, batch exports and timeline renderer share the same settings.
+- **Better clip copy:** transcripts seed concise social captions; an optional local Gemma pass refines titles and captions without changing source timing. Edit and save the hook/title and social caption on each result.
+- **Selectable burned-in captions:** choose hype, karaoke, minimal or premium styles. The selected style, color look and audio settings carry into individual and batch exports.
+- **Day/night theme:** toggle between dark and light appearance; the choice persists between launches.
+- **Editor timecode:** the playhead and total duration now sit inside the video frame, above transport controls.
+- **Front-screen branding and motion:** the overview uses the app icon, and the interface receives smoother theme and control transitions.
+- **Hardware-aware model setup:** recommends Whisper Small/Medium and Gemma 3 4B, Gemma 2 7B or Gemma 3 12B based on RAM and detected GPU memory; YOLOX Nano remains part of the compact local set, while SDXL stays optional.
+
 ## v5.2.2 — streamlined Editor and local media imports
 
 ### Download the installers

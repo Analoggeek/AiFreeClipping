@@ -49,13 +49,20 @@ export const api = {
   propose: (payload: Record<string, unknown>) => post<{ job_id: string }>('/api/clips/propose', payload),
   clips: () => request<{ clips: Candidate[] }>('/api/clips'),
   patchClip: (id: string, patch: Partial<Candidate>) => request<{ clip: Candidate }>(`/api/clips/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
-  applyEffects: (clip_ids: string[], effects: Record<string, unknown>) =>
-    post<{ ok: boolean; changed: number }>('/api/clips/apply-effects', { clip_ids, effects }),
+  applyEffects: (
+    clip_ids: string[], effects: Record<string, unknown>, effects_by_clip?: Record<string, Record<string, unknown>>,
+  ) => post<{ ok: boolean; changed: number }>('/api/clips/apply-effects', {
+    clip_ids, effects, effects_by_clip: effects_by_clip || {},
+  }),
   deleteClip: (id: string) => request<{ ok: boolean; file_deleted: boolean }>(`/api/clips/${id}`, { method: 'DELETE' }),
   deleteClips: (clip_ids: string[]) => request<{ ok: boolean; deleted: number; files_deleted: number }>('/api/clips/bulk-delete', { method: 'DELETE', body: JSON.stringify({ clip_ids }) }),
   renderClip: (id: string, payload: Record<string, unknown>) => post<{ job_id: string }>(`/api/clips/${id}/render`, payload),
-  exportBatch: (clip_ids: string[], aspect = '9:16', resolution = 'source') =>
-    post<{ job_id: string }>('/api/exports/batch', { clip_ids, aspect, resolution }),
+  exportBatch: (
+    clip_ids: string[], aspect = '9:16', resolution = 'source',
+    effects_by_clip?: Record<string, Record<string, unknown>>,
+  ) => post<{ job_id: string }>('/api/exports/batch', {
+    clip_ids, aspect, resolution, effects_by_clip: effects_by_clip || {},
+  }),
 
   projects: () => request<{ projects: Project[] }>('/api/projects'),
   createProject: (payload: Record<string, unknown>) => post<{ project: Project }>('/api/projects', payload),

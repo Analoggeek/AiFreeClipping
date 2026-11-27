@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Clapperboard, CloudDownload, Download, FolderOpen, LayoutDashboard, Library,
-  ListVideo, LoaderCircle, MonitorPlay, Package, PlugZap, Settings, Sparkles, UploadCloud, WifiOff,
+  ListVideo, LoaderCircle, Moon, MonitorPlay, Package, PlugZap, Settings, Sparkles, Sun, UploadCloud, WifiOff,
 } from 'lucide-react';
 import logo from '../brand/logo-mark-3d.svg';
 import { api, apiBase } from './api';
@@ -35,7 +35,8 @@ export default function App() {
   const [page, setPage] = useState<PageId>('overview');
   const [toast, setToast] = useState('');
   const [online, setOnline] = useState(false);
-  const [version, setVersion] = useState('5.2.2');
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('aifreeclip.theme') === 'light' ? 'light' : 'dark');
+  const [version, setVersion] = useState('5.2.3');
   const [mediaSelection, setMediaSelection] = useState<string[]>([]);
   const [clipSelection, setClipSelection] = useState<string[]>([]);
   const [folder, setFolder] = useState('');
@@ -43,6 +44,12 @@ export default function App() {
   const autoSetupStarted = useRef(false);
   const { jobs } = useJobs();
   const notify = useCallback((message: string) => setToast(message), []);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('aifreeclip.theme', theme);
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'light' ? '#f4f6fb' : '#090b14');
+  }, [theme]);
 
   useEffect(() => {
     api.health().then((result) => { setOnline(true); setVersion(result.version); }).catch(() => setOnline(false));
@@ -63,7 +70,7 @@ export default function App() {
       if (result.values?.auto_setup_complete === '1') return;
       void api.autoSetupModels()
         .then((result) => {
-          if (result.job_id) notify('Hardware detected — downloading and activating your offline model pack in the background.');
+          if (result.job_id) notify('Hardware detected — installing the recommended offline models in the background.');
         })
         .catch(() => undefined);
     }).catch(() => undefined);
@@ -139,6 +146,12 @@ export default function App() {
           <div className="crumb"><Library size={16} /><span>AI Clipper Pro</span><b>/</b><strong>{NAV.find((item) => item.id === page)?.label}</strong></div>
           <div className="topbar-actions">
             {!online && <span className="offline"><WifiOff size={14} /> Start the local engine</span>}
+            <button
+              className="theme-toggle"
+              onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+              title={`Switch to ${theme === 'dark' ? 'day' : 'night'} theme`}
+              aria-label={`Switch to ${theme === 'dark' ? 'day' : 'night'} theme`}
+            >{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}<span>{theme === 'dark' ? 'Day' : 'Night'}</span></button>
             <button className="ghost-btn" onClick={() => folder && window.desktop?.revealPath(folder)} title="Open exports folder">
               <FolderOpen size={16} /> Exports
             </button>

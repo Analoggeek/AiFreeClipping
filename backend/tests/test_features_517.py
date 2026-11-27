@@ -210,7 +210,7 @@ def test_timeline_export_uses_source_quality_and_renders_title_cards(tmp_path):
     assert (info["width"], info["height"]) == (202, 360)
 
 
-def test_batch_export_respects_requested_quality_without_saved_effects(tmp_path, monkeypatch):
+def test_batch_export_respects_per_clip_settings_and_requested_quality(tmp_path, monkeypatch):
     source = tmp_path / "batch-source.mp4"
     source.write_bytes(b"synthetic source")
     media_id, clip_id = uid("m517_batch_"), uid("c517_batch_")
@@ -235,8 +235,18 @@ def test_batch_export_respects_requested_quality_without_saved_effects(tmp_path,
     monkeypatch.setattr(main_module, "hardware_info", lambda: {"workers": 1, "encoder": "test"})
     job_id = None
     try:
+        custom_regions = [
+            {"x": 0, "y": 0, "w": 1, "h": 0.6},
+            {"x": 0, "y": 0.6, "w": 1, "h": 0.4},
+        ]
         response = client.post("/api/exports/batch", headers=HEADERS, json={
             "clip_ids": [clip_id], "aspect": "16:9", "resolution": "720p",
+            "effects_by_clip": {clip_id: {
+                "caption_style": {"preset": "premium", "position": "top"},
+                "captions": [{"word": "brilliant", "start": 1.1, "end": 1.8}],
+                "regions": custom_regions, "region_layout": "top-game-bottom-player",
+                "split_ratio": 0.7, "outline_style": "neon", "title": "Edited title",
+            }},
         })
         assert response.status_code == 200
         job_id = response.json()["job_id"]
@@ -244,6 +254,13 @@ def test_batch_export_respects_requested_quality_without_saved_effects(tmp_path,
         assert job["status"] == "done", job
         assert captured["aspect"] == "16:9"
         assert captured["resolution"] == "720p"
+        assert captured["caption_style"] == {"preset": "premium", "position": "top"}
+        assert captured["captions"] == [{"word": "brilliant", "start": 1.1, "end": 1.8}]
+        assert captured["regions"] == custom_regions
+        assert captured["region_layout"] == "top-game-bottom-player"
+        assert captured["split_ratio"] == 0.7
+        assert captured["outline_style"] == "neon"
+        assert captured["title"] == "Edited title"
         saved_clip = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
         assert saved_clip["metadata"]["effects"]["resolution"] == "720p"
         assert saved_clip["metadata"]["effects"]["watermark"] is True

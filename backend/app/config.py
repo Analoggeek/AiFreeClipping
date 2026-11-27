@@ -131,6 +131,7 @@ def _tool_version(binary: str, flag: str) -> str | None:
 def _gpu_info() -> dict[str, Any]:
     info: dict[str, Any] = {
         "cuda": False, "metal": False, "note": "CPU fallback available", "name": "CPU",
+        "vram_total_gb": None,
     }
     try:
         nvidia = subprocess.run(
@@ -139,14 +140,37 @@ def _gpu_info() -> dict[str, Any]:
         )
         if nvidia.returncode == 0 and nvidia.stdout.strip():
             info["cuda"] = True
-            info["name"] = nvidia.stdout.strip().splitlines()[0]
+            devices: list[tuple[float, str]] = []
+            for line in nvidia.stdout.splitlines():
+                parts = line.rsplit(",", 1)
+                name = parts[0].strip()
+                memory = parts[1].strip().split() if len(parts) > 1 else []
+                try:
+                    total = float(memory[0])
+                    unit = memory[1].lower() if len(memory) > 1 else "mib"
+                    vram_gb = total / (1024 if unit.startswith("m") else 1)
+                    devices.append((vram_gb, name))
+                except (ValueError, IndexError):
+                    devices.append((0.0, name))
+            if devices:
+                best_vram, info["name"] = max(devices)
+                info["vram_total_gb"] = round(best_vram, 1) if best_vram else None
             info["note"] = "NVIDIA GPU available for NVENC / Whisper CUDA"
     except Exception:
         pass
     try:
         import torch  # type: ignore
 
-        info["cuda"] = info["cuda"] or bool(torch.cuda.is_available())
+        cuda_available = bool(torch.cuda.is_available())
+        info["cuda"] = info["cuda"] or cuda_available
+        if cuda_available and info["vram_total_gb"] is None:
+            try:
+                properties = torch.cuda.get_device_properties(0)
+                info["vram_total_gb"] = round(float(properties.total_memory) / (1024 ** 3), 1)
+                info["name"] = str(getattr(properties, "name", info["name"]))
+                info["note"] = "NVIDIA GPU available for NVENC / Whisper CUDA"
+            except Exception:
+                pass
         info["metal"] = bool(getattr(torch.backends, "mps", None) and torch.backends.mps.is_available())
     except Exception:
         import platform

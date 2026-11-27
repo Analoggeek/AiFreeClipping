@@ -6,12 +6,13 @@ import {
 import { api, mediaUrl, pollJob } from '../api';
 import { EmptyState, formatClock, JobTracker, Panel, Pill } from '../components/common';
 import type { Candidate, Media } from '../types';
-import { drawVideoComposition } from '../lib/composition';
+import { drawVideoComposition, type CropOutlineStyle } from '../lib/composition';
 import type { PageProps } from '../App';
 
 type Box = { x: number; y: number; w: number; h: number };
+type CaptionPreset = 'hype' | 'karaoke' | 'minimal' | 'premium';
 type RegionItem = { id: string; label: string; box: Box; color: string };
-type RegionLayout = { preset: string; boxes: RegionItem[] };
+type RegionLayout = { preset: string; boxes: RegionItem[]; splitRatio: number; outlineStyle: CropOutlineStyle };
 type Props = PageProps & {
   mediaSelection: string[];
   setMediaSelection: Dispatch<SetStateAction<string[]>>;
@@ -20,17 +21,17 @@ type Props = PageProps & {
 const STEPS = ['Select videos', 'Mark region', 'Viral settings', 'AI results'];
 
 const FULL: Box = { x: 0, y: 0, w: 1, h: 1 };
-const REGION_PRESETS: Array<{ id: string; label: string; icon: string; boxes: Array<{ id: string; label: string; box: Box }> }> = [
+const REGION_PRESETS: Array<{ id: string; label: string; icon: string; splitRatio?: number; boxes: Array<{ id: string; label: string; box: Box }> }> = [
   { id: 'full', label: 'Full frame', icon: '▣', boxes: [] },
   {
-    id: 'top-game-bottom-player', label: 'Gameplay top · player bottom', icon: '▤▣',
+    id: 'top-game-bottom-player', label: 'Gameplay top · player bottom', icon: '▤▣', splitRatio: 0.58,
     boxes: [
       { id: 'gameplay', label: 'Gameplay', box: { x: 0, y: 0, w: 1, h: 0.58 } },
       { id: 'player', label: 'Player', box: { x: 0, y: 0.58, w: 1, h: 0.42 } },
     ],
   },
   {
-    id: 'top-player-bottom-game', label: 'Player top · gameplay bottom', icon: '◉▤',
+    id: 'top-player-bottom-game', label: 'Player top · gameplay bottom', icon: '◉▤', splitRatio: 0.42,
     boxes: [
       { id: 'player', label: 'Player', box: { x: 0, y: 0, w: 1, h: 0.42 } },
       { id: 'gameplay', label: 'Gameplay', box: { x: 0, y: 0.42, w: 1, h: 0.58 } },
@@ -44,7 +45,7 @@ const REGION_PRESETS: Array<{ id: string; label: string; icon: string; boxes: Ar
     ],
   },
   {
-    id: 'side-by-side', label: 'Player side · gameplay side', icon: '◫',
+    id: 'side-by-side', label: 'Player side · gameplay side', icon: '◫', splitRatio: 0.62,
     boxes: [
       { id: 'gameplay', label: 'Gameplay', box: { x: 0, y: 0, w: 0.62, h: 1 } },
       { id: 'player', label: 'Player', box: { x: 0.62, y: 0, w: 0.38, h: 1 } },
@@ -53,6 +54,7 @@ const REGION_PRESETS: Array<{ id: string; label: string; icon: string; boxes: Ar
 ];
 
 const COLORS = ['#22d3ee', '#a78bfa', '#34d399', '#fbbf24'];
+const DEFAULT_REGION_LAYOUT: RegionLayout = { preset: 'full', boxes: [], splitRatio: 0.58, outlineStyle: 'clean' };
 
 export default function Clipper({ notify, openEditor, openPublish, mediaSelection, setMediaSelection }: Props) {
   const [media, setMedia] = useState<Media[]>([]);
@@ -60,7 +62,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   const [regions, setRegions] = useState<Record<string, RegionLayout>>({});
   const [activeRegionId, setActiveRegionId] = useState('gameplay');
   const [settings, setSettings] = useState({
-    count: 5, min_duration: 15, max_duration: 60, platform: 'shorts', style: 'hype',
+    count: 5, min_duration: 15, max_duration: 60, platform: 'shorts', style: 'hype', caption_style: 'hype' as CaptionPreset,
     captions: true, sound_effects: true, stickers: true, use_llm: true, music: '', resolution: 'source' as 'source' | '1080p' | '720p',
   });
   const [jobId, setJobId] = useState<string | null>(null);
@@ -87,38 +89,68 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
 
   const selectedMedia = media.filter((item) => mediaSelection.includes(item.id));
   const preview = selectedMedia[0];
-  const layout: RegionLayout = preview ? regions[preview.id] || { preset: 'full', boxes: [] } : { preset: 'full', boxes: [] };
+  const layout: RegionLayout = preview ? regions[preview.id] || DEFAULT_REGION_LAYOUT : DEFAULT_REGION_LAYOUT;
   const activeRegion = layout.boxes.find((item) => item.id === activeRegionId) || layout.boxes[0] || null;
+  const hasSplitRatio = ['top-game-bottom-player', 'top-player-bottom-game', 'side-by-side'].includes(layout.preset) && layout.boxes.length >= 2;
+  const firstPanelLabel = layout.boxes[0]?.label || 'First area';
+  const secondPanelLabel = layout.boxes[1]?.label || 'Second area';
 
   const applyPreset = (preset: typeof REGION_PRESETS[number]) => {
     if (!preview) return;
     const boxes = preset.boxes.map((item, index) => ({ ...item, color: COLORS[index % COLORS.length] }));
-    setRegions((current) => ({ ...current, [preview.id]: { preset: preset.id, boxes } }));
+    setRegions((current) => {
+      const previous = current[preview.id] || DEFAULT_REGION_LAYOUT;
+      return {
+        ...current,
+        [preview.id]: {
+          preset: preset.id,
+          boxes,
+          splitRatio: preset.splitRatio ?? previous.splitRatio,
+          outlineStyle: previous.outlineStyle || 'clean',
+        },
+      };
+    });
     if (boxes[0]) setActiveRegionId(boxes[0].id);
+  };
+
+  const updateSplitRatio = (splitRatio: number) => {
+    if (!preview) return;
+    setRegions((current) => {
+      const existing = current[preview.id] || DEFAULT_REGION_LAYOUT;
+      return { ...current, [preview.id]: { ...existing, splitRatio } };
+    });
+  };
+
+  const updateOutlineStyle = (outlineStyle: CropOutlineStyle) => {
+    if (!preview) return;
+    setRegions((current) => {
+      const existing = current[preview.id] || DEFAULT_REGION_LAYOUT;
+      return { ...current, [preview.id]: { ...existing, outlineStyle } };
+    });
   };
 
   const updateBox = (regionId: string, box: Box) => {
     if (!preview) return;
     setRegions((current) => {
-      const existing = current[preview.id] || { preset: 'custom', boxes: [] };
+      const existing = current[preview.id] || { ...DEFAULT_REGION_LAYOUT, preset: 'custom' };
       const boxes = existing.boxes.some((item) => item.id === regionId)
         ? existing.boxes.map((item) => item.id === regionId ? { ...item, box } : item)
         : [...existing.boxes, { id: regionId, label: regionId, box, color: COLORS[existing.boxes.length % COLORS.length] }];
       // Editing the crop geometry must not discard the chosen composition. The
       // preset defines panel order (player/gameplay); this only updates a crop.
-      return { ...current, [preview.id]: { preset: existing.preset, boxes } };
+      return { ...current, [preview.id]: { ...existing, boxes } };
     });
   };
 
   const removeBox = (regionId: string) => {
     if (!preview) return;
     setRegions((current) => {
-      const existing = current[preview.id] || { preset: 'full', boxes: [] };
+      const existing = current[preview.id] || DEFAULT_REGION_LAYOUT;
       const boxes = existing.boxes.filter((item) => item.id !== regionId);
       const preset = boxes.length >= 2 && existing.preset !== 'custom'
         ? existing.preset
         : boxes.length ? 'custom' : 'full';
-      return { ...current, [preview.id]: { preset, boxes } };
+      return { ...current, [preview.id]: { ...existing, preset, boxes } };
     });
   };
 
@@ -129,19 +161,24 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       id: `custom-${Date.now()}`, label: `Custom focus ${index}`,
       box: { x: 0.2, y: 0.2, w: 0.6, h: 0.6 }, color: COLORS[(index - 1) % COLORS.length],
     };
-    setRegions((current) => ({ ...current, [preview.id]: { preset: 'custom', boxes: [...layout.boxes, region] } }));
+    setRegions((current) => ({
+      ...current,
+      [preview.id]: { ...layout, preset: 'custom', boxes: [...layout.boxes, region] },
+    }));
     setActiveRegionId(region.id);
   };
 
   const copyRegionToSelected = () => {
     if (!preview || selectedMedia.length < 2) return;
     setRegions((current) => {
-      const selectedLayout = current[preview.id] || { preset: 'full', boxes: [] };
+      const selectedLayout = current[preview.id] || DEFAULT_REGION_LAYOUT;
       const next = { ...current };
       for (const item of selectedMedia) {
         if (item.id !== preview.id) {
           next[item.id] = {
             preset: selectedLayout.preset,
+            splitRatio: selectedLayout.splitRatio,
+            outlineStyle: selectedLayout.outlineStyle,
             boxes: selectedLayout.boxes.map((box) => ({ ...box, box: { ...box.box } })),
           };
         }
@@ -161,6 +198,8 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       regions: layout.boxes.map((item) => item.box),
       region: activeRegion?.box || null,
       layout: layout.preset,
+      splitRatio: layout.splitRatio,
+      outlineStyle: layout.outlineStyle,
     });
     if (!video) {
       drawVideoComposition({} as HTMLVideoElement, canvas, { aspect: cropAspect });
@@ -218,19 +257,23 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       if (missingCount) {
         notify(`${missingCount} unavailable selection(s) skipped; analyzing ${validIds.length} available video(s).`);
       }
+      const proposalSettings: Record<string, unknown> = { ...settings };
+      delete proposalSettings.caption_style;
       const result = await api.propose({
         media_ids: validIds,
         regions: validIds.map((id) => {
-          const selection = regions[id] || { preset: 'full', boxes: [] };
+          const selection = regions[id] || DEFAULT_REGION_LAYOUT;
           return {
             media_id: id,
             kind: selection.boxes.length ? 'custom' : 'full',
             box: selection.boxes.find((item) => item.id === activeRegionId)?.box || selection.boxes[0]?.box,
             boxes: selection.boxes.map((item) => item.box),
             layout: selection.preset,
+            split_ratio: selection.splitRatio,
+            outline_style: selection.outlineStyle,
           };
         }),
-        ...settings,
+        ...proposalSettings,
       });
       setJobId(result.job_id);
     } catch (error) { notify(String(error)); } finally { setBusy(false); }
@@ -254,20 +297,28 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   }, [jobId, notify, refresh]);
 
   const effectPayload = (clip?: Candidate) => {
-    const preset = ({ hype: 'hype', story: 'minimal', clean: 'minimal', cinematic: 'premium' } as const)[settings.style as 'hype' | 'story' | 'clean' | 'cinematic'] || 'hype';
+    const looks = {
+      hype: { speed: 1.04, brightness: 0.02, contrast: 1.05, saturation: 1.08 },
+      story: { speed: 1, brightness: 0, contrast: 1.02, saturation: 1 },
+      clean: { speed: 1, brightness: 0, contrast: 1, saturation: 1 },
+      cinematic: { speed: 1, brightness: 0.01, contrast: 1.08, saturation: 1.04 },
+    };
+    const look = looks[settings.style as keyof typeof looks] || looks.hype;
     return {
       aspect: settings.platform === 'landscape' ? '16:9' : '9:16',
       resolution: settings.resolution,
-      caption_style: { preset: settings.captions ? preset : 'none' },
+      caption_style: { preset: settings.captions ? settings.caption_style : 'none', position: 'bottom' },
       sfx: settings.sound_effects ? ['whoosh', 'pop'] : [],
       music: settings.music.trim() || null, music_volume: 0.18,
-      speed: 1, brightness: 0, contrast: 1, saturation: 1,
+      ...look,
       blur_background: true, watermark: true,
       // A candidate keeps the exact region chosen when it was analyzed; never
       // let the currently previewed source silently override that saved crop.
       region: clip ? clip.region || null : null,
       regions: clip ? clip.regions || [] : [],
       region_layout: clip ? clip.region_layout || null : null,
+      split_ratio: clip?.split_ratio ?? null,
+      outline_style: clip?.outline_style ?? null,
       title: clip?.title,
     };
   };
@@ -276,9 +327,24 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     const ids = candidates.map((clip) => clip.id || '').filter(Boolean);
     if (!ids.length) { notify('Generate clips first.'); return; }
     try {
-      const result = await api.applyEffects(ids, effectPayload());
-      notify(`Copied this clip's effects to ${result.changed} clip(s).`);
+      const effectsByClip = Object.fromEntries(
+        candidates.filter((clip) => clip.id && ids.includes(clip.id))
+          .map((clip) => [clip.id as string, effectPayload(clip)]),
+      );
+      const result = await api.applyEffects(ids, {}, effectsByClip);
+      notify(`Applied the current look and caption settings to ${result.changed} clip(s).`);
     } catch (error) { notify(String(error)); }
+  };
+
+  const saveCandidateText = async (
+    clipId: string,
+    patch: Partial<Pick<Candidate, 'title' | 'caption'>>,
+  ) => {
+    if (!clipId) return;
+    try {
+      const result = await api.patchClip(clipId, patch);
+      setCandidates((current) => current.map((item) => item.id === clipId ? { ...item, ...result.clip } : item));
+    } catch (error) { notify(`Could not save caption text: ${String(error)}`); }
   };
 
   const renderOne = async (clip: Candidate) => {
@@ -294,10 +360,15 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     const ids = checked.length ? checked : candidates.map((clip) => clip.id || '').filter(Boolean);
     if (!ids.length) { notify('No clips to export yet.'); return; }
     try {
+      const effectsByClip = Object.fromEntries(
+        candidates.filter((clip) => clip.id && ids.includes(clip.id))
+          .map((clip) => [clip.id as string, effectPayload(clip)]),
+      );
       const result = await api.exportBatch(
         ids,
         settings.platform === 'landscape' ? '16:9' : '9:16',
         settings.resolution,
+        effectsByClip,
       );
       setBatchJob(result.job_id);
     } catch (error) { notify(String(error)); }
@@ -386,6 +457,19 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                   <b>{preset.icon}</b>{preset.label}
                 </button>
               ))}
+              {hasSplitRatio && (
+                <label className="field composition-range">
+                  <span>Composition split · {Math.round(layout.splitRatio * 100)}% / {100 - Math.round(layout.splitRatio * 100)}%</span>
+                  <input type="range" min="0.25" max="0.75" step="0.01" value={layout.splitRatio} onChange={(event) => updateSplitRatio(Number(event.target.value))} aria-label="Adjust gameplay and player composition proportions" />
+                  <small>{firstPanelLabel} {Math.round(layout.splitRatio * 100)}% <i /> {secondPanelLabel} {100 - Math.round(layout.splitRatio * 100)}%</small>
+                </label>
+              )}
+              <label className="field composition-outline">
+                <span>Crop outline style</span>
+                <select value={layout.outlineStyle} onChange={(event) => updateOutlineStyle(event.target.value as CropOutlineStyle)}>
+                  <option value="none">No outline</option><option value="clean">Clean white</option><option value="neon">Cyan neon glow</option><option value="double">Double line</option>
+                </select>
+              </label>
               <button className="chip-btn add-region" disabled={!preview} onClick={addCustomRegion}><Plus size={14} /> Add custom region</button>
               <h3 className="region-subhead">Areas in this clip</h3>
               {layout.boxes.length === 0 && <p className="hint">Full frame is selected. Add a custom region, choose an area, then drag on the video to crop to it.</p>}
@@ -433,6 +517,11 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                 <option value="hype">High energy</option><option value="story">Storytelling</option><option value="clean">Clean / minimal</option><option value="cinematic">Cinematic</option>
               </select>
             </label>
+            <label className="field"><span>On-video caption style</span>
+              <select value={settings.caption_style} onChange={(event) => setSettings({ ...settings, caption_style: event.target.value as CaptionPreset })}>
+                <option value="hype">Bold · Hype</option><option value="karaoke">Karaoke highlight</option><option value="minimal">Minimal</option><option value="premium">Premium</option>
+              </select>
+            </label>
             <label className="field"><span>Background music path (optional)</span><input value={settings.music} onChange={(event) => setSettings({ ...settings, music: event.target.value })} placeholder="~/.AiFreeClipping/assets/music/track.mp3" /></label>
             <label className="field"><span>Export quality</span>
               <select value={settings.resolution} onChange={(event) => setSettings({ ...settings, resolution: event.target.value as typeof settings.resolution })}>
@@ -453,6 +542,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
               </label>
             ))}
           </div>
+          <p className="hint caption-writing-hint">The AI drafts a concise, transcript-grounded social caption. You can refine that text on each result; the style selector controls burned-in word captions.</p>
           <div className="panel-actions">
             <button className="ghost-btn" onClick={() => setStep(1)}><ArrowLeft size={15} /> Back</button>
             <button className="primary" disabled={busy || !mediaSelection.length} onClick={findMoments}>
@@ -466,7 +556,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       {step === 3 && (
         <Panel title="AI-picked clips" subtitle={`${candidates.length} candidates — review, tweak, render or open in the editor`} action={
           <div className="panel-actions compact">
-            <button className="ghost-btn" onClick={() => void copyEffectsToAll()}><Copy size={15} /> Copy effects to all</button>
+            <button className="ghost-btn" onClick={() => void copyEffectsToAll()}><Copy size={15} /> Apply look to all</button>
             <button className="primary" onClick={exportAll}><Download size={16} /> Export selected ({checked.length || candidates.length})</button>
           </div>
         }>
@@ -485,7 +575,15 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                       <div className="candidate-body">
                         <div className="candidate-head">
                           <input type="checkbox" checked={checked.includes(clipId)} onChange={() => setChecked((current) => current.includes(clipId) ? current.filter((id) => id !== clipId) : [...current, clipId])} />
-                          <strong>{clip.title}</strong>
+                          <label className="candidate-title-field">
+                            <span>Clip title · export hook</span>
+                            <input
+                              value={clip.title}
+                              onChange={(event) => setCandidates((current) => current.map((item) => item.id === clipId ? { ...item, title: event.target.value } : item))}
+                              onBlur={(event) => void saveCandidateText(clipId, { title: event.currentTarget.value })}
+                              aria-label={`Edit title for clip ${index + 1}`}
+                            />
+                          </label>
                         </div>
                         <div className="candidate-meta">
                           <Pill tone={clip.score >= 75 ? 'green' : clip.score >= 55 ? 'amber' : 'muted'}>{Math.round(clip.score)} / 100</Pill>
@@ -493,8 +591,24 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                           <span>{Math.round(clip.end - clip.start)}s</span>
                           <span>{source?.title || clip.media_id}</span>
                         </div>
+                        <div className="candidate-caption-editor">
+                          <label className="field">
+                            <span>Social caption · editable</span>
+                            <textarea
+                              rows={2}
+                              value={clip.caption ?? clip.transcript ?? ''}
+                              onChange={(event) => setCandidates((current) => current.map((item) => item.id === clipId ? { ...item, caption: event.target.value } : item))}
+                              onBlur={(event) => void saveCandidateText(clipId, { caption: event.currentTarget.value })}
+                              aria-label={`Edit social caption for clip ${index + 1}`}
+                            />
+                          </label>
+                          <button className="chip-btn" title="Copy social caption" onClick={() => {
+                            const text = clip.caption || clip.transcript || '';
+                            if (text) void navigator.clipboard?.writeText(text).then(() => notify('Caption copied to clipboard.'));
+                          }}><Copy size={13} /> Copy caption</button>
+                        </div>
                         <div className="reasons">{clip.reasons.map((reason) => <Pill key={reason} tone="violet">{reason}</Pill>)}</div>
-                        {clip.transcript && <p className="transcript">“{clip.transcript.slice(0, 180)}…”</p>}
+                        {clip.transcript && <p className="transcript">Source transcript: “{clip.transcript.slice(0, 180)}…”</p>}
                         <div className="candidate-actions">
                           <button className="chip-btn" onClick={() => openEditor(clipId)}><Scissors size={14} /> Edit</button>
                           <button className="chip-btn" onClick={() => renderOne(clip)}><Download size={14} /> Render</button>
@@ -526,7 +640,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
           <div className="panel-actions"><button className="ghost-btn" onClick={() => setStep(2)}><ArrowLeft size={15} /> Back</button></div>
         </Panel>
       )}
-      {step < 3 && <div className="hint-bar">Tip: the pipeline uses Gemma 2 7B, faster-whisper and YOLOX/ByteTrack locally — no footage leaves your machine.</div>}
+      {step < 3 && <div className="hint-bar">Tip: local Gemma, Whisper and YOLOX/ByteTrack models power the pipeline; your source footage stays on this machine.</div>}
     </div>
   );
 }

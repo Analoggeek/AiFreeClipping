@@ -1,5 +1,6 @@
 export type NormalizedBox = { x: number; y: number; w: number; h: number };
 export type CompositionAspect = '9:16' | '1:1' | '16:9' | 'source';
+export type CropOutlineStyle = 'none' | 'clean' | 'neon' | 'double';
 
 const STACK_LAYOUTS: Record<string, { axis: 'vertical' | 'horizontal'; first: number }> = {
   'top-game-bottom-player': { axis: 'vertical', first: 0.58 },
@@ -59,6 +60,68 @@ function drawCover(
     video, sourceX, sourceY, sourceWidth, sourceHeight,
     x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight,
   );
+  context.restore();
+}
+
+function splitFraction(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0.25, Math.min(0.75, parsed)) : fallback;
+}
+
+function drawCompositionOutline(
+  context: CanvasRenderingContext2D,
+  style: CropOutlineStyle,
+  width: number,
+  height: number,
+  axis?: 'vertical' | 'horizontal',
+  splitAt?: number,
+) {
+  if (style === 'none') return;
+  const unit = Math.max(1, Math.min(width, height) / 360);
+  const color = style === 'neon' ? '#22d3ee' : '#ffffff';
+  const lineWidth = style === 'neon' ? unit * 2.5 : unit * 1.5;
+  context.save();
+  context.lineJoin = 'round';
+  context.strokeStyle = color;
+  context.lineWidth = lineWidth;
+  if (style === 'neon') {
+    context.shadowColor = 'rgba(34,211,238,.9)';
+    context.shadowBlur = unit * 5;
+  }
+  context.strokeRect(lineWidth / 2, lineWidth / 2, width - lineWidth, height - lineWidth);
+  if (axis && splitAt !== undefined) {
+    context.beginPath();
+    if (axis === 'vertical') {
+      context.moveTo(0, splitAt);
+      context.lineTo(width, splitAt);
+    } else {
+      context.moveTo(splitAt, 0);
+      context.lineTo(splitAt, height);
+    }
+    context.stroke();
+  }
+  if (style === 'double') {
+    context.shadowBlur = 0;
+    context.lineWidth = Math.max(1, unit);
+    const inset = lineWidth * 2.6;
+    context.strokeRect(inset, inset, width - inset * 2, height - inset * 2);
+    if (axis && splitAt !== undefined) {
+      const gap = lineWidth * 2.6;
+      context.beginPath();
+      if (axis === 'vertical') {
+        context.moveTo(0, splitAt - gap);
+        context.lineTo(width, splitAt - gap);
+        context.moveTo(0, splitAt + gap);
+        context.lineTo(width, splitAt + gap);
+      } else {
+        context.moveTo(splitAt - gap, 0);
+        context.lineTo(splitAt - gap, height);
+        context.moveTo(splitAt + gap, 0);
+        context.lineTo(splitAt + gap, height);
+      }
+      context.stroke();
+    }
+  }
   context.restore();
 }
 
@@ -148,6 +211,8 @@ export function drawVideoComposition(
     region?: NormalizedBox | null;
     regions?: NormalizedBox[];
     layout?: string | null;
+    splitRatio?: number;
+    outlineStyle?: CropOutlineStyle;
     cropPath?: Array<[number, number]>;
     fit?: 'blur-contain' | 'cover';
     brightness?: number;
@@ -181,18 +246,22 @@ export function drawVideoComposition(
   const regions = (options.regions || []).filter(Boolean);
   const layout = options.layout || '';
   const fit = options.fit || 'blur-contain';
+  const outlineStyle = options.outlineStyle || 'clean';
   const split = STACK_LAYOUTS[layout];
   if (split && regions.length >= 2) {
+    const first = splitFraction(options.splitRatio, split.first);
     if (split.axis === 'vertical') {
-      const firstHeight = Math.max(2, Math.round(height * split.first / 2) * 2);
+      const firstHeight = Math.max(2, Math.round(height * first / 2) * 2);
       const secondHeight = height - firstHeight;
       drawCover(context, video, regions[0], 0, 0, width, firstHeight, false);
       drawCover(context, video, regions[1], 0, firstHeight, width, secondHeight, false);
+      drawCompositionOutline(context, outlineStyle, width, height, 'vertical', firstHeight);
     } else {
-      const firstWidth = Math.max(2, Math.round(width * split.first / 2) * 2);
+      const firstWidth = Math.max(2, Math.round(width * first / 2) * 2);
       const secondWidth = width - firstWidth;
       drawCover(context, video, regions[0], 0, 0, firstWidth, height, false);
       drawCover(context, video, regions[1], firstWidth, 0, secondWidth, height, false);
+      drawCompositionOutline(context, outlineStyle, width, height, 'horizontal', firstWidth);
     }
     return;
   }
@@ -202,11 +271,7 @@ export function drawVideoComposition(
     const size = Math.max(2, Math.round(Math.min(width, height) * 0.34 / 2) * 2);
     const inset = Math.max(2, Math.round(Math.min(width, height) * 0.04 / 2) * 2);
     drawCover(context, video, regions[1], inset, inset, size, size, false);
-    context.save();
-    context.strokeStyle = 'rgba(255,255,255,.92)';
-    context.lineWidth = Math.max(2, width / 120);
-    context.strokeRect(inset, inset, size, size);
-    context.restore();
+    drawCompositionOutline(context, outlineStyle, size, size);
     return;
   }
 
@@ -214,6 +279,7 @@ export function drawVideoComposition(
   if (focus && (focus.x !== 0 || focus.y !== 0 || focus.w !== 1 || focus.h !== 1)) {
     if (fit === 'cover') {
       drawCover(context, video, focus, 0, 0, width, height, true);
+      drawCompositionOutline(context, outlineStyle, width, height);
       return;
     }
     const crop = normalizedBox(focus);
@@ -237,6 +303,7 @@ export function drawVideoComposition(
     const fitHeight = sourceHeight * contain;
     context.drawImage(video, sourceX, sourceY, sourceWidth, sourceHeight,
       (width - fitWidth) / 2, (height - fitHeight) / 2, fitWidth, fitHeight);
+    drawCompositionOutline(context, outlineStyle, width, height);
     return;
   }
   if (
