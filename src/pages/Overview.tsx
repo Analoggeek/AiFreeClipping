@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import { Panel, Pill } from '../components/common';
-import logo from '../../brand/logo-3d.png';
+import appIcon from '../../brand/icon.png';
 import type { PageId } from '../App';
 
 const PIPELINE = [
@@ -51,8 +51,8 @@ export default function Overview({ onNavigate, openClipper }: { onNavigate: (pag
           </div>
         </div>
         <div className="hero-art">
-          <img src={logo} alt="AI Clipper Pro" />
-          <div className="hero-chip chip-a">Gemma 2 7B</div>
+          <img src={appIcon} alt="AI Clipper Pro app icon" />
+          <div className="hero-chip chip-a">Local Gemma</div>
           <div className="hero-chip chip-b">Whisper</div>
           <div className="hero-chip chip-c">YOLOX + ByteTrack</div>
         </div>

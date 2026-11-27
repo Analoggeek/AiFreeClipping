@@ -22,11 +22,11 @@ HASHTAGS = {
 
 
 class Suggestion(BaseModel):
-    start: float
-    end: float
+    index: int = Field(ge=0)
     score: int = Field(ge=0, le=100)
     title: str
     reason: str
+    caption: str = Field(default="", max_length=360)
 
 
 class RerankResult(BaseModel):
@@ -43,9 +43,12 @@ class Candidate(BaseModel):
     hook: str = ""
     hashtags: list[str] = Field(default_factory=list)
     transcript: str = ""
+    caption: str = ""
     region: dict[str, float] | None = None
     regions: list[dict[str, float]] = Field(default_factory=list)
     region_layout: str | None = None
+    split_ratio: float | None = Field(default=None, ge=0.25, le=0.75)
+    outline_style: str = "clean"
     crop_path: list[list[float]] = Field(default_factory=list)
 
 
@@ -170,6 +173,37 @@ def make_title(text: str, platform: str, fallback: str = "You won't believe this
     return title, hook
 
 
+def make_caption(text: str, fallback: str = "") -> str:
+    """Build concise, editable social copy from the transcript without inventing details."""
+    cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
+    cleaned = re.sub(r"\s+([,.;!?।])", r"\1", cleaned)
+    if not cleaned:
+        cleaned = re.sub(r"\s+#\w+.*$", "", str(fallback or "")).strip()
+    if not cleaned:
+        return "A standout moment from the video."
+    sentences = re.split(r"(?<=[.!?।])\s+", cleaned)
+    caption = " ".join(sentences[:2]).strip()
+    if len(caption) > 240:
+        shortened = caption[:237].rsplit(" ", 1)[0].rstrip(" ,;:-")
+        caption = (shortened or caption[:237].rstrip()) + "…"
+    elif caption and caption[-1] not in ".!?।":
+        caption += "."
+    return caption
+
+
+def _composition_ratio(layout: str | None, value: float | None) -> float:
+    defaults = {
+        "top-game-bottom-player": 0.58,
+        "top-player-bottom-game": 0.42,
+        "side-by-side": 0.62,
+    }
+    try:
+        parsed = float(value) if value is not None else defaults.get(layout or "", 0.58)
+    except (TypeError, ValueError, OverflowError):
+        parsed = defaults.get(layout or "", 0.58)
+    return max(0.25, min(0.75, parsed)) if math.isfinite(parsed) else defaults.get(layout or "", 0.58)
+
+
 def propose(
     media_rows: list[dict[str, Any]],
     transcripts: dict[str, dict[str, Any]],
@@ -181,6 +215,8 @@ def propose(
     regions: dict[str, list[dict[str, float]]] | None = None,
     layouts: dict[str, str] | None = None,
     focus_regions: dict[str, dict[str, float]] | None = None,
+    split_ratios: dict[str, float] | None = None,
+    outline_styles: dict[str, str] | None = None,
 ) -> list[Candidate]:
     """Greedy non-overlapping window search over fused audio/visual features."""
     candidates: list[Candidate] = []
@@ -194,6 +230,10 @@ def propose(
             transcripts.get(media_id), visions.get(media_id), duration, step
         )
         focus_boxes = (regions or {}).get(media_id) or []
+        layout_name = (layouts or {}).get(media_id)
+        split_ratio = _composition_ratio(layout_name, (split_ratios or {}).get(media_id))
+        requested_outline = (outline_styles or {}).get(media_id, "clean")
+        outline_style = requested_outline if requested_outline in {"none", "clean", "neon", "double"} else "clean"
         if focus_boxes:
             # Region-focused visual activity is already fused into `visual`; mark
             # the bias so the reason list and the editor keep the same context.
@@ -249,9 +289,12 @@ def propose(
                         hook=hook[:140],
                         hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
                         transcript=transcript_text[:600],
+                        caption=make_caption(transcript_text, title),
                         region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
                         regions=focus_boxes,
-                        region_layout=(layouts or {}).get(media_id),
+                        region_layout=layout_name,
+                        split_ratio=split_ratio,
+                        outline_style=outline_style,
                         crop_path=crop_path,
                     )
                 )
@@ -276,6 +319,10 @@ def propose(
             title, hook = make_title(transcript_text, platform, media.get("title", ""))
             chosen_reasons = list(reasons) or ["steady engagement"]
             focus_boxes = (regions or {}).get(media_id) or []
+            layout_name = (layouts or {}).get(media_id)
+            split_ratio = _composition_ratio(layout_name, (split_ratios or {}).get(media_id))
+            requested_outline = (outline_styles or {}).get(media_id, "clean")
+            outline_style = requested_outline if requested_outline in {"none", "clean", "neon", "double"} else "clean"
             if focus_boxes:
                 chosen_reasons.append("focused on your player/gameplay regions")
             crop_path = (
@@ -288,10 +335,10 @@ def propose(
                 media_id=media_id, start=round(begin, 2), end=round(stop, 2),
                 score=round(score, 2), reasons=chosen_reasons, title=title,
                 hook=hook[:140], hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
-                transcript=transcript_text[:600],
+                transcript=transcript_text[:600], caption=make_caption(transcript_text, title),
                 region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
-                regions=focus_boxes, region_layout=(layouts or {}).get(media_id),
-                crop_path=crop_path,
+                regions=focus_boxes, region_layout=layout_name, split_ratio=split_ratio,
+                outline_style=outline_style, crop_path=crop_path,
             ))
             if len(candidates) >= count:
                 break
@@ -303,33 +350,48 @@ async def refine_with_llm(
     candidates: list[Candidate],
     llm: Callable,
     model: str | None = None,
+    platform: str = "shorts",
 ) -> list[Candidate]:
-    """Optional local-LLM rerank; falls back untouched when Ollama is unavailable."""
+    """Use one compact structured call to improve ranking, titles and share copy.
+
+    Candidate timing and crop metadata remain source-of-truth; the model only
+    returns an index, an adjusted score, and editable text.
+    """
     if not candidates:
         return candidates
+    limited = candidates[:8]
     summary = "\n".join(
-        f"{i}. {c.start}-{c.end}s | {c.transcript[:240]}" for i, c in enumerate(candidates[:12])
+        f"{index}. {candidate.start:.1f}-{candidate.end:.1f}s | "
+        f"title: {candidate.title[:90]} | transcript: {candidate.transcript[:180]}"
+        for index, candidate in enumerate(limited)
     )
     prompt = (
-        "You are a viral short-form video editor. Rank these moments by viral potential. "
-        "Keep the same indices and timings. Rewrite each title under 100 chars with #Shorts. "
+        f"Review these {platform} video moments and rank them by engagement potential. "
+        "Return one suggestion per input using its zero-based index. Keep every clip's timing unchanged. "
+        "Write a clear, accurate title under 100 characters and a natural social caption under 240 characters. "
+        "Use only facts supported by the transcript, avoid generic clickbait, do not add hashtags, "
+        "and preserve the transcript's language. Keep the explanation short.\n"
         f"Moments:\n{summary}"
     )
     result = await llm(
         prompt,
         RerankResult,
-        system="Return JSON only. Do not change start/end times.",
+        system="Return only schema-valid JSON. Do not invent events or alter clip timings.",
         model=model,
+        temperature=0.15,
+        timeout=90,
     )
     if not result or not result.suggestions:
         return candidates
     for suggestion in result.suggestions:
-        if 0 <= suggestion.start < len(candidates):
-            candidate = candidates[int(suggestion.start)]
+        if 0 <= suggestion.index < len(limited):
+            candidate = limited[suggestion.index]
             candidate.score = (candidate.score + float(suggestion.score)) / 2
-            if suggestion.title:
-                candidate.title = suggestion.title[:100]
-            if suggestion.reason:
-                candidate.reasons = [suggestion.reason] + candidate.reasons[:1]
+            if suggestion.title.strip():
+                candidate.title = suggestion.title.strip()[:100]
+            if suggestion.caption.strip():
+                candidate.caption = suggestion.caption.strip()[:240]
+            if suggestion.reason.strip():
+                candidate.reasons = [suggestion.reason.strip()[:120]] + candidate.reasons[:1]
     candidates.sort(key=lambda item: item.score, reverse=True)
     return candidates

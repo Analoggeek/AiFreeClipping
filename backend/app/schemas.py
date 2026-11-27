@@ -79,6 +79,8 @@ class RegionSelection(BaseModel):
     box: dict[str, float] | None = None  # normalized x, y, w, h
     boxes: list[dict[str, float]] = Field(default_factory=list)
     layout: str | None = None
+    split_ratio: float | None = Field(default=None, ge=0.25, le=0.75)
+    outline_style: Literal["none", "clean", "neon", "double"] | None = None
 
 
 class ClipProposalRequest(BaseModel):
@@ -129,6 +131,8 @@ class RenderRequest(BaseModel):
     region: dict[str, float] | None = None
     regions: list[dict[str, float]] = Field(default_factory=list)
     region_layout: str | None = None
+    split_ratio: float | None = Field(default=None, ge=0.25, le=0.75)
+    outline_style: Literal["none", "clean", "neon", "double"] | None = None
 
 
 class ProjectCreate(BaseModel):
@@ -155,11 +159,13 @@ class ExportAllRequest(BaseModel):
     clip_ids: list[str]
     aspect: str = "9:16"
     resolution: str = "source"
+    effects_by_clip: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class ApplyEffectsRequest(BaseModel):
     clip_ids: list[str]
-    effects: dict[str, Any]
+    effects: dict[str, Any] = Field(default_factory=dict)
+    effects_by_clip: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
 class ImageRequest(BaseModel):

@@ -34,9 +34,12 @@ export type Candidate = {
   hook: string;
   hashtags: string[];
   transcript: string;
+  caption?: string;
   region?: { x: number; y: number; w: number; h: number } | null;
   regions?: Array<{ x: number; y: number; w: number; h: number }>;
   region_layout?: string | null;
+  split_ratio?: number | null;
+  outline_style?: 'none' | 'clean' | 'neon' | 'double';
   crop_path?: Array<[number, number]>;
   id?: string;
   output?: string | null;
@@ -53,6 +56,7 @@ export type ModelInfo = {
   use: string;
   installed: boolean;
   recommended?: boolean;
+  recommendedReason?: string;
   downloadUrl?: string;
   docsUrl?: string;
   apiUrl?: string;
@@ -70,7 +74,7 @@ export type HardwareInfo = {
   ram_total_gb: number | null;
   disk_free_gb: number | null;
   app_usage_gb?: number;
-  gpu: { cuda: boolean; metal: boolean; name?: string; note?: string };
+  gpu: { cuda: boolean; metal: boolean; name?: string; note?: string; vram_total_gb?: number | null };
   workers: number;
   encoder: string;
   platform: string;
@@ -83,7 +87,7 @@ export type Capabilities = {
   fasterWhisper?: boolean;
   opencv?: boolean;
   ultralytics?: boolean;
-  gpu?: { cuda: boolean; metal: boolean; note?: string };
+  gpu?: { cuda: boolean; metal: boolean; note?: string; vram_total_gb?: number | null };
   paths?: Record<string, string>;
   ollamaModel?: string;
   whisperModel?: string;
@@ -93,7 +97,8 @@ export type VideoItem = {
   id?: string; clip_id?: string; path: string; sourceStart: number; duration: number; sourceDuration?: number;
   label?: string; region?: { x: number; y: number; w: number; h: number } | null;
   regions?: Array<{ x: number; y: number; w: number; h: number }>;
-  region_layout?: string | null; crop_path?: Array<[number, number]>;
+  region_layout?: string | null; split_ratio?: number | null;
+  outline_style?: 'none' | 'clean' | 'neon' | 'double'; crop_path?: Array<[number, number]>;
   effects?: Record<string, unknown>; auto_edit?: boolean;
 };
 export type CaptionItem = {
@@ -132,6 +137,8 @@ export type AutoEditTimelineEdit = {
   region?: VideoItem['region'];
   regions?: VideoItem['regions'];
   region_layout?: string | null;
+  split_ratio?: number | null;
+  outline_style?: VideoItem['outline_style'];
   crop_path?: VideoItem['crop_path'];
   captions: Array<{ text?: string; word?: string; start: number; end: number; kind?: 'title' | 'caption' }>;
   audio: AudioItem[];

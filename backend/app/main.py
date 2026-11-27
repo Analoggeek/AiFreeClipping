@@ -105,6 +105,43 @@ def save_analysis(media_id: str, kind: str, data: dict[str, Any]) -> None:
     )
 
 
+def _caption_words_in_window(analysis: dict[str, Any], start: float, end: float) -> list[dict[str, Any]]:
+    """Select word-timed captions, falling back to timed ASR segments when needed."""
+    captions: list[dict[str, Any]] = []
+    segments = analysis.get("segments") if isinstance(analysis, dict) else []
+    for segment in segments if isinstance(segments, list) else []:
+        if not isinstance(segment, dict):
+            continue
+        words = segment.get("words")
+        selected: list[dict[str, Any]] = []
+        for word in words if isinstance(words, list) else []:
+            if not isinstance(word, dict):
+                continue
+            try:
+                word_start = float(word.get("start", 0))
+                word_end = float(word.get("end", word_start))
+            except (TypeError, ValueError):
+                continue
+            if word_start <= end and word_end >= start:
+                selected.append(word)
+        if isinstance(words, list) and words:
+            captions.extend(selected)
+            continue
+        try:
+            segment_start = float(segment.get("start", start))
+            segment_end = float(segment.get("end", segment_start))
+        except (TypeError, ValueError):
+            continue
+        text = str(segment.get("text") or "").strip()
+        if text and segment_start <= end and segment_end >= start:
+            captions.append({
+                "text": text,
+                "start": max(start, segment_start),
+                "end": min(end, segment_end),
+            })
+    return captions
+
+
 def configured_watermark_path() -> str | None:
     """Return the optional user-selected channel logo; never inject app branding."""
     configured = db.get_setting("watermark_path", "").strip()
@@ -344,6 +381,8 @@ async def propose_clips(payload: ClipProposalRequest):
         region_map: dict[str, list[dict[str, float]]] = {}
         focus_map: dict[str, dict[str, float]] = {}
         layout_map: dict[str, str] = {}
+        split_ratio_map: dict[str, float] = {}
+        outline_style_map: dict[str, str] = {}
         for region in req.regions:
             boxes = [box for box in _region_boxes(region) if box]
             if region.kind in ("custom", "player", "gameplay"):
@@ -355,6 +394,10 @@ async def propose_clips(payload: ClipProposalRequest):
                 region_map[region.media_id] = []
             if region.layout:
                 layout_map[region.media_id] = region.layout
+            if region.split_ratio is not None:
+                split_ratio_map[region.media_id] = region.split_ratio
+            if region.outline_style:
+                outline_style_map[region.media_id] = region.outline_style
         total = max(len(rows), 1)
         for index, row in enumerate(rows):
             base = index / total * 85
@@ -401,11 +444,13 @@ async def propose_clips(payload: ClipProposalRequest):
         jobs.update(job_id, progress=88, message="Scoring engaging moments…")
         candidates = scoring.propose(
             rows, transcripts, visions, req.count, req.min_duration, req.max_duration,
-            req.platform, region_map, layout_map, focus_map,
+            req.platform, region_map, layout_map, focus_map, split_ratio_map, outline_style_map,
         )
         if req.use_llm and await llm.reachable():
-            jobs.update(job_id, progress=94, message="Gemma is refining titles…")
-            candidates = await scoring.refine_with_llm(candidates, llm.structured, req.llm_model)
+            jobs.update(job_id, progress=94, message="Local LLM is refining titles and captions…")
+            candidates = await scoring.refine_with_llm(
+                candidates, llm.structured, req.llm_model, req.platform,
+            )
         for candidate in candidates:
             db.insert(
                 "clips",
@@ -449,11 +494,33 @@ def _clip_response(row: dict[str, Any] | None) -> dict[str, Any] | None:
     result = {**metadata, **loaded, "metadata": metadata}
     if not isinstance(result.get("reasons"), list):
         result["reasons"] = [result["reason"]] if result.get("reason") else []
+    effects = metadata.get("effects") if isinstance(metadata.get("effects"), dict) else {}
     result.setdefault("hook", "")
     result.setdefault("hashtags", [])
     result.setdefault("transcript", "")
-    if not isinstance(result.get("regions"), list):
+    result.setdefault("caption", "")
+    result["region"] = effects.get("region") if "region" in effects else result.get("region")
+    result["region_layout"] = effects.get("region_layout") if "region_layout" in effects else result.get("region_layout")
+    if isinstance(effects.get("regions"), list):
+        result["regions"] = effects["regions"]
+    elif not isinstance(result.get("regions"), list):
         result["regions"] = []
+    if isinstance(effects.get("crop_path"), list) and effects["crop_path"]:
+        result["crop_path"] = effects["crop_path"]
+    elif not isinstance(result.get("crop_path"), list) or not result.get("crop_path"):
+        result["crop_path"] = metadata.get("crop_path") or []
+    if effects.get("outline_style"):
+        result["outline_style"] = effects["outline_style"]
+    if result.get("outline_style") is None:
+        result["outline_style"] = "clean"
+    if effects.get("split_ratio") is not None:
+        result["split_ratio"] = effects["split_ratio"]
+    if result.get("split_ratio") is None:
+        result["split_ratio"] = {
+            "top-game-bottom-player": 0.58,
+            "top-player-bottom-game": 0.42,
+            "side-by-side": 0.62,
+        }.get(result.get("region_layout"), 0.58)
     return result
 
 
@@ -472,16 +539,25 @@ class ClipPatch(BaseModel):
     start: float | None = None
     end: float | None = None
     title: str | None = None
+    caption: str | None = None
     score: float | None = None
     status: str | None = None
 
 
 @app.patch("/api/clips/{clip_id}")
 def patch_clip(clip_id: str, payload: ClipPatch):
-    if not db.one("SELECT id FROM clips WHERE id=?", (clip_id,)):
+    row = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
+    if not row:
         return JSONResponse({"detail": "Clip not found"}, status_code=404)
-    db.update("clips", "id", clip_id, payload.model_dump(exclude_none=True))
-    return ok(clip=_clip_response(db.one("SELECT * FROM clips WHERE id=?", (clip_id,))))
+    updates = payload.model_dump(exclude_none=True)
+    caption = updates.pop("caption", None)
+    if caption is not None:
+        metadata = _clip_metadata(row)
+        metadata["caption"] = str(caption).strip()[:1000]
+        updates["metadata"] = dumps(metadata)
+    if updates:
+        db.update("clips", "id", clip_id, updates)
+    return ok(clip=_clip_response(db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")))
 
 
 @app.post("/api/clips/apply-effects")
@@ -493,7 +569,12 @@ def apply_effects(payload: ApplyEffectsRequest):
         if not row:
             continue
         metadata = _clip_metadata(row)
-        metadata["effects"] = payload.effects
+        saved_effects = metadata.get("effects") if isinstance(metadata.get("effects"), dict) else {}
+        effect_patch = {
+            **payload.effects,
+            **payload.effects_by_clip.get(clip_id, {}),
+        }
+        metadata["effects"] = {**saved_effects, **effect_patch}
         db.update("clips", "id", clip_id, {"metadata": dumps(metadata)})
         changed += 1
     return ok(changed=changed, effects=payload.effects)
@@ -606,21 +687,38 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
         media = media_row(clip["media_id"])
         options = req.model_dump()
         metadata = _clip_metadata(clip)
-        regions = req.regions or metadata.get("regions") or []
-        focus = req.region or metadata.get("region") or (regions[0] if regions else None)
-        if focus:
-            options["region"] = focus
+        saved_effects = metadata.get("effects") if isinstance(metadata.get("effects"), dict) else {}
+        supplied = req.model_fields_set
+        if "regions" in supplied:
+            regions = req.regions
+        else:
+            regions = saved_effects.get("regions") if isinstance(saved_effects.get("regions"), list) else metadata.get("regions") or []
+        if "region" in supplied:
+            focus = req.region or (regions[0] if regions else None)
+        else:
+            focus = saved_effects.get("region") or metadata.get("region") or (regions[0] if regions else None)
+        options["region"] = focus
         options["regions"] = regions
-        options["region_layout"] = req.region_layout or metadata.get("region_layout")
+        options["region_layout"] = (
+            req.region_layout if "region_layout" in supplied
+            else saved_effects.get("region_layout") if "region_layout" in saved_effects
+            else metadata.get("region_layout")
+        )
+        saved_split_ratio = saved_effects.get("split_ratio")
+        if saved_split_ratio is None:
+            saved_split_ratio = metadata.get("split_ratio")
+        options["split_ratio"] = req.split_ratio if "split_ratio" in supplied else saved_split_ratio
+        options["outline_style"] = (
+            (req.outline_style or "clean") if "outline_style" in supplied
+            else saved_effects.get("outline_style") or metadata.get("outline_style") or "clean"
+        )
         options["crop_path"] = metadata.get("crop_path") or []
         options["title"] = req.title or clip.get("title") or metadata.get("title")
         if req.captions is None:
-            words: list[dict[str, Any]] = []
-            for segment in last_analysis(clip["media_id"], "transcript").get("segments", []):
-                for word in segment.get("words") or []:
-                    if clip["start"] <= float(word.get("start", 0)) <= clip["end"]:
-                        words.append(word)
-            options["captions"] = words
+            analysis = last_analysis(clip["media_id"], "transcript") or {}
+            options["captions"] = _caption_words_in_window(
+                analysis, float(clip["start"]), float(clip["end"]),
+            )
         options["watermark_path"] = configured_watermark_path() if req.watermark else None
         output = req.output or render.export_path(f"{clip.get('title') or 'clip'}_{clip_id}")
         await render.render_clip(
@@ -632,6 +730,7 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
             "aspect", "resolution", "caption_style", "captions", "title", "sticker", "sticker_position",
             "music", "music_volume", "sfx", "sfx_volume", "speed", "brightness", "contrast",
             "saturation", "blur_background", "watermark", "watermark_path", "region", "regions", "region_layout",
+            "split_ratio", "outline_style",
         }}
         metadata["hardware"] = hardware_info()
         db.update("clips", "id", clip_id, {
@@ -642,7 +741,7 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
             "hardware": metadata["hardware"], "effects": metadata["effects"],
         }
 
-    return ok(job_id=jobs.run("render", work, payload.model_dump()))
+    return ok(job_id=jobs.run("render", work, payload.model_dump(exclude_unset=True)))
 
 
 @app.post("/api/auto-edit")
@@ -744,8 +843,18 @@ async def auto_edit(payload: AutoEditRequest):
                 if not captions:
                     warnings.append(f"{row.get('title') or clip_id}: rendered with a title card; no speech transcript was available.")
 
-            regions = metadata.get("regions") or []
-            focus = metadata.get("region") or (regions[0] if regions else None)
+            regions = (
+                effects.get("regions") if isinstance(effects.get("regions"), list)
+                else metadata.get("regions") or []
+            )
+            if "region" in effects:
+                focus = effects.get("region") or (regions[0] if regions else None)
+            else:
+                focus = metadata.get("region") or (regions[0] if regions else None)
+            split_ratio = effects.get("split_ratio")
+            if split_ratio is None:
+                split_ratio = metadata.get("split_ratio")
+            outline_style = effects.get("outline_style") or metadata.get("outline_style") or "clean"
             requested_music = req.music if req.music is not None else effects.get("music")
             music = str(requested_music or "").strip() or None
             if music:
@@ -792,7 +901,8 @@ async def auto_edit(payload: AutoEditRequest):
                 "blur_background": req.blur_background,
                 "watermark": bool(watermark_path), "watermark_path": watermark_path,
                 "region": focus, "regions": regions,
-                "region_layout": metadata.get("region_layout"),
+                "region_layout": effects.get("region_layout") or metadata.get("region_layout"),
+                "split_ratio": split_ratio, "outline_style": outline_style,
                 "crop_path": metadata.get("crop_path") or [],
             }
             output = render.export_path(f"{row.get('title') or 'clip'}_auto_edited_{clip_id}")
@@ -838,7 +948,8 @@ async def auto_edit(payload: AutoEditRequest):
                 "source_start": clip_start, "source_duration": source_duration,
                 "duration": timeline_duration, "title": title, "aspect": req.aspect,
                 "resolution": req.resolution, "region": focus, "regions": regions,
-                "region_layout": metadata.get("region_layout"),
+                "region_layout": options.get("region_layout"),
+                "split_ratio": split_ratio, "outline_style": outline_style,
                 "crop_path": metadata.get("crop_path") or [],
                 "captions": captions[:180] if req.captions else [],
                 "audio": auto_audio, "stickers": auto_stickers,
@@ -870,9 +981,13 @@ async def export_batch(payload: ExportAllRequest):
                     return None
                 metadata = _clip_metadata(clip)
                 output = render.export_path(f"{clip.get('title', 'clip')}_{clip_id}_{index+1}")
-                effects = metadata.get("effects")
-                if not isinstance(effects, dict):
-                    effects = {}
+                saved_effects = metadata.get("effects")
+                if not isinstance(saved_effects, dict):
+                    saved_effects = {}
+                effects = {
+                    **saved_effects,
+                    **req.effects_by_clip.get(clip_id, {}),
+                }
                 watermark_enabled = effects.get("watermark", True)
                 saved_watermark_path = effects.get("watermark_path")
                 watermark_path = None
@@ -881,12 +996,35 @@ async def export_batch(payload: ExportAllRequest):
                         watermark_path = str(saved_watermark_path)
                     else:
                         watermark_path = configured_watermark_path()
-                regions = effects.get("regions") or metadata.get("regions") or []
+                regions = (
+                    effects.get("regions") if isinstance(effects.get("regions"), list)
+                    else metadata.get("regions") or []
+                )
+                saved_captions = effects.get("captions")
+                if isinstance(saved_captions, list):
+                    captions = saved_captions
+                else:
+                    transcript = last_analysis(clip["media_id"], "transcript") or {}
+                    captions = _caption_words_in_window(
+                        transcript, float(clip["start"]), float(clip["end"]),
+                    )
+                if "region" in effects:
+                    focus = effects.get("region") or (regions[0] if regions else None)
+                else:
+                    focus = metadata.get("region") or (regions[0] if regions else None)
+                region_layout = (
+                    effects.get("region_layout") if "region_layout" in effects
+                    else metadata.get("region_layout")
+                )
+                split_ratio = effects.get("split_ratio")
+                if split_ratio is None:
+                    split_ratio = metadata.get("split_ratio")
+                outline_style = effects.get("outline_style") or metadata.get("outline_style") or "clean"
                 options = {
                     "aspect": effects.get("aspect", req.aspect),
                     "resolution": effects.get("resolution", req.resolution),
                     "caption_style": effects.get("caption_style", {"preset": "hype"}),
-                    "captions": effects.get("captions") or [],
+                    "captions": captions,
                     "watermark": watermark_enabled, "watermark_path": watermark_path,
                     "sfx": effects.get("sfx", ["whoosh", "pop"]),
                     "sfx_volume": effects.get("sfx_volume", 0.5),
@@ -899,9 +1037,11 @@ async def export_batch(payload: ExportAllRequest):
                     "contrast": render._normalise_contrast(effects.get("contrast", 1.0)),
                     "saturation": effects.get("saturation", 1),
                     "blur_background": effects.get("blur_background", True),
-                    "region": effects.get("region") or metadata.get("region") or (regions[0] if regions else None),
+                    "region": focus,
                     "regions": regions,
-                    "region_layout": effects.get("region_layout") or metadata.get("region_layout"),
+                    "region_layout": region_layout,
+                    "split_ratio": split_ratio,
+                    "outline_style": outline_style,
                     "crop_path": metadata.get("crop_path") or [],
                     "title": effects.get("title") or clip.get("title"),
                 }
@@ -922,6 +1062,7 @@ async def export_batch(payload: ExportAllRequest):
                         "aspect", "resolution", "caption_style", "captions", "title", "sticker", "sticker_position",
                         "music", "music_volume", "sfx", "sfx_volume", "speed", "brightness", "contrast",
                         "saturation", "blur_background", "watermark", "watermark_path", "region", "regions", "region_layout",
+                        "split_ratio", "outline_style",
                     }},
                 }
                 metadata["hardware"] = hardware_info()
@@ -952,6 +1093,23 @@ def create_project(payload: ProjectCreate):
     if payload.clip_id:
         clip = db.loads(db.one("SELECT * FROM clips WHERE id=?", (payload.clip_id,)), "metadata") or {}
         clip_metadata = _clip_metadata(clip)
+        clip_effects = clip_metadata.get("effects") if isinstance(clip_metadata.get("effects"), dict) else {}
+        clip_regions = (
+            clip_effects.get("regions") if isinstance(clip_effects.get("regions"), list)
+            else clip_metadata.get("regions") or []
+        )
+        if "region" in clip_effects:
+            clip_region = clip_effects.get("region") or (clip_regions[0] if clip_regions else None)
+        else:
+            clip_region = clip_metadata.get("region")
+        clip_layout = (
+            clip_effects.get("region_layout") if "region_layout" in clip_effects
+            else clip_metadata.get("region_layout")
+        )
+        clip_split_ratio = clip_effects.get("split_ratio")
+        if clip_split_ratio is None:
+            clip_split_ratio = clip_metadata.get("split_ratio")
+        clip_outline = clip_effects.get("outline_style") or clip_metadata.get("outline_style") or "clean"
         media = media_row(clip.get("media_id", ""))
         timeline["tracks"]["video"].append(
             {
@@ -959,9 +1117,10 @@ def create_project(payload: ProjectCreate):
                 "sourceStart": clip.get("start", 0),
                 "duration": clip.get("end", 0) - clip.get("start", 0),
                 "label": clip.get("title") or media.get("title", "Clip"),
-                "region": clip_metadata.get("region"), "regions": clip_metadata.get("regions") or [],
-                "region_layout": clip_metadata.get("region_layout"),
-                "crop_path": clip_metadata.get("crop_path") or [],
+                "region": clip_region, "regions": clip_regions,
+                "region_layout": clip_layout, "split_ratio": clip_split_ratio,
+                "outline_style": clip_outline,
+                "crop_path": clip_metadata.get("crop_path") or clip_effects.get("crop_path") or [],
             }
         )
     elif payload.media_id:

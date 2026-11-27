@@ -89,7 +89,8 @@ def test_actual_crop_render_is_quicktime_friendly_h264_mp4(tmp_path):
         str(source), 0, 1, str(output), {
             "aspect": "9:16", "resolution": "720p",
             "region": {"x": 0.2, "y": 0.1, "w": 0.5, "h": 0.8},
-            "blur_background": True, "caption_style": {"preset": "none"}, "sfx": [],
+            "outline_style": "neon", "blur_background": True,
+            "caption_style": {"preset": "none"}, "sfx": [],
         },
     ))
     info = probe(output)
@@ -121,11 +122,13 @@ def test_timeline_renderer_applies_selected_region(tmp_path, monkeypatch):
         "tracks": {"video": [{
             "path": str(source), "sourceStart": 2, "duration": 8,
             "region": {"x": 0.2, "y": 0.1, "w": 0.5, "h": 0.8},
+            "outline_style": "double",
         }], "captions": [], "stickers": [], "audio": []},
     }, str(tmp_path / "timeline.mp4"), watermark_path=str(logo)))
     filter_graph = captured["args"][captured["args"].index("-filter_complex") + 1]
     assert "crop=iw*0.5000:ih*0.8000:iw*0.2000:ih*0.1000" in filter_graph
     assert "scale=720:1280" in filter_graph
+    assert "drawbox=" in filter_graph and "white@0.96" in filter_graph
     assert "[1:v]scale=100:-1,format=rgba,colorchannelmixer=aa=0.85[wm]" in filter_graph
 
 
@@ -215,6 +218,7 @@ def test_saved_clip_metadata_is_flattened_for_ui_and_preserved_in_editor_project
     source.write_bytes(b"source")
     media_id, clip_id, legacy_id = "testmedia515candidate", "testclip515candidate", "testclip515legacy"
     region = {"x": 0.2, "y": 0.1, "w": 0.5, "h": 0.8}
+    second_region = {"x": 0.5, "y": 0.1, "w": 0.5, "h": 0.8}
     candidate = {
         "media_id": media_id, "start": 2, "end": 8, "score": 77,
         "title": "Focused moment", "reasons": ["high activity"], "hook": "",
@@ -228,14 +232,20 @@ def test_saved_clip_metadata_is_flattened_for_ui_and_preserved_in_editor_project
     })
     for identifier, document in (
         (clip_id, candidate),
-        (legacy_id, {"id": legacy_id, "metadata": candidate, "effects": {"aspect": "9:16"}}),
+        (legacy_id, {
+            "id": legacy_id, "metadata": candidate,
+            "effects": {
+                "aspect": "9:16", "region": region, "regions": [region, second_region],
+                "region_layout": "side-by-side", "split_ratio": 0.71, "outline_style": "neon",
+            },
+        }),
     ):
         db.insert("clips", {
             "id": identifier, "project_id": None, "media_id": media_id,
             "start": 2, "end": 8, "score": 77, "title": "Focused moment", "reason": "high activity",
             "status": "proposed", "output": None, "metadata": dumps(document), "created_at": now(),
         })
-    project_id = None
+    project_ids: list[str] = []
     try:
         response = client.get("/api/clips", headers=HEADERS)
         assert response.status_code == 200
@@ -246,16 +256,29 @@ def test_saved_clip_metadata_is_flattened_for_ui_and_preserved_in_editor_project
         assert clips[clip_id]["reasons"] == ["high activity"]
         assert clips[legacy_id]["region"] == region
         assert clips[legacy_id]["effects"]["aspect"] == "9:16"
+        assert clips[legacy_id]["regions"] == [region, second_region]
+        assert clips[legacy_id]["region_layout"] == "side-by-side"
+        assert clips[legacy_id]["split_ratio"] == 0.71
+        assert clips[legacy_id]["outline_style"] == "neon"
 
         response = client.post("/api/projects", headers=HEADERS, json={"name": "Crop project", "clip_id": clip_id})
         assert response.status_code == 200
         project = response.json()["project"]
-        project_id = project["id"]
+        project_ids.append(project["id"])
         item = project["timeline"]["tracks"]["video"][0]
         assert item["region"] == region and item["regions"] == [region]
         assert item["crop_path"] == [[2.0, 0.3], [5.0, 0.5], [8.0, 0.7]]
+
+        response = client.post("/api/projects", headers=HEADERS, json={"name": "Effects project", "clip_id": legacy_id})
+        assert response.status_code == 200
+        project = response.json()["project"]
+        project_ids.append(project["id"])
+        legacy_item = project["timeline"]["tracks"]["video"][0]
+        assert legacy_item["regions"] == [region, second_region]
+        assert legacy_item["region_layout"] == "side-by-side"
+        assert legacy_item["split_ratio"] == 0.71 and legacy_item["outline_style"] == "neon"
     finally:
-        if project_id:
+        for project_id in project_ids:
             db.delete("projects", "id", project_id)
         db.delete("clips", "id", clip_id)
         db.delete("clips", "id", legacy_id)
@@ -274,13 +297,39 @@ def test_apply_effects_does_not_nest_or_drop_candidate_regions():
     try:
         response = client.post(
             "/api/clips/apply-effects", headers=HEADERS,
-            json={"clip_ids": [clip_id], "effects": {"aspect": "16:9"}},
+            json={
+                "clip_ids": [clip_id], "effects": {"brightness": 0.1},
+                "effects_by_clip": {clip_id: {"aspect": "16:9", "split_ratio": 0.7}},
+            },
         )
         assert response.status_code == 200 and response.json()["changed"] == 1
         stored = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")["metadata"]
         assert stored["region"] == region and stored["regions"] == [region]
-        assert stored["effects"] == {"aspect": "16:9"}
+        assert stored["effects"] == {"brightness": 0.1, "aspect": "16:9", "split_ratio": 0.7}
         assert "metadata" not in stored
+    finally:
+        db.delete("clips", "id", clip_id)
+
+
+def test_patch_clip_persists_editable_social_caption():
+    clip_id = "testclip515caption"
+    db.insert("clips", {
+        "id": clip_id, "project_id": None, "media_id": "missing-caption-source",
+        "start": 0, "end": 1, "score": 1, "title": "Caption", "reason": "",
+        "status": "proposed", "output": None,
+        "metadata": dumps({"caption": "Initial copy", "transcript": "Original words."}),
+        "created_at": now(),
+    })
+    try:
+        response = client.patch(
+            f"/api/clips/{clip_id}", headers=HEADERS,
+            json={"caption": "  Revised social copy  "},
+        )
+        assert response.status_code == 200
+        assert response.json()["clip"]["caption"] == "Revised social copy"
+        stored = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
+        assert stored["metadata"]["caption"] == "Revised social copy"
+        assert stored["metadata"]["transcript"] == "Original words."
     finally:
         db.delete("clips", "id", clip_id)
 

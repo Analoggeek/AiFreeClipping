@@ -51,11 +51,11 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
     } catch (error) { notify(String(error)); setBusy(null); }
   };
 
-  const installAll = async () => {
+  const installRecommended = async () => {
     try {
       const result = await api.installRecommendedModels();
       setRecommendedJob(result.job_id);
-      notify('Downloading, installing, activating and saving the recommended models…');
+      notify('Downloading, installing, activating and saving the models recommended for this hardware…');
     } catch (error) { notify(String(error)); }
   };
 
@@ -73,7 +73,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
       const result = await api.autoSetupModels();
       if (!result.job_id) { notify(result.message || 'Offline setup was attempted recently; retry again later.'); return; }
       setRecommendedJob(result.job_id);
-      notify('Detecting your hardware and downloading the complete offline model pack…');
+      notify('Detecting your hardware and installing the recommended offline model set…');
     } catch (error) { notify(String(error)); }
   };
 
@@ -144,19 +144,20 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
     kind, items: models.filter((model) => model.kind === kind),
   })).filter((group) => group.items.length);
   const installedCount = models.filter((model) => model.installed).length;
+  const recommendedCount = models.filter((model) => model.recommended && model.autoInstall).length;
 
   return (
     <div className="stack">
       <Panel
         title="AI models & hardware"
-        subtitle="One click downloads, installs, activates and saves everything locally. Cloud models link straight to their API key page."
+        subtitle="One click installs a balanced model set picked for your memory and GPU. Cloud models link straight to their API key page."
         action={
           <div className="panel-actions compact">
             <button className="ghost-btn" onClick={() => void refresh()}><RefreshCw size={15} /> Refresh</button>
             <button className="chip-btn" onClick={() => void pickModelFolder()}><FolderOpen size={14} /> Model folder</button>
             <button className="chip-btn" disabled={Boolean(recommendedJob)} onClick={() => void autoSetup()}><Cpu size={14} /> Auto setup</button>
-            <button className="primary" disabled={Boolean(recommendedJob)} onClick={() => void installAll()}>
-              {recommendedJob ? <LoaderCircle size={15} className="spin" /> : <Zap size={15} />} Install all
+            <button className="primary" disabled={Boolean(recommendedJob)} onClick={() => void installRecommended()}>
+              {recommendedJob ? <LoaderCircle size={15} className="spin" /> : <Zap size={15} />} Install recommended
             </button>
           </div>
         }
@@ -164,6 +165,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
         <div className="hardware-bar">
           <Pill tone="green">{caps.gpu?.cuda ? 'CUDA GPU detected' : caps.gpu?.metal ? 'Apple Metal available' : 'CPU fallback'}</Pill>
           <Pill tone="violet">{installedCount}/{models.length} models ready</Pill>
+          <Pill tone="amber">{recommendedCount} local models matched to this hardware</Pill>
           {modelFolder && <Pill tone="muted">{modelFolder}</Pill>}
         </div>
         {recommendedJob && <JobTracker jobId={recommendedJob} label="Automatic model setup" />}
@@ -181,6 +183,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
                       {model.recommended && <Pill tone="violet"><Sparkles size={12} /> Recommended</Pill>}
                     </div>
                     <p>{model.use}</p>
+                    {model.recommended && model.recommendedReason && <p className="model-recommendation"><Sparkles size={12} /> {model.recommendedReason}</p>}
                     {model.setupNote && <p className="model-note">{model.setupNote}</p>}
                     {model.id === 'sdxl-1.0' && checkpointPath && <p className="model-checkpoint-path" title={checkpointPath}>Selected SDXL checkpoint: {checkpointPath}</p>}
                     {model.id === 'sdxl-1.0' && checkpointFolder && <p className="model-checkpoint-path" title={checkpointFolder}>ComfyUI checkpoints folder: {checkpointFolder}</p>}
@@ -227,12 +230,12 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
         })}
       </div>
 
-      <Panel title="Recommended order" subtitle="Install these first for the fastest complete offline workflow">
+      <Panel title="Hardware-matched setup" subtitle="The recommended set adjusts to available memory and GPU acceleration">
         <ol className="howto">
-          <li><Package size={16} /><div><strong>1. Whisper Small (Medium for Hindi)</strong><p>Word-level captions and transcript-driven moment detection.</p></div></li>
-          <li><Zap size={16} /><div><strong>2. YOLOX Nano ONNX + ByteTrack</strong><p>Player/gameplay tracking inside the packaged app — no Torch needed.</p></div></li>
-          <li><Sparkles size={16} /><div><strong>3. Gemma 2 7B via Ollama</strong><p>Viral titles and reranking. The runtime is downloaded and started automatically — no manual setup.</p></div></li>
-          <li><KeyRound size={16} /><div><strong>4. Optional cloud APIs</strong><p>Nano Banana, YouTube, Pexels and Pixabay links open their key pages directly.</p></div></li>
+          <li><Package size={16} /><div><strong>1. Whisper Small or Medium</strong><p>Small is lighter on low-memory machines; Medium is recommended from 16 GB RAM for improved multilingual accuracy.</p></div></li>
+          <li><Zap size={16} /><div><strong>2. YOLOX Nano ONNX + ByteTrack</strong><p>A compact 4 MB detector for player/gameplay tracking, including inside packaged builds.</p></div></li>
+          <li><Sparkles size={16} /><div><strong>3. Gemma sized for your system</strong><p>Choose a compact 4B model for entry hardware, 7B for balanced acceleration, or 12B on high-memory GPUs and Apple Silicon.</p></div></li>
+          <li><KeyRound size={16} /><div><strong>4. Optional image and cloud services</strong><p>SDXL, Nano Banana, YouTube, Pexels and Pixabay stay optional so setup avoids large downloads you may not need.</p></div></li>
         </ol>
       </Panel>
     </div>

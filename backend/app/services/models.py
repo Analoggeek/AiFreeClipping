@@ -357,9 +357,46 @@ def _whisper_dir(model_id: str) -> Path:
     return Path(env("HF_HOME", str(root / "huggingface"))).expanduser() / model_id
 
 
+def recommended_models(hardware: dict[str, Any] | None = None) -> dict[str, str]:
+    """Pick a balanced offline model set for available RAM and GPU memory."""
+    snapshot = hardware or hardware_info()
+    gpu = snapshot.get("gpu") or {}
+    try:
+        ram = float(snapshot.get("ram_total_gb") or 8)
+    except (TypeError, ValueError):
+        ram = 8.0
+    try:
+        vram = float(gpu.get("vram_total_gb") or snapshot.get("vram_total_gb") or 0)
+    except (TypeError, ValueError):
+        vram = 0.0
+    metal = bool(gpu.get("metal"))
+    cuda = bool(gpu.get("cuda"))
+
+    if ram >= 32 and (metal or (cuda and vram >= 12)):
+        llm_id, llm_reason = "gemma3:12b", "High-memory / accelerated system — best local writing quality."
+    elif ram >= 16 and (metal or (cuda and vram >= 6) or ram >= 32):
+        llm_id, llm_reason = "gemma2:7b", "Balanced quality and speed for this memory / accelerator tier."
+    else:
+        llm_id = "gemma3:4b"
+        llm_reason = "Compact 4B model selected to keep inference responsive on limited hardware."
+
+    asr_id = "whisper-medium" if ram >= 16 else "whisper-small"
+    asr_reason = (
+        "Extra multilingual accuracy; this system has enough memory for Medium."
+        if asr_id == "whisper-medium"
+        else "Low-memory profile: Small keeps transcription lighter while preserving word timing."
+    )
+    return {
+        asr_id: asr_reason,
+        "yolox-nano": "Tiny ONNX detector; fast player tracking with a 4 MB download.",
+        llm_id: llm_reason,
+    }
+
+
 async def status() -> list[dict[str, Any]]:
     installed_llm = {item["name"] for item in await tags()}
     persisted = _installed_ids()
+    recommendations = recommended_models(hardware_info())
     checkpoint_dir = _comfy_checkpoints_dir()
     configured_checkpoint = db.get_setting("comfy_checkpoint", "sd_xl_base_1.0.safetensors")
     configured_path = Path(db.get_setting("comfy_checkpoint_path", "")).expanduser()
@@ -388,7 +425,12 @@ async def status() -> list[dict[str, Any]]:
                 env(API_ENV.get(model["id"], ""))
                 or db.get_setting(API_SETTINGS.get(model["id"], ""))
             )
-        result.append({**model, "installed": installed})
+        result.append({
+            **model,
+            "installed": installed,
+            "recommended": model["id"] in recommendations,
+            "recommendedReason": recommendations.get(model["id"], ""),
+        })
     return result
 
 
@@ -533,23 +575,20 @@ async def install_recommended(progress: Callable[[float, str], None]) -> dict[st
 
 
 async def auto_setup(progress: Callable[[float, str], None]) -> dict[str, Any]:
-    """Hardware-aware, unattended setup: choose the biggest useful local stack."""
+    """Install only the hardware-matched offline models, skipping ready weights."""
     hardware = hardware_info()
+    profile = recommended_models(hardware)
+    current = await status()
+    target = [
+        model["id"] for model in current
+        if model.get("recommended") and model.get("autoInstall") and not model.get("installed")
+    ]
     ram = float(hardware.get("ram_total_gb") or 8)
-    gpu = hardware.get("gpu") or {}
-    accelerated = bool(gpu.get("cuda") or gpu.get("metal"))
-    target = ["whisper-small", "yolox-nano"]
-    if ram >= 16 and accelerated:
-        target.append("gemma2:7b")
-    else:
-        target.append("gemma3:4b")
-    if ram >= 16:
-        target.append("sdxl-1.0")
-    progress(2, f"Detected {ram:.1f} GB RAM — preparing {len(target)} local models…")
+    progress(2, f"Detected {ram:.1f} GB RAM — preparing {len(target)} recommended model(s)…")
     installed: list[str] = []
     for index, model_id in enumerate(target):
-        offset = index / len(target) * 100
-        span = 100 / len(target)
+        offset = index / max(len(target), 1) * 100
+        span = 100 / max(len(target), 1)
 
         def scoped(pct: float, message: str, model_id=model_id, offset=offset, span=span) -> None:
             progress(min(99, offset + pct / 100 * span), f"{model_id}: {message}")
@@ -557,8 +596,8 @@ async def auto_setup(progress: Callable[[float, str], None]) -> dict[str, Any]:
         await install(model_id, scoped)
         installed.append(model_id)
     db.set_setting("auto_setup_complete", "1")
-    progress(100, "Your offline studio is ready")
-    return {"installed": installed, "hardware": hardware}
+    progress(100, "Your hardware-matched offline studio is ready")
+    return {"installed": installed, "recommended": list(profile), "hardware": hardware}
 
 
 async def uninstall(model_id: str) -> dict[str, Any]:

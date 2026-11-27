@@ -38,6 +38,8 @@ export function appendAutoEditTimeline(
       region: edit.region || regions[0] || null,
       regions,
       region_layout: edit.region_layout || null,
+      split_ratio: edit.split_ratio ?? null,
+      outline_style: edit.outline_style || 'clean',
       crop_path: edit.crop_path || [],
       effects,
       auto_edit: true,
