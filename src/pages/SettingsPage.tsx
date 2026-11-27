@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, ShieldCheck, Sparkles, Trash2, Youtube } from 'lucide-react';
+import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, ShieldCheck, Sparkles, Trash2, Volume2, Youtube } from 'lucide-react';
 import { api } from '../api';
+import type { AutoEditOptions } from '../types';
 import { Panel } from '../components/common';
 import logo from '../../brand/logo.svg';
 
@@ -14,18 +15,51 @@ const FIELDS = [
   { key: 'comfy_checkpoint', label: 'ComfyUI SDXL checkpoint', icon: HardDrive, placeholder: 'sd_xl_base_1.0.safetensors' },
 ];
 
+const AUTO_EDIT_DEFAULTS: AutoEditOptions = {
+  style: 'hype', aspect: '9:16', resolution: 'source',
+  captions: true, sound_effects: true, stickers: true, blur_background: true,
+  music: '', music_volume: 0.18,
+};
+
 export default function SettingsPage({ notify }: { notify: (message: string) => void }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [folders, setFolders] = useState<Record<string, string>>({});
+  const [autoEdit, setAutoEdit] = useState<AutoEditOptions>(AUTO_EDIT_DEFAULTS);
 
   useEffect(() => {
-    api.settings().then((result) => setValues(result.values)).catch(() => undefined);
+    api.settings().then((result) => {
+      const saved = result.values || {};
+      setValues(saved);
+      const numericVolume = Number(saved.auto_edit_music_volume ?? AUTO_EDIT_DEFAULTS.music_volume);
+      setAutoEdit({
+        style: ['hype', 'minimal', 'premium'].includes(saved.auto_edit_style) ? saved.auto_edit_style as AutoEditOptions['style'] : AUTO_EDIT_DEFAULTS.style,
+        aspect: ['9:16', '1:1', '16:9'].includes(saved.auto_edit_aspect) ? saved.auto_edit_aspect as AutoEditOptions['aspect'] : AUTO_EDIT_DEFAULTS.aspect,
+        resolution: ['source', '720p', '1080p'].includes(saved.auto_edit_resolution) ? saved.auto_edit_resolution as AutoEditOptions['resolution'] : AUTO_EDIT_DEFAULTS.resolution,
+        captions: saved.auto_edit_captions === undefined ? true : !['0', 'false'].includes(saved.auto_edit_captions.toLowerCase()),
+        sound_effects: saved.auto_edit_sound_effects === undefined ? true : !['0', 'false'].includes(saved.auto_edit_sound_effects.toLowerCase()),
+        stickers: saved.auto_edit_stickers === undefined ? true : !['0', 'false'].includes(saved.auto_edit_stickers.toLowerCase()),
+        blur_background: saved.auto_edit_blur_background === undefined ? true : !['0', 'false'].includes(saved.auto_edit_blur_background.toLowerCase()),
+        music: saved.auto_edit_music || '',
+        music_volume: Number.isFinite(numericVolume) ? Math.max(0, Math.min(1, numericVolume)) : AUTO_EDIT_DEFAULTS.music_volume,
+      });
+    }).catch(() => undefined);
     api.folders().then((result) => setFolders(result.folders)).catch(() => undefined);
   }, []);
 
   const save = async () => {
     try {
-      const result = await api.saveSettings(values);
+      const result = await api.saveSettings({
+        ...values,
+        auto_edit_style: autoEdit.style,
+        auto_edit_aspect: autoEdit.aspect,
+        auto_edit_resolution: autoEdit.resolution,
+        auto_edit_captions: String(autoEdit.captions),
+        auto_edit_sound_effects: String(autoEdit.sound_effects),
+        auto_edit_stickers: String(autoEdit.stickers),
+        auto_edit_blur_background: String(autoEdit.blur_background),
+        auto_edit_music: autoEdit.music || '',
+        auto_edit_music_volume: String(autoEdit.music_volume),
+      });
       setValues(result.values);
       notify('Settings saved.');
     } catch (error) { notify(String(error)); }
@@ -67,6 +101,39 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
             <button className="chip-btn" disabled={!values.watermark_path} onClick={() => setValues((current) => ({ ...current, watermark_path: '' }))}><Trash2 size={14} /> Remove</button>
           </div>
         </div>
+      </Panel>
+
+      <Panel title="Auto Edit" subtitle="These saved preferences control the Auto Edit button in the Video Editor">
+        <div className="form-grid four">
+          <label className="field"><span>Editing style</span>
+            <select value={autoEdit.style} onChange={(event) => setAutoEdit((current) => ({ ...current, style: event.target.value as AutoEditOptions['style'] }))}>
+              <option value="hype">High energy</option><option value="minimal">Minimal</option><option value="premium">Premium</option>
+            </select>
+          </label>
+          <label className="field"><span>Output format</span>
+            <select value={autoEdit.aspect} onChange={(event) => setAutoEdit((current) => ({ ...current, aspect: event.target.value as AutoEditOptions['aspect'] }))}>
+              <option value="9:16">Vertical · 9:16</option><option value="1:1">Square · 1:1</option><option value="16:9">Landscape · 16:9</option>
+            </select>
+          </label>
+          <label className="field"><span>Export quality</span>
+            <select value={autoEdit.resolution} onChange={(event) => setAutoEdit((current) => ({ ...current, resolution: event.target.value as AutoEditOptions['resolution'] }))}>
+              <option value="source">Source quality</option><option value="1080p">1080p</option><option value="720p">720p</option>
+            </select>
+          </label>
+          <label className="field"><span>Music file (optional)</span>
+            <input value={autoEdit.music || ''} onChange={(event) => setAutoEdit((current) => ({ ...current, music: event.target.value }))} placeholder="/path/to/music.mp3" />
+          </label>
+          <label className="field"><span>Music volume · {Math.round(autoEdit.music_volume * 100)}%</span>
+            <input type="range" min="0" max="1" step="0.05" value={autoEdit.music_volume} onChange={(event) => setAutoEdit((current) => ({ ...current, music_volume: Number(event.target.value) }))} />
+          </label>
+        </div>
+        <div className="toggle-grid">
+          <label className="toggle"><input type="checkbox" checked={autoEdit.captions} onChange={(event) => setAutoEdit((current) => ({ ...current, captions: event.target.checked }))} /><span><Sparkles size={16} /></span>Generate captions</label>
+          <label className="toggle"><input type="checkbox" checked={autoEdit.sound_effects} onChange={(event) => setAutoEdit((current) => ({ ...current, sound_effects: event.target.checked }))} /><span><Volume2 size={16} /></span>Add sound effects</label>
+          <label className="toggle"><input type="checkbox" checked={autoEdit.stickers} onChange={(event) => setAutoEdit((current) => ({ ...current, stickers: event.target.checked }))} /><span><ImagePlus size={16} /></span>Use saved stickers</label>
+          <label className="toggle"><input type="checkbox" checked={autoEdit.blur_background} onChange={(event) => setAutoEdit((current) => ({ ...current, blur_background: event.target.checked }))} /><span><HardDrive size={16} /></span>Blur-fill unused frame</label>
+        </div>
+        <p className="hint">Click Save settings to keep these choices. Auto Edit will build editable video, caption, sticker, and audio tracks in the timeline as well as render each finished clip.</p>
       </Panel>
 
       <Panel title="Local folders" subtitle="All media, projects and models live on this machine">

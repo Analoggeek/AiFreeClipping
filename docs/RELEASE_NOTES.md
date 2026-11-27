@@ -1,5 +1,27 @@
 # Release notes
 
+## v5.1.8 — dependable editor playback, editable Auto Edit and explicit AI art
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.1.8-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/AI-Clipper-Pro-5.1.8-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.1.8-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/AI-Clipper-Pro-5.1.8-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/AI-Clipper-Pro-5.1.8-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/AI-Clipper-Pro-5.1.8-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/AI-Clipper-Pro-5.1.8-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/AI-Clipper-Pro-5.1.8-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.1.8-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/AI-Clipper-Pro-5.1.8-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.1.8-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/AI-Clipper-Pro-5.1.8-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.8/manifest.json)
+
+### Changes
+
+- **Single Auto Edit action:** the Editor has one Auto Edit button beside Export; its style, format, resolution, music, captions, SFX, stickers and blur-fill preferences now live in Settings.
+- **Real editable output:** Auto Edit applies speed/color treatment and returns its source cut, selected crops/layout, timed captions, music, sound effects and stickers as editable tracks in a saved project, alongside its rendered MP4s.
+- **Reliable preview playback:** the canvas preview seeks and plays at each clip's actual speed, changes between timeline clips, and renders the same color treatment and selected composition as export.
+- **Media cleanup:** remove items directly from the Editor's media library; successful deletion immediately removes the row and clears its selection.
+- **Honest AI Art:** request up to three alternatives, choose one to add, and see partial-provider failures. If no image model is available, generation reports that instead of silently substituting decorative fallback art.
+- **Player/gameplay composition parity:** the chosen top/bottom or side-by-side region order is retained on discovered clips and shared across preview, Auto Edit and timeline export.
+- **UI cleanup:** removed the “Saved locally,” “Clip edit,” and “Timeline editor” labels.
+
 ## v5.1.7 — source-quality exports, composition parity and resilient Auto Edit
 
 ### Download the installers

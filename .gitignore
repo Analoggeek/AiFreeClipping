@@ -19,6 +19,7 @@ coverage/
 out/
 
 # local data / secrets / generated media
+.arena/
 AIDATA/
 *.db
 *.sqlite3

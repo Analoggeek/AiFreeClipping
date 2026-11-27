@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import secrets
 import time
 import urllib.parse
 import urllib.request
@@ -88,7 +89,7 @@ def comfyui(
     sizes = {"16:9": (1344, 768), "1:1": (1024, 1024), "9:16": (768, 1344)}
     width, height = sizes.get(aspect, (768, 1344))
     workflow["5"]["inputs"].update({"width": width, "height": height})
-    workflow["3"]["inputs"]["seed"] = int(time.time())
+    workflow["3"]["inputs"]["seed"] = secrets.randbelow(2**32)
     client_id = str(uuid.uuid4())
     request = urllib.request.Request(
         f"{_comfy_url()}/prompt",
@@ -115,17 +116,14 @@ def comfyui(
     raise TimeoutError("ComfyUI image generation timed out")
 
 
-def local_art(prompt: str, aspect: str = "9:16") -> str:
-    """Always-available offline image renderer used when no diffusion engine is up.
-
-    SDXL/Nano Banana remain the quality upgrades; this guarantees that image
-    generation never dead-ends with 'ComfyUI is not running' on a fresh install.
-    """
+def local_art(prompt: str, aspect: str = "9:16", variation: int = 0) -> str:
+    """Create a decorative offline graphic; this is not a prompt-to-image model."""
     from PIL import Image, ImageDraw, ImageFilter
 
     sizes = {"16:9": (1344, 768), "1:1": (1024, 1024), "9:16": (768, 1344)}
     width, height = sizes.get(aspect, (768, 1344))
-    seed = int.from_bytes(hashlib.sha256(prompt.encode()).digest()[:8], "big")
+    seed_text = f"{prompt}\0{variation}\0{uuid.uuid4().hex}"
+    seed = int.from_bytes(hashlib.sha256(seed_text.encode()).digest()[:8], "big")
     rand = __import__("random").Random(seed)
     hue = seed % 360
     image = Image.new("RGB", (width, height))
@@ -136,15 +134,14 @@ def local_art(prompt: str, aspect: str = "9:16") -> str:
             [(0, y), (width, y)],
             fill=(int(28 + 42 * t + hue % 20), int(18 + 28 * t), int(60 + 70 * t)),
         )
-    for _ in range(16):
+    # Keep the offline renderer deliberately decorative rather than pretending
+    # its abstract graphic is the output of an AI image model.
+    for _ in range(10):
         cx, cy = rand.randint(0, width), rand.randint(0, height)
-        radius = rand.randint(width // 14, width // 4)
-        color = (rand.randint(80, 230), rand.randint(60, 190), rand.randint(140, 255))
-        draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], outline=color, width=rand.randint(2, 9))
-    image = image.filter(ImageFilter.GaussianBlur(1.2))
-    draw = ImageDraw.Draw(image)
-    words = " ".join(prompt.split()[:6])[:48]
-    draw.text((28, height - 58), words, fill=(245, 245, 255))
+        radius = rand.randint(width // 18, width // 5)
+        color = (rand.randint(80, 210), rand.randint(60, 175), rand.randint(145, 245))
+        draw.ellipse([cx - radius, cy - radius, cx + radius, cy + radius], outline=color, width=rand.randint(3, 10))
+    image = image.filter(ImageFilter.GaussianBlur(1.0))
     return _save_image(image, "local")
 
 
@@ -156,22 +153,80 @@ def _save_image(image, prefix: str) -> str:
     return str(path)
 
 
-def generate(prompt: str, provider: str = "auto", aspect: str = "9:16", reference: str | None = None, negative: str = "text, watermark, blurry, low quality") -> dict[str, Any]:
+_VARIATION_DIRECTIONS = (
+    "Use a dramatic close-up and strong rim lighting.",
+    "Use an environmental wide composition with clear foreground depth.",
+    "Use a polished editorial illustration with a clean, uncluttered silhouette.",
+    "Use a bold low-angle composition with a distinct color palette.",
+)
+
+
+def generate(
+    prompt: str,
+    provider: str = "auto",
+    aspect: str = "9:16",
+    reference: str | None = None,
+    negative: str = "text, watermark, blurry, low quality",
+    *,
+    variation: int = 0,
+    variation_count: int = 1,
+) -> dict[str, Any]:
     has_key = bool(db.get_setting("gemini_api_key", env("GEMINI_API_KEY")))
     if provider == "auto":
-        provider = "nano-banana" if has_key and env("DISABLE_CLOUD_FEATURES") != "1" else "comfyui"
-    try:
-        if provider == "nano-banana":
-            path = nano_banana(prompt, aspect, reference)
-        elif provider == "comfyui":
-            if not comfy_reachable():
-                raise RuntimeError("Local SDXL engine is not running yet")
-            path = comfyui(prompt, aspect, negative, reference)
+        if has_key and env("DISABLE_CLOUD_FEATURES") != "1":
+            provider = "nano-banana"
+        elif comfy_reachable():
+            provider = "comfyui"
         else:
-            path = local_art(prompt, aspect)
-            provider = "local"
-    except Exception:
-        # Never leave the editor with a dead image button on a fresh/offline install.
-        path = local_art(prompt, aspect)
-        provider = "local"
+            raise RuntimeError(
+                "No AI image model is ready. Add a Gemini API key in Settings or start ComfyUI with an SDXL checkpoint. "
+                "Offline decorative art is available, but it is not prompt-generated AI art."
+            )
+
+    prompt_for_variant = prompt.strip()
+    if variation_count > 1:
+        direction = _VARIATION_DIRECTIONS[variation % len(_VARIATION_DIRECTIONS)]
+        prompt_for_variant += (
+            f"\n\nCreate alternative {variation + 1} of {variation_count}: {direction} "
+            "Keep the requested subject and style, but make the composition visibly different from other options."
+        )
+
+    if provider == "nano-banana":
+        path = nano_banana(prompt_for_variant, aspect, reference)
+    elif provider == "comfyui":
+        path = comfyui(prompt_for_variant, aspect, negative, reference)
+    elif provider == "local":
+        path = local_art(prompt, aspect, variation)
+    else:
+        raise RuntimeError(f"Unknown image provider: {provider}")
     return {"path": path, "url": "/api/assets/file?path=" + urllib.parse.quote(path), "provider": provider}
+
+
+def generate_variations(
+    prompt: str,
+    provider: str = "auto",
+    aspect: str = "9:16",
+    reference: str | None = None,
+    negative: str = "text, watermark, blurry, low quality",
+    count: int = 3,
+    on_progress=None,
+) -> dict[str, Any]:
+    """Generate several independent options and retain partial success on failure."""
+    count = max(1, min(4, int(count)))
+    results: list[dict[str, Any]] = []
+    warnings: list[str] = []
+    for index in range(count):
+        try:
+            result = generate(
+                prompt, provider, aspect, reference, negative,
+                variation=index, variation_count=count,
+            )
+            results.append(result)
+        except Exception as exc:
+            warnings.append(f"Option {index + 1} failed: {exc}")
+        if on_progress:
+            on_progress(round((index + 1) / count * 95), f"Generated {len(results)} of {count} image options…")
+    if not results:
+        details = " ".join(warnings)
+        raise RuntimeError(f"Image generation produced no usable options. {details}".strip())
+    return {"images": results, "path": results[0]["path"], "url": results[0]["url"], "provider": results[0]["provider"], "warnings": warnings}

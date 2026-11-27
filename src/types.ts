@@ -89,14 +89,52 @@ export type Capabilities = {
 };
 
 export type VideoItem = {
-  id?: string; clip_id?: string; path: string; sourceStart: number; duration: number;
+  id?: string; clip_id?: string; path: string; sourceStart: number; duration: number; sourceDuration?: number;
   label?: string; region?: { x: number; y: number; w: number; h: number } | null;
   regions?: Array<{ x: number; y: number; w: number; h: number }>;
-  region_layout?: string | null;
+  region_layout?: string | null; effects?: Record<string, unknown>; auto_edit?: boolean;
 };
-export type CaptionItem = { text: string; start: number; end: number };
-export type StickerItem = { path: string; start: number; end: number; x: number; y: number; label?: string };
-export type AudioItem = { path: string; start: number; end: number; volume: number; label?: string };
+export type CaptionItem = {
+  text: string; start: number; end: number; kind?: 'title' | 'caption'; auto_edit_clip_id?: string;
+};
+export type StickerItem = {
+  path: string; start: number; end: number; x: number; y: number; scale?: number; label?: string; auto_edit_clip_id?: string;
+};
+export type AudioItem = {
+  path: string; start: number; end: number; volume: number; label?: string;
+  kind?: 'music' | 'sfx'; auto_edit_clip_id?: string;
+};
+
+export type AutoEditOptions = {
+  style: 'hype' | 'minimal' | 'premium';
+  aspect: '9:16' | '1:1' | '16:9';
+  resolution: 'source' | '720p' | '1080p';
+  captions: boolean;
+  sound_effects: boolean;
+  stickers: boolean;
+  blur_background: boolean;
+  music?: string;
+  music_volume: number;
+};
+
+export type AutoEditTimelineEdit = {
+  clip_id: string;
+  media_id: string;
+  source_path: string;
+  source_start: number;
+  source_duration: number;
+  duration: number;
+  title: string;
+  aspect: '9:16' | '1:1' | '16:9';
+  resolution: 'source' | '720p' | '1080p';
+  region?: VideoItem['region'];
+  regions?: VideoItem['regions'];
+  region_layout?: string | null;
+  captions: Array<{ text?: string; word?: string; start: number; end: number; kind?: 'title' | 'caption' }>;
+  audio: AudioItem[];
+  stickers: StickerItem[];
+  effects: Record<string, unknown>;
+};
 
 export type Timeline = {
   tracks: {

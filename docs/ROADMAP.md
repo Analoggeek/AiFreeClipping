@@ -1,5 +1,15 @@
 # Roadmap
 
+## Shipped in v5.1.8
+
+- Auto Edit action beside Export, with saved preferences in Settings
+- Editable Auto Edit recipes for video, captions, music/SFX, stickers and source crops
+- Speed-aware Editor playback with matching timeline render effects
+- Media-library removal control and immediate UI cleanup
+- Three-option AI art generation with visible provider failures and no silent decorative fallback
+- Player/gameplay order and crops preserved through discovery, preview and export
+- Editor copy cleaned of the requested local-save and mode labels
+
 ## Shipped in v5.1.7
 
 - Shared crop/composition logic for accurate Editor/Clipper previews and renders
