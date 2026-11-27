@@ -35,7 +35,7 @@ export default function App() {
   const [page, setPage] = useState<PageId>('overview');
   const [toast, setToast] = useState('');
   const [online, setOnline] = useState(false);
-  const [version, setVersion] = useState('5.2.0');
+  const [version, setVersion] = useState('5.2.1');
   const [mediaSelection, setMediaSelection] = useState<string[]>([]);
   const [clipSelection, setClipSelection] = useState<string[]>([]);
   const [folder, setFolder] = useState('');
