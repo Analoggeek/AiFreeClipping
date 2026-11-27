@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import os
 import subprocess
 from datetime import date
@@ -248,6 +249,119 @@ def _crop_filter(region: Any, expand_small: bool = True) -> str | None:
     return f"crop=iw*{width:.4f}:ih*{height:.4f}:iw*{x:.4f}:ih*{y:.4f}"
 
 
+def _simplify_crop_points(
+    points: list[tuple[float, float]], tolerance: float = 0.003, max_points: int = 64,
+) -> list[tuple[float, float]]:
+    """Reduce expression size without smoothing away an intentional shot snap."""
+    if len(points) <= max_points:
+        return points
+    snap_pairs: list[tuple[float, int, int]] = []
+    for index, ((t0, x0), (t1, x1)) in enumerate(zip(points, points[1:])):
+        shift = abs(x1 - x0)
+        if t1 - t0 <= 0.002 and shift >= 0.03:
+            snap_pairs.append((shift, index, index + 1))
+    required = {0, len(points) - 1}
+    all_snap_keys = {index for _shift, left, right in snap_pairs for index in (left, right)}
+    if len(required | all_snap_keys) <= max_points:
+        required.update(all_snap_keys)
+    elif snap_pairs:
+        # Keep important cut snaps spread across the entire clip rather than
+        # dropping the moving crop when a dense edit exceeds the key budget.
+        budget = max(1, (max_points - len(required)) // 2)
+        selected: set[int] = set()
+        for slot in range(budget):
+            first = slot * len(snap_pairs) // budget
+            last = max(first + 1, (slot + 1) * len(snap_pairs) // budget)
+            _shift, left, right = max(snap_pairs[first:last], key=lambda item: item[0])
+            selected.update((left, right))
+        for _shift, left, right in sorted(snap_pairs, key=lambda item: item[0], reverse=True):
+            if len(required | selected | {left, right}) <= max_points:
+                selected.update((left, right))
+        required.update(selected)
+
+    anchors = sorted(required)
+    kept = set(required)
+    pending = list(zip(anchors, anchors[1:]))
+    while pending:
+        left, right = pending.pop()
+        if right - left <= 1:
+            continue
+        t0, x0 = points[left]
+        t1, x1 = points[right]
+        span = t1 - t0
+        if span <= 0:
+            continue
+        worst_index = -1
+        worst_error = tolerance
+        for index in range(left + 1, right):
+            t, x = points[index]
+            expected = x0 + (x1 - x0) * (t - t0) / span
+            error = abs(x - expected)
+            if error > worst_error:
+                worst_index, worst_error = index, error
+        if worst_index >= 0:
+            kept.add(worst_index)
+            pending.extend(((left, worst_index), (worst_index, right)))
+
+    if len(kept) > max_points:
+        candidates = [index for index in range(len(points)) if index not in required]
+        slots = max_points - len(required)
+        selected = set(required)
+        if slots > 0 and candidates:
+            for slot in range(1, slots + 1):
+                position = round(slot * (len(candidates) - 1) / (slots + 1))
+                selected.add(candidates[position])
+        kept = selected
+    return [points[index] for index in sorted(kept)]
+
+
+def _moving_crop_filter(
+    path: Any, output_aspect: str, source_width: int, source_height: int,
+) -> str | None:
+    """Build a frame-evaluated portrait crop from normalized center keyframes.
+
+    Keys use source timestamps, so this filter belongs after trim but before setpts.
+    A pair of near-adjacent keys at a cut keeps the old framing to the cut and
+    applies the new framing on it instead of interpolating across shots.
+    """
+    if output_aspect != "9:16" or source_width <= 0 or source_height <= 0:
+        return None
+    target_ratio = 9 / 16
+    if source_width / source_height <= target_ratio + 1e-4:
+        return None
+    points: list[tuple[float, float]] = []
+    for item in path if isinstance(path, (list, tuple)) else []:
+        try:
+            t, center = float(item[0]), float(item[1])
+        except (IndexError, TypeError, ValueError, OverflowError):
+            continue
+        if math.isfinite(t) and math.isfinite(center):
+            points.append((t, max(0.0, min(1.0, center))))
+    points.sort(key=lambda item: item[0])
+    compact: list[tuple[float, float]] = []
+    for point in points:
+        if compact and point[0] <= compact[-1][0]:
+            compact[-1] = point
+        else:
+            compact.append(point)
+    compact = _simplify_crop_points(compact)
+    if not compact:
+        return None
+
+    center = f"{compact[-1][1]:.6f}"
+    for (t0, x0), (t1, x1) in reversed(list(zip(compact, compact[1:]))):
+        duration = t1 - t0
+        if duration <= 0:
+            continue
+        linear = f"({x0:.6f}+({x1 - x0:.6f})*(t-{t0:.6f})/{duration:.6f})"
+        center = f"if(lt(t,{t1:.6f}),{linear},{center})"
+    first_t, first_x = compact[0]
+    center = f"if(lt(t,{first_t:.6f}),{first_x:.6f},{center})"
+    crop_width = f"ih*{target_ratio:.10f}"
+    x = f"max(0,min(iw-({crop_width}),({center})*iw-({crop_width})/2))"
+    return f"crop=w={crop_width}:h=ih:x='{x}':y=0"
+
+
 _COMPOSITE_LAYOUTS = {
     "top-game-bottom-player": ("vertical", (0.58, 0.42)),
     "top-player-bottom-game": ("vertical", (0.42, 0.58)),
@@ -426,6 +540,12 @@ def build_clip_args(
     speed = max(0.25, min(float(options.get("speed", 1)), 4))
     regions = options.get("regions") or []
     focus = options.get("region") or (regions[0] if regions else None)
+    source_width = int(options.get("source_width") or 1080)
+    source_height = int(options.get("source_height") or 1920)
+    moving_crop = (
+        _moving_crop_filter(options.get("crop_path"), options.get("aspect", "9:16"), source_width, source_height)
+        if focus is None and not regions else None
+    )
     source_trim = ",".join([
         f"trim=start={start:.3f}:end={end:.3f}",
         f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30",
@@ -436,6 +556,15 @@ def build_clip_args(
     if composed:
         filters, current = composed
         video_parts.extend(filters)
+    elif moving_crop:
+        # The auto-follow crop fills a portrait canvas directly; it replaces the
+        # full-frame blur/contain treatment only when a tracked path is available.
+        trim = ",".join([
+            f"trim=start={start:.3f}:end={end:.3f}", moving_crop,
+            f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30",
+        ])
+        video_parts.append(f"[0:v]{trim},scale={width}:{height}:flags=lanczos[base]")
+        current = "base"
     else:
         trim_parts = [f"trim=start={start:.3f}:end={end:.3f}"]
         crop = _crop_filter(focus)
@@ -657,9 +786,19 @@ async def render_timeline(
             filters.extend(composed_filters)
         else:
             focus = item.get("region") or (regions[0] if regions else None)
+            source = source_info[position]
+            moving_crop = (
+                _moving_crop_filter(
+                    item.get("crop_path"), aspect,
+                    int(source.get("width") or 0), int(source.get("height") or 0),
+                )
+                if focus is None and not regions else None
+            )
             crop = _crop_filter(focus)
             video_filter = f"trim=start={source_in:.3f}:duration={source_duration:.3f}"
-            if crop:
+            if moving_crop:
+                video_filter += "," + moving_crop
+            elif crop:
                 video_filter += "," + crop
             video_filter += (
                 f",setpts=(PTS-STARTPTS)/{speed:.3f},"

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import subprocess
 import tempfile
@@ -43,7 +44,22 @@ def _crop_region(frame, region: dict[str, float] | None, width: float, height: f
     return frame[y1:y2, x1:x2] if x2 > x1 + 10 and y2 > y1 + 10 else frame
 
 
-def _multi_sampler(path: str, fps: float, regions: list[dict[str, float]], max_frames: int = 900):
+REFRAME_VERSION = 1
+_MAX_ANALYSIS_SAMPLES = 900
+
+
+def _sampling_step(source_fps: float, target_fps: float, frame_count: float, max_samples: int) -> int:
+    """Choose a useful stride while spreading a bounded sample budget over the whole video."""
+    desired = max(1, int(round(source_fps / max(target_fps, 0.1))))
+    try:
+        total = int(frame_count)
+    except (TypeError, ValueError, OverflowError):
+        total = 0
+    budget_step = math.ceil(total / max(1, max_samples)) if total > 0 else 1
+    return max(desired, budget_step)
+
+
+def _multi_sampler(path: str, fps: float, regions: list[dict[str, float]], max_samples: int = _MAX_ANALYSIS_SAMPLES):
     """Decode the video once and yield one crop/motion pair per focus region."""
     try:
         import cv2  # type: ignore
@@ -51,58 +67,68 @@ def _multi_sampler(path: str, fps: float, regions: list[dict[str, float]], max_f
         return None
     capture = cv2.VideoCapture(path)
     source_fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
-    step = max(1, int(round(source_fps / max(fps, 0.1))))
+    max_samples = max(1, max_samples)
+    step = _sampling_step(source_fps, fps, capture.get(cv2.CAP_PROP_FRAME_COUNT), max_samples)
     width = capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 1
     height = capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1
     previous: list[Any] = [None] * len(regions)
     index = 0
-    while True:
-        ok, frame = capture.read()
-        if not ok or index >= max_frames:
-            break
-        if index % step == 0:
-            crops = []
-            motions = []
-            for position, region in enumerate(regions):
-                crop = _crop_region(frame, region, width, height)
-                small = cv2.resize(crop, (160, 90))
-                gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-                motion = float(cv2.absdiff(gray, previous[position]).mean()) / 255.0 if previous[position] is not None else 0.0
-                previous[position] = gray
-                crops.append((small, crop))
-                motions.append(motion)
-            yield index / source_fps, crops, motions
-        index += 1
-    capture.release()
+    sample_count = 0
+    try:
+        while sample_count < max_samples:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            if index % step == 0:
+                crops = []
+                motions = []
+                for position, region in enumerate(regions):
+                    crop = _crop_region(frame, region, width, height)
+                    small = cv2.resize(crop, (160, 90))
+                    gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                    motion = float(cv2.absdiff(gray, previous[position]).mean()) / 255.0 if previous[position] is not None else 0.0
+                    previous[position] = gray
+                    crops.append((small, crop))
+                    motions.append(motion)
+                sample_count += 1
+                yield index / source_fps, crops, motions
+            index += 1
+    finally:
+        capture.release()
 
 
-def _frame_sampler(path: str, fps: float, region: dict[str, float] | None, max_frames: int = 900):
+def _frame_sampler(path: str, fps: float, region: dict[str, float] | None, max_samples: int = _MAX_ANALYSIS_SAMPLES):
     try:
         import cv2  # type: ignore
     except ImportError:
         return None
     capture = cv2.VideoCapture(path)
     source_fps = capture.get(cv2.CAP_PROP_FPS) or 30.0
-    step = max(1, int(round(source_fps / max(fps, 0.1))))
+    max_samples = max(1, max_samples)
+    step = _sampling_step(source_fps, fps, capture.get(cv2.CAP_PROP_FRAME_COUNT), max_samples)
     index = 0
+    sample_count = 0
     previous = None
     width = capture.get(cv2.CAP_PROP_FRAME_WIDTH) or 1
     height = capture.get(cv2.CAP_PROP_FRAME_HEIGHT) or 1
-    while True:
-        ok, frame = capture.read()
-        if not ok or index >= max_frames:
-            break
-        if index % step == 0:
-            crop = _crop_region(frame, region, width, height)
-            small = cv2.resize(crop, (160, 90))
-            gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
-            motion = 0.0
-            if previous is not None:
-                motion = float(cv2.absdiff(gray, previous).mean()) / 255.0
-            previous = gray
-            yield index / source_fps, small, motion, crop
-        index += 1
-    capture.release()
+    try:
+        while sample_count < max_samples:
+            ok, frame = capture.read()
+            if not ok:
+                break
+            if index % step == 0:
+                crop = _crop_region(frame, region, width, height)
+                small = cv2.resize(crop, (160, 90))
+                gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
+                motion = 0.0
+                if previous is not None:
+                    motion = float(cv2.absdiff(gray, previous).mean()) / 255.0
+                previous = gray
+                sample_count += 1
+                yield index / source_fps, small, motion, crop
+            index += 1
+    finally:
+        capture.release()
 
 
 def _weights_dir() -> Path:
@@ -199,18 +225,154 @@ def _detector(engine: str):
         return None
 
 
+def _follow_crop_path(
+    observations: list[dict[str, Any]], scene_cuts: list[float],
+) -> list[list[float]]:
+    """Build a calm portrait crop path from tracked subjects, snapping at scene changes.
+
+    Each observation contains normalized track centers and their relative prominence.
+    A single subject is committed to at a time; small detector movement is held, while
+    sustained subject changes and hard cuts can move the crop deliberately.
+    """
+    if not observations or not any(sample.get("tracks") for sample in observations):
+        return []
+    first = observations[0]
+    width = float(first.get("width") or 0)
+    height = float(first.get("height") or 0)
+    if width <= 0 or height <= 0 or width / height <= 9 / 16 + 1e-4:
+        return []
+
+    crop_fraction = min(1.0, height * (9 / 16) / width)
+    left_limit, right_limit = crop_fraction / 2, 1 - crop_fraction / 2
+    cuts = sorted({float(value) for value in scene_cuts if math.isfinite(float(value)) and float(value) >= 0})
+    path: list[list[float]] = []
+    active_id: int | None = None
+    active_score = 0.0
+    active_last_seen = float("-inf")
+    challenger_id: int | None = None
+    challenger_since = 0.0
+    crop_x: float | None = None
+    moving = False
+    previous_t: float | None = None
+    cut_index = 0
+
+    def clamp_x(value: float) -> float:
+        return max(left_limit, min(right_limit, value))
+
+    def append_key(time_value: float, center: float) -> None:
+        if not math.isfinite(time_value) or time_value < 0:
+            return
+        key = [round(time_value, 6), round(clamp_x(center), 6)]
+        if path and abs(path[-1][0] - key[0]) <= 1e-7:
+            path[-1] = key
+        elif not path or key[0] > path[-1][0]:
+            path.append(key)
+
+    for sample in observations:
+        t = float(sample.get("t", 0))
+        visible: dict[int, dict[str, float]] = {}
+        for track in sample.get("tracks") or []:
+            try:
+                track_id = int(track["id"])
+                center = float(track["x"])
+                prominence = max(0.0, float(track["prominence"]))
+            except (KeyError, TypeError, ValueError, OverflowError):
+                continue
+            if math.isfinite(center) and math.isfinite(prominence):
+                visible[track_id] = {"x": center, "prominence": prominence}
+        winner = max(
+            visible.items(),
+            key=lambda item: (item[1]["prominence"], -item[0]),
+            default=None,
+        )
+
+        crossed: list[float] = []
+        while cut_index < len(cuts) and cuts[cut_index] <= t:
+            cut = cuts[cut_index]
+            cut_index += 1
+            if previous_t is None or cut > previous_t + 1e-6:
+                crossed.append(cut)
+
+        if crossed:
+            old_x = crop_x if crop_x is not None else 0.5
+            for position, cut in enumerate(crossed):
+                before_x = old_x if position == 0 else 0.5
+                after_x = clamp_x(winner[1]["x"]) if position == len(crossed) - 1 and winner else 0.5
+                append_key(max(0.0, cut - 0.0001), before_x)
+                append_key(cut, after_x)
+            active_id = winner[0] if winner else None
+            active_score = winner[1]["prominence"] if winner else 0.0
+            active_last_seen = t if winner else float("-inf")
+            challenger_id = None
+            crop_x = clamp_x(winner[1]["x"]) if winner else 0.5
+            moving = False
+            append_key(t, crop_x)
+            previous_t = t
+            continue
+
+        if active_id is None or t - active_last_seen > 1.0:
+            if winner:
+                active_id, active_score = winner[0], winner[1]["prominence"]
+                active_last_seen = t
+            challenger_id = None
+        elif active_id in visible:
+            active_score = visible[active_id]["prominence"]
+            active_last_seen = t
+            if winner and winner[0] != active_id and winner[1]["prominence"] > max(active_score, 1e-6) * 1.4:
+                if challenger_id == winner[0] and t - challenger_since >= 0.8:
+                    active_id, active_score = winner[0], winner[1]["prominence"]
+                    challenger_id = None
+                elif challenger_id != winner[0]:
+                    challenger_id, challenger_since = winner[0], t
+            else:
+                challenger_id = None
+        elif winner and t - active_last_seen > 1.0:
+            active_id, active_score = winner[0], winner[1]["prominence"]
+            active_last_seen = t
+            challenger_id = None
+
+        selected = visible.get(active_id) if active_id is not None else None
+        target = clamp_x(selected["x"]) if selected else (crop_x if crop_x is not None else 0.5)
+        if crop_x is None:
+            crop_x = target
+        else:
+            dt = max(1e-3, t - (previous_t if previous_t is not None else t))
+            if not moving and abs(target - crop_x) > 0.05:
+                moving = True
+            if moving:
+                proposed = 0.45 * (target - crop_x)
+                maximum = 0.25 * dt
+                crop_x += max(-maximum, min(maximum, proposed))
+                if abs(target - crop_x) <= 0.012:
+                    moving = False
+        append_key(t, crop_x)
+        previous_t = t
+
+    return path
+
+
 def _analyze_one(
     path: str, region: dict[str, float] | None, fps: float, engine: str, on_progress,
-    lo: float = 0.0, hi: float = 100.0,
+    lo: float = 0.0, hi: float = 100.0, track_reframe: bool = False,
 ) -> dict[str, Any]:
     def report(pct: float, message: str) -> None:
         if on_progress:
             on_progress(lo + pct / 100 * (hi - lo), message)
 
     sampler = _frame_sampler(path, fps, region)
+    should_track_reframe = bool(track_reframe and region is None)
+    detect = _detector(engine)
+    scene_changes: list[tuple[float, float]] | None = None
+    if should_track_reframe and detect:
+        try:
+            scene_changes = _scene_cuts(path)
+        except Exception:
+            scene_changes = []
+    scene_cut_times = [time_value for time_value, _score in (scene_changes or [])]
+
     tracker = ByteTrackLite()
     samples: list[dict[str, Any]] = []
-    detect = _detector(engine)
+    observations: list[dict[str, Any]] = []
     used_engine = "motion"
     report(10, "Sampling frames…")
 
@@ -219,9 +381,19 @@ def _analyze_one(
             used_engine = "yolox-onnx + ByteTrack" if _weights_dir().joinpath("yolox_nano.onnx").exists() else "ultralytics + ByteTrack"
         else:
             used_engine = "opencv-motion + ByteTrack"
+        cut_index = 0
+        previous_sample_t: float | None = None
+        tracks_created = 0
         for t, _frame, motion, full_frame in sampler:
+            if should_track_reframe:
+                while cut_index < len(scene_cut_times) and scene_cut_times[cut_index] <= t:
+                    cut_time = scene_cut_times[cut_index]
+                    cut_index += 1
+                    if previous_sample_t is None or cut_time > previous_sample_t + 1e-6:
+                        tracks_created += tracker._next_id - 1
+                        tracker = ByteTrackLite()
             detections = detect(full_frame) if detect else []
-            tracks = tracker.update(detections) if detections else []
+            tracks = tracker.update(detections)
             samples.append(
                 {
                     "t": round(t, 3),
@@ -230,24 +402,54 @@ def _analyze_one(
                     "detections": len(detections),
                 }
             )
+            if should_track_reframe and detect:
+                frame_height, frame_width = full_frame.shape[:2]
+                # Include newly initialized tracks for framing: ByteTrack's
+                # public result intentionally waits for a second hit, but a
+                # shot-cut snap cannot wait another analysis interval.
+                framing_tracks = [track for track in tracker.tracks if track.last_seen == tracker.frame]
+                observations.append({
+                    "t": t,
+                    "width": frame_width,
+                    "height": frame_height,
+                    "tracks": [
+                        {
+                            "id": track.track_id,
+                            "x": ((track.box[0] + track.box[2]) / 2) / frame_width,
+                            "prominence": (
+                                max(0.0, track.box[2] - track.box[0])
+                                * max(0.0, track.box[3] - track.box[1])
+                                / (frame_width * frame_height)
+                                * max(0.05, track.confidence)
+                            ),
+                        }
+                        for track in framing_tracks
+                    ],
+                })
+            previous_sample_t = t
     else:
         used_engine = "ffmpeg-scene"
-        cuts = _scene_cuts(path)
+        cuts = scene_changes if scene_changes is not None else _scene_cuts(path)
         report(50, "Detecting scene changes…")
         samples = [{"t": t, "activity": min(1.0, score * 2.5), "people": 0, "detections": 0} for t, score in cuts]
+        tracks_created = 0
 
     report(80, "Building activity timeline…")
     if samples:
         peak = max((s["activity"] for s in samples), default=0) or 1.0
         for sample in samples:
             sample["activity"] = round(min(1.0, sample["activity"] / peak), 3)
-    return {
+    result = {
         "engine": used_engine,
         "region": region,
         "fps": fps,
         "timeline": samples,
-        "track_count": tracker._next_id - 1,
+        "track_count": tracks_created + tracker._next_id - 1,
     }
+    if should_track_reframe:
+        result["crop_path"] = _follow_crop_path(observations, scene_cut_times)
+        result["reframe_version"] = REFRAME_VERSION
+    return result
 
 
 def analyze_sync(
@@ -257,13 +459,17 @@ def analyze_sync(
     engine: str = "auto",
     on_progress=None,
     regions: list[dict[str, float]] | None = None,
+    track_reframe: bool = False,
 ) -> dict[str, Any]:
     """Analyse one or several focus regions and fuse them into one activity timeline."""
     selected = [box for box in (regions or []) if box]
     if region and not selected:
         selected = [region]
     if len(selected) <= 1:
-        result = _analyze_one(path, selected[0] if selected else None, fps, engine, on_progress)
+        result = _analyze_one(
+            path, selected[0] if selected else None, fps, engine, on_progress,
+            track_reframe=track_reframe,
+        )
         result["regions"] = selected
         result["region_key"] = json.dumps(selected, sort_keys=True)
         return result
@@ -283,7 +489,7 @@ def analyze_sync(
         for t, crops, motions in sampler:
             for position, ((_small, crop), motion) in enumerate(zip(crops, motions)):
                 detections = detect(crop) if detect else []
-                tracks = trackers[position].update(detections) if detections else []
+                tracks = trackers[position].update(detections)
                 per_region[position].append({
                     "t": round(t, 3),
                     "activity": round(motion, 4),
@@ -323,5 +529,10 @@ def analyze_sync(
     }
 
 
-async def analyze(path: str, region=None, fps: float = 2.0, engine: str = "auto", on_progress=None, regions=None):
-    return await asyncio.to_thread(analyze_sync, path, region, fps, engine, on_progress, regions)
+async def analyze(
+    path: str, region=None, fps: float = 2.0, engine: str = "auto", on_progress=None,
+    regions=None, track_reframe: bool = False,
+):
+    return await asyncio.to_thread(
+        analyze_sync, path, region, fps, engine, on_progress, regions, track_reframe,
+    )

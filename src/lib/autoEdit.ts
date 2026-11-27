@@ -38,6 +38,7 @@ export function appendAutoEditTimeline(
       region: edit.region || regions[0] || null,
       regions,
       region_layout: edit.region_layout || null,
+      crop_path: edit.crop_path || [],
       effects,
       auto_edit: true,
     };

@@ -71,7 +71,8 @@ def test_timeline_export_preserves_short_source_duration(tmp_path, monkeypatch):
         "tracks": {
             "video": [{
                 "path": str(source), "sourceStart": 0, "sourceDuration": 0.05,
-                "duration": 0.2, "effects": {"speed": 0.25},
+                "duration": 0.2, "crop_path": [[0.0, 0.2], [0.05, 0.8]],
+                "effects": {"speed": 0.25},
             }],
             "captions": [], "stickers": [], "audio": [],
         },
@@ -80,6 +81,7 @@ def test_timeline_export_preserves_short_source_duration(tmp_path, monkeypatch):
     graph = captured["args"][captured["args"].index("-filter_complex") + 1]
     assert captured["duration"] == pytest.approx(0.2)
     assert "trim=start=0.000:duration=0.050" in graph
+    assert "if(lt(t,0.050000)" in graph
     assert "setpts=(PTS-STARTPTS)/0.250" in graph
 
 

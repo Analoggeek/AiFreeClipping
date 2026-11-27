@@ -20,6 +20,7 @@ class Track:
     misses: int = 0
     age: int = 0
     last_seen: int = 0
+    confidence: float = 0.0
     history: list[Box] = field(default_factory=list)
 
     @property
@@ -55,9 +56,10 @@ class ByteTrackLite:
                 continue
             used_tracks.add(ti)
             used_dets.add(di)
-            box, _ = detections[di]
+            box, confidence = detections[di]
             track = self.tracks[ti]
             track.box = list(box)
+            track.confidence = float(confidence)
             track.hits += 1
             track.misses = 0
             track.last_seen = self.frame
@@ -74,9 +76,9 @@ class ByteTrackLite:
         used_tracks, used_dets = self._associate(all_indices, high)
 
         # New identities start only from confident detections.
-        for det_index, (box, _score) in enumerate(high):
+        for det_index, (box, confidence) in enumerate(high):
             if det_index not in used_dets:
-                track = Track(self._next_id, list(box), last_seen=self.frame)
+                track = Track(self._next_id, list(box), last_seen=self.frame, confidence=float(confidence))
                 track.history.append(list(box))
                 self._next_id += 1
                 self.tracks.append(track)

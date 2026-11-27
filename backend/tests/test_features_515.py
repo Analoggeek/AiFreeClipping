@@ -219,6 +219,7 @@ def test_saved_clip_metadata_is_flattened_for_ui_and_preserved_in_editor_project
         "media_id": media_id, "start": 2, "end": 8, "score": 77,
         "title": "Focused moment", "reasons": ["high activity"], "hook": "",
         "hashtags": [], "transcript": "", "region": region, "regions": [region],
+        "crop_path": [[2.0, 0.3], [5.0, 0.5], [8.0, 0.7]],
     }
     db.insert("media", {
         "id": media_id, "title": "Source", "path": str(source), "source_url": None,
@@ -241,6 +242,7 @@ def test_saved_clip_metadata_is_flattened_for_ui_and_preserved_in_editor_project
         clips = {clip["id"]: clip for clip in response.json()["clips"]}
         assert clips[clip_id]["region"] == region
         assert clips[clip_id]["regions"] == [region]
+        assert clips[clip_id]["crop_path"] == [[2.0, 0.3], [5.0, 0.5], [8.0, 0.7]]
         assert clips[clip_id]["reasons"] == ["high activity"]
         assert clips[legacy_id]["region"] == region
         assert clips[legacy_id]["effects"]["aspect"] == "9:16"
@@ -251,6 +253,7 @@ def test_saved_clip_metadata_is_flattened_for_ui_and_preserved_in_editor_project
         project_id = project["id"]
         item = project["timeline"]["tracks"]["video"][0]
         assert item["region"] == region and item["regions"] == [region]
+        assert item["crop_path"] == [[2.0, 0.3], [5.0, 0.5], [8.0, 0.7]]
     finally:
         if project_id:
             db.delete("projects", "id", project_id)
@@ -296,7 +299,10 @@ def test_render_endpoint_uses_the_candidate_saved_crop_by_default(tmp_path, monk
         "id": clip_id, "project_id": None, "media_id": media_id,
         "start": 1, "end": 3, "score": 1, "title": "Render crop", "reason": "",
         "status": "proposed", "output": None,
-        "metadata": dumps({"region": region, "regions": [region], "reasons": []}), "created_at": now(),
+        "metadata": dumps({
+            "region": region, "regions": [region], "reasons": [],
+            "crop_path": [[1.0, 0.3], [3.0, 0.7]],
+        }), "created_at": now(),
     })
     captured = {}
 
@@ -325,6 +331,7 @@ def test_render_endpoint_uses_the_candidate_saved_crop_by_default(tmp_path, monk
             time.sleep(0.01)
         assert job and job["status"] == "done", job
         assert captured["options"]["region"] == region
+        assert captured["options"]["crop_path"] == [[1.0, 0.3], [3.0, 0.7]]
         assert captured["options"]["contrast"] == 1.0
         assert captured["options"]["watermark_path"] is None
         saved = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")["metadata"]

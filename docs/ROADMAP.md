@@ -1,5 +1,12 @@
 # Roadmap
 
+## Shipped in v5.2.0
+
+- Optional full-frame portrait reframing from local ByteTrack detections, with steadier subject framing and cut-boundary snaps
+- Candidate-local crop paths carried through render, Auto Edit, batch, timeline export and the Editor preview
+- Vision sampling spread across long sources within a fixed analysis budget
+- Existing manual regions, multi-panel layouts and no-tracking fallback preserved
+
 ## Shipped in v5.1.8
 
 - Auto Edit action beside Export, with saved preferences in Settings

@@ -62,6 +62,42 @@ function drawCover(
   context.restore();
 }
 
+function interpolateCropCenter(path: Array<[number, number]>, time: number): number {
+  const points = path
+    .map(([t, x]) => ({ t: Number(t), x: Number(x) }))
+    .filter((point) => Number.isFinite(point.t) && Number.isFinite(point.x))
+    .sort((a, b) => a.t - b.t);
+  if (!points.length) return 0.5;
+  if (time <= points[0].t) return points[0].x;
+  if (time >= points[points.length - 1].t) return points[points.length - 1].x;
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const first = points[index];
+    const second = points[index + 1];
+    if (first.t <= time && time <= second.t) {
+      const span = second.t - first.t;
+      return span > 0 ? first.x + (second.x - first.x) * (time - first.t) / span : second.x;
+    }
+  }
+  return points[points.length - 1].x;
+}
+
+function drawTrackedCrop(
+  context: CanvasRenderingContext2D,
+  video: HTMLVideoElement,
+  width: number,
+  height: number,
+  path: Array<[number, number]>,
+): boolean {
+  const cropWidth = video.videoHeight * width / height;
+  if (cropWidth <= 0 || cropWidth >= video.videoWidth) return false;
+  const center = Math.max(0, Math.min(1, interpolateCropCenter(path, video.currentTime)));
+  const sourceX = Math.max(0, Math.min(video.videoWidth - cropWidth, center * video.videoWidth - cropWidth / 2));
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(video, sourceX, 0, cropWidth, video.videoHeight, 0, 0, width, height);
+  return true;
+}
+
 function drawFullFrame(
   context: CanvasRenderingContext2D,
   video: HTMLVideoElement,
@@ -112,6 +148,7 @@ export function drawVideoComposition(
     region?: NormalizedBox | null;
     regions?: NormalizedBox[];
     layout?: string | null;
+    cropPath?: Array<[number, number]>;
     fit?: 'blur-contain' | 'cover';
     brightness?: number;
     contrast?: number;
@@ -202,5 +239,10 @@ export function drawVideoComposition(
       (width - fitWidth) / 2, (height - fitHeight) / 2, fitWidth, fitHeight);
     return;
   }
+  if (
+    options.cropPath?.length
+    && options.aspect === '9:16'
+    && drawTrackedCrop(context, video, width, height, options.cropPath)
+  ) return;
   drawFullFrame(context, video, width, height, fit);
 }
