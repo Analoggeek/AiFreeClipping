@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
-  Captions, Clapperboard, Download, Film, Image as ImageIcon, ImagePlus, Layers3, LoaderCircle,
-  Mic2, Music2, Pause, Play, Plus, Save, Search, SkipBack, SkipForward, Sparkles,
-  Split, Trash2, Volume2, WandSparkles,
+  Captions, Clapperboard, Download, Film, ImagePlus, Layers3, LoaderCircle,
+  Mic2, Pause, Play, Plus, Save, SkipBack, SkipForward, Split, Trash2,
+  Upload, WandSparkles,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
 import { JobTracker, Pill, formatClock } from '../components/common';
-import type { AutoEditOptions, AutoEditTimelineEdit, Candidate, Media, Timeline } from '../types';
+import type { AutoEditOptions, AutoEditTimelineEdit, Candidate, Media, Timeline, VideoItem } from '../types';
 import { appendAutoEditTimeline } from '../lib/autoEdit';
 import { drawVideoComposition } from '../lib/composition';
 import type { PageProps } from '../App';
@@ -20,7 +20,6 @@ type AnyItem = {
   auto_edit?: boolean; auto_edit_clip_id?: string; kind?: string;
 };
 type Selection = { track: TrackKey; index: number } | null;
-type ImageOption = { path: string; url?: string; provider?: string };
 
 const emptyTimeline = (): Timeline => ({
   tracks: { video: [], captions: [], stickers: [], audio: [] },
@@ -43,23 +42,16 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
   const [playing, setPlaying] = useState(false);
   const [media, setMedia] = useState<Media[]>([]);
   const [newMedia, setNewMedia] = useState('');
-  const [tab, setTab] = useState<'media' | 'clips' | 'stock' | 'art' | 'sfx'>('media');
-  const [query, setQuery] = useState('');
-  const [source, setSource] = useState('pexels');
-  const [stock, setStock] = useState<Array<Record<string, string>>>([]);
-  const [prompt, setPrompt] = useState('');
-  const [provider, setProvider] = useState('auto');
-  const [sfxList, setSfxList] = useState<string[]>([]);
+  const [tab, setTab] = useState<'media' | 'clips'>('media');
+  const [importingMedia, setImportingMedia] = useState(false);
   const [busy, setBusy] = useState(false);
   const [jobId, setJobId] = useState<string | null>(null);
-  const [jobKind, setJobKind] = useState<'captions' | 'art' | null>(null);
   const [exportJob, setExportJob] = useState<string | null>(null);
   const [exportOutput, setExportOutput] = useState('');
   const [clips, setClips] = useState<Candidate[]>([]);
   const [autoJob, setAutoJob] = useState<string | null>(null);
   const [autoEditOptions, setAutoEditOptions] = useState<AutoEditOptions>(DEFAULT_AUTO_EDIT);
   const [autoEditSettingsLoaded, setAutoEditSettingsLoaded] = useState(false);
-  const [imageResults, setImageResults] = useState<ImageOption[]>([]);
   const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -99,7 +91,9 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       setProjectId(id);
       setProjectName(result.project.name);
       setTimeline(loadedTimeline);
+      setSelected(loadedTimeline.tracks.video.length ? { track: 'video', index: 0 } : null);
       setPlayhead(0);
+      setPlaying(false);
     } catch (error) { notify(String(error)); }
   }, [notify]);
 
@@ -113,42 +107,31 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       return api.projects();
     }).then((projects) => {
       if (clipSelection[0]) {
+        setTab('clips');
         void api.createProject({ name: 'Auto Edit project', clip_id: clipSelection[0] }).then((created) => loadProject(created.project.id));
       } else if (projects.projects.length) {
         void loadProject(projects.projects[0].id);
       }
     }).catch(() => undefined);
-    api.sfx().then((result) => setSfxList(result.sfx)).catch(() => undefined);
   }, [clipSelection, loadProject]);
 
   useEffect(() => {
     if (!jobId) return;
     return pollJob(jobId, (job) => {
       if (job.status === 'done') {
-        if (jobKind === 'art') {
-          const generated = Array.isArray(job.result?.images) ? job.result.images as ImageOption[] : [];
-          const options = generated.length ? generated : (job.result?.path ? [{ path: String(job.result.path), provider: String(job.result.provider || '') }] : []);
-          const warnings = Array.isArray(job.result?.warnings) ? job.result.warnings.map((warning: unknown) => String(warning)) : [];
-          setImageResults(options.filter((option) => option.path));
-          const warningSummary = warnings.length ? ` ${warnings.join(' ')}` : '';
-          notify(options.length ? `Generated ${options.length} image option(s).${warningSummary} Choose one to add it to the timeline.` : 'Image generation returned no usable options.');
-        }
-        if (jobKind === 'captions') {
-          const transcript = (job.result?.segments || job.result?.transcript) as { segments?: Array<{ start: number; end: number; text: string }> } | undefined;
-          if (transcript) {
-            const segments = Array.isArray(transcript) ? transcript : (transcript.segments || []);
-            addItem('captions', segments.slice(0, 80).map((segment) => ({ text: segment.text, start: segment.start, end: segment.end, kind: 'caption' })) as AnyItem, true);
-            notify(`Added ${Math.min(segments.length, 80)} captions.`);
-          }
+        const transcript = (job.result?.segments || job.result?.transcript) as { segments?: Array<{ start: number; end: number; text: string }> } | undefined;
+        if (transcript) {
+          const segments = Array.isArray(transcript) ? transcript : (transcript.segments || []);
+          addItem('captions', segments.slice(0, 80).map((segment) => ({ text: segment.text, start: segment.start, end: segment.end, kind: 'caption' })) as AnyItem, true);
+          notify(`Added ${Math.min(segments.length, 80)} captions.`);
         }
         setBusy(false);
         setJobId(null);
-        setJobKind(null);
       }
-      if (job.status === 'error') { notify(job.error || job.message); setBusy(false); setJobId(null); setJobKind(null); }
-      if (job.status === 'cancelled') { notify('Operation cancelled.'); setBusy(false); setJobId(null); setJobKind(null); }
+      if (job.status === 'error') { notify(job.error || job.message); setBusy(false); setJobId(null); }
+      if (job.status === 'cancelled') { notify('Operation cancelled.'); setBusy(false); setJobId(null); }
     });
-  }, [jobId, jobKind]);
+  }, [jobId, notify]);
 
   useEffect(() => {
     if (!exportJob) return;
@@ -246,6 +229,29 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     });
   };
 
+  const commitTimeline = (next: Timeline) => {
+    timelineStateRef.current = next;
+    setTimeline(next);
+    setExportOutput('');
+  };
+
+  const focusVideoItem = (index: number, start: number) => {
+    setSelected({ track: 'video', index });
+    setPlayhead(start);
+    setPlaying(false);
+  };
+
+  const replaceTimelineClip = (item: VideoItem) => {
+    const next = structuredClone(timelineStateRef.current);
+    const replacedClipIds = new Set(next.tracks.video.map((video) => video.clip_id).filter((id): id is string => Boolean(id)));
+    next.tracks.video = [item];
+    next.tracks.captions = next.tracks.captions.filter((caption) => !caption.auto_edit_clip_id || !replacedClipIds.has(caption.auto_edit_clip_id));
+    next.tracks.stickers = next.tracks.stickers.filter((sticker) => !sticker.auto_edit_clip_id || !replacedClipIds.has(sticker.auto_edit_clip_id));
+    next.tracks.audio = next.tracks.audio.filter((audio) => !audio.auto_edit_clip_id || !replacedClipIds.has(audio.auto_edit_clip_id));
+    commitTimeline(next);
+    focusVideoItem(0, 0);
+  };
+
   const removeSelected = () => {
     if (!selected) return;
     const item = (timeline.tracks[selected.track] as unknown as AnyItem[])[selected.index];
@@ -326,6 +332,33 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     });
   };
 
+  const importLocalMedia = async () => {
+    if (!window.desktop?.selectFiles) {
+      notify('Local video imports are available in the desktop app.');
+      return;
+    }
+    setImportingMedia(true);
+    try {
+      const paths = await window.desktop.selectFiles([{
+        name: 'Video files',
+        extensions: ['mp4', 'mov', 'mkv', 'webm', 'avi', 'm4v', 'mpeg', 'mpg', '3gp', 'mts'],
+      }]);
+      if (!paths.length) return;
+      const result = await api.importMedia(paths);
+      const imported = result.media || [];
+      if (!imported.length) {
+        notify('No supported video files were imported.');
+        return;
+      }
+      setMedia((current) => {
+        const existing = new Set(current.map((item) => item.id));
+        return [...imported.filter((item) => !existing.has(item.id)), ...current];
+      });
+      notify(`Imported ${imported.length} local video(s). Select one from Media to add it to the timeline.`);
+    } catch (error) { notify(String(error)); }
+    finally { setImportingMedia(false); }
+  };
+
   const createProject = async () => {
     const chosen = media.find((item) => item.id === newMedia);
     if (!chosen) { notify('Choose a source video first.'); return; }
@@ -357,64 +390,36 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     const source = media.find((item) => item.path === first);
     if (!source) { notify('Add a library video to the timeline first.'); return; }
     setBusy(true);
-    setTab('media');
-    setJobKind('captions');
     try {
       const result = await api.transcribe(source.id);
       setJobId(result.job_id);
       notify('Generating word-timed captions with Whisper…');
-    } catch (error) { notify(String(error)); setBusy(false); setJobKind(null); }
-  };
-
-  const searchStock = async () => {
-    if (!query.trim()) return;
-    setBusy(true);
-    try { setStock((await api.searchAssets(query, source, tab === 'stock' ? 'image' : 'video')).results); }
-    catch (error) { notify(String(error)); } finally { setBusy(false); }
-  };
-
-  const downloadStock = async (asset: Record<string, string>) => {
-    try {
-      const result = await api.downloadAsset(asset.url, asset.title || 'stock-asset', asset.source || source);
-      addItem('stickers', { path: result.asset.path, start: playhead, end: playhead + 4, x: 0.6, y: 0.15, label: asset.title });
-      notify('Asset added to the sticker track.');
-    } catch (error) { notify(String(error)); }
-  };
-
-  const generateArt = async () => {
-    if (!prompt.trim()) { notify('Describe the sticker or image you want.'); return; }
-    setBusy(true);
-    setJobKind('art');
-    setImageResults([]);
-    try { setJobId((await api.generateImage(prompt, provider, '1:1', 3)).job_id); }
-    catch (error) { notify(String(error)); setBusy(false); setJobKind(null); }
-  };
-
-  const addGeneratedImage = (image: ImageOption) => {
-    addItem('stickers', { path: image.path, start: playhead, end: playhead + 3, x: 0.7, y: 0.15, scale: 0.22, label: 'AI art' });
-    notify(`${image.provider === 'local' ? 'Offline graphic' : 'Generated image'} added to the sticker track.`);
-  };
-
-  const addSfx = async (name: string) => {
-    try {
-      const result = await api.sfxPath(name);
-      addItem('audio', { path: result.path, start: playhead, end: playhead + 1.2, volume: 0.8, label: name, kind: 'sfx' });
-      notify(`${name} added at ${formatClock(playhead)}.`);
-    } catch (error) { notify(String(error)); }
+    } catch (error) { notify(String(error)); setBusy(false); }
   };
 
   const addMediaToTimeline = async (item: Media) => {
+    const video: VideoItem = {
+      path: item.path,
+      sourceStart: 0,
+      duration: Math.min(30, Math.max(3, item.duration || 10)),
+      label: item.title,
+    };
     if (!projectId) {
       try {
         const created = await api.createProject({ name: item.title, media_id: item.id });
+        const next = created.project.timeline || emptyTimeline();
         projectStateRef.current = { id: created.project.id, name: created.project.name };
-        timelineStateRef.current = created.project.timeline || emptyTimeline();
         setProjectId(created.project.id);
         setProjectName(created.project.name);
-        setTimeline(created.project.timeline || emptyTimeline());
+        commitTimeline(next);
+        focusVideoItem(0, 0);
       } catch (error) { notify(String(error)); return; }
     } else {
-      addItem('video', { path: item.path, sourceStart: 0, duration: Math.min(30, Math.max(3, item.duration || 10)), label: item.title });
+      const next = structuredClone(timelineStateRef.current);
+      const start = next.tracks.video.reduce((sum, clip) => sum + clip.duration, 0);
+      next.tracks.video.push(video);
+      commitTimeline(next);
+      focusVideoItem(next.tracks.video.length - 1, start);
     }
     notify(`${item.title} added to the timeline.`);
   };
@@ -442,24 +447,32 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     if (!clip.id) { notify('This AI clip has no saved clip ID yet.'); return; }
     const sourceMedia = media.find((item) => item.id === clip.media_id);
     if (!sourceMedia) { notify('The source video for this clip is no longer in your library.'); return; }
+    const video: VideoItem = {
+      id: clip.id,
+      clip_id: clip.id,
+      path: sourceMedia.path,
+      sourceStart: clip.start,
+      duration: Math.max(0.2, clip.end - clip.start),
+      label: clip.title,
+      region: clip.region,
+      regions: clip.regions,
+      region_layout: clip.region_layout,
+      crop_path: clip.crop_path || [],
+    };
     if (!projectId) {
       try {
         const created = await api.createProject({ name: clip.title.slice(0, 60), clip_id: clip.id });
+        const next = created.project.timeline || emptyTimeline();
         projectStateRef.current = { id: created.project.id, name: created.project.name };
-        timelineStateRef.current = created.project.timeline || emptyTimeline();
         setProjectId(created.project.id);
         setProjectName(created.project.name);
-        setTimeline(created.project.timeline || emptyTimeline());
+        commitTimeline(next);
+        focusVideoItem(0, 0);
       } catch (error) { notify(String(error)); return; }
     } else {
-      addItem('video', {
-        id: clip.id, clip_id: clip.id, path: sourceMedia.path,
-        sourceStart: clip.start, duration: Math.max(0.2, clip.end - clip.start),
-        label: clip.title, region: clip.region, regions: clip.regions, region_layout: clip.region_layout,
-        crop_path: clip.crop_path || [],
-      });
+      replaceTimelineClip(video);
     }
-    notify(`“${clip.title}” added to the timeline.`);
+    notify(`“${clip.title}” selected for preview and replaced the timeline clip.`);
   };
 
   useEffect(() => {
@@ -584,13 +597,17 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       <div className="editor-body">
         <aside className="asset-panel">
           <div className="asset-tabs">
-            {([['media', Film, 'Media'], ['clips', Clapperboard, 'Clips'], ['stock', Search, 'Stock'], ['art', WandSparkles, 'AI Art'], ['sfx', Music2, 'SFX']] as const).map(([id, Icon, label]) => (
+            {([['clips', Clapperboard, 'Clips'], ['media', Film, 'Media']] as const).map(([id, Icon, label]) => (
               <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={15} />{label}</button>
             ))}
           </div>
           <div className="asset-content">
             {tab === 'media' && (
               <>
+                <button className="ghost-btn asset-import-button" disabled={importingMedia} onClick={() => void importLocalMedia()}>
+                  {importingMedia ? <LoaderCircle size={15} className="spin" /> : <Upload size={15} />}
+                  {importingMedia ? 'Importing videos…' : 'Import local videos'}
+                </button>
                 {!projectId && (
                   <div className="new-project">
                     <h3>Start a project</h3>
@@ -617,72 +634,24 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                       >{deletingMediaId === item.id ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />}</button>
                     </div>
                   ))}
-                  {!media.length && <p className="hint">No source videos in the library. Import or download a video first.</p>}
+                  {!media.length && <p className="hint">No videos in the library yet. Import a local video or add one from Downloads.</p>}
                 </div>
               </>
             )}
             {tab === 'clips' && (
               <div className="asset-list">
-                <p className="hint">Your AI-picked clips refresh here automatically. Click one to add its source cut and focus crop to the timeline.</p>
+                <p className="hint">Click a clip to preview it. It replaces the video clip currently on the timeline.</p>
                 {clips.length === 0 && <p className="hint">No AI clips yet. Run AI Clipper first; you can keep editing here while it works.</p>}
                 {clips.map((clip, index) => {
                   const sourceMedia = media.find((item) => item.id === clip.media_id);
+                  const isSelected = selected?.track === 'video' && timeline.tracks.video[selected.index]?.clip_id === clip.id;
                   return (
-                    <button key={clip.id || `${clip.media_id}-${index}`} className="asset-row" disabled={!sourceMedia || !clip.id} onClick={() => void addClipToTimeline(clip)}>
+                    <button key={clip.id || `${clip.media_id}-${index}`} className={`asset-row ${isSelected ? 'is-selected' : ''}`} aria-pressed={isSelected} disabled={!sourceMedia || !clip.id} onClick={() => void addClipToTimeline(clip)}>
                       {sourceMedia?.thumbnail ? <img src={mediaUrl(sourceMedia.thumbnail)} alt="" /> : <Clapperboard size={20} />}
-                      <span><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small><small>{clip.output ? 'Rendered MP4 · click to add source cut' : 'Click to add to timeline'}</small></span>
+                      <span><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small><small>{clip.output ? 'Rendered MP4 · click to preview and replace' : 'Click to preview and replace timeline clip'}</small></span>
                     </button>
                   );
                 })}
-              </div>
-            )}
-            {tab === 'stock' && (
-              <>
-                <div className="stock-search">
-                  <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="whoosh, neon city, crowd…" onKeyDown={(event) => event.key === 'Enter' && searchStock()} />
-                  <select value={source} onChange={(event) => setSource(event.target.value)}>
-                    <option value="pexels">Pexels</option><option value="pixabay">Pixabay</option><option value="openverse">Openverse</option>
-                  </select>
-                  <button className="chip-btn" disabled={busy} onClick={searchStock}><Search size={15} /> Search</button>
-                </div>
-                <div className="asset-list">
-                  {stock.map((asset, index) => (
-                    <button key={asset.id || index} className="asset-row" onClick={() => downloadStock(asset)}>
-                      {asset.preview ? <img src={asset.preview} alt="" /> : <ImageIcon size={20} />}
-                      <span><strong>{asset.title}</strong><small>{asset.license || asset.source}</small></span>
-                    </button>
-                  ))}
-                  {!stock.length && <p className="hint">Stock assets are copyright-friendly. Add your free API key in Settings.</p>}
-                </div>
-              </>
-            )}
-            {tab === 'art' && (
-              <div className="art-panel">
-                <h3>Generate AI art</h3>
-                <p>Generate three alternatives, then choose the one to add. Auto uses Nano Banana with a Gemini key or a running ComfyUI SDXL model. Offline decorative art is a simple graphic, not prompt-generated AI.</p>
-                <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={4} placeholder="Describe the subject, mood, lighting, style, and composition you want…" />
-                <select value={provider} onChange={(event) => setProvider(event.target.value)}>
-                  <option value="auto">Auto (best available AI)</option><option value="nano-banana">Nano Banana</option><option value="comfyui">Local ComfyUI (SDXL)</option><option value="local">Offline decorative graphic</option>
-                </select>
-                <button className="primary" disabled={busy} onClick={generateArt}><Sparkles size={15} /> Generate 3 variations</button>
-                {jobId && jobKind === 'art' && <JobTracker jobId={jobId} label="Generating image options" />}
-                {imageResults.length > 0 && <div className="generated-options">
-                  {imageResults.map((image, index) => (
-                    <article className="generated-option" key={image.path}>
-                      <img src={mediaUrl('/api/assets/file?path=' + encodeURIComponent(image.path))} alt={`Generated option ${index + 1}`} />
-                      <small>Option {index + 1} · {image.provider || 'AI image'}</small>
-                      <button className="chip-btn" onClick={() => addGeneratedImage(image)}><Plus size={13} /> Add to timeline</button>
-                    </article>
-                  ))}
-                </div>}
-              </div>
-            )}
-            {tab === 'sfx' && (
-              <div className="asset-list">
-                <p className="hint">Procedural, royalty-free effects generated on your machine.</p>
-                {sfxList.map((name) => (
-                  <button key={name} className="asset-row" onClick={() => addSfx(name)}><Volume2 size={18} /><span><strong>{name}</strong><small>Insert at playhead</small></span></button>
-                ))}
               </div>
             )}
           </div>
@@ -802,8 +771,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
           <div className="timeline-actions">
             <div className="timeline-tools">
               <button className="icon-btn" title="Auto captions with Whisper" aria-label="Auto captions" onClick={autoCaptions}><Captions size={15} /></button>
-              <button className="icon-btn" title="Generate AI art" aria-label="Generate AI art" onClick={() => setTab('art')}><ImagePlus size={15} /></button>
-              <button className="icon-btn" title="Sound effects" aria-label="Sound effects" onClick={() => setTab('sfx')}><Volume2 size={15} /></button>
               <button className="icon-btn" title="Split clip at playhead" aria-label="Split clip" onClick={splitSelected}><Split size={15} /></button>
               <button className="icon-btn" title="Delete selected item" aria-label="Delete selected item" onClick={removeSelected}><Trash2 size={15} /></button>
             </div>
