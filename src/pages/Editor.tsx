@@ -7,19 +7,20 @@ import {
 import { api, mediaUrl, pollJob } from '../api';
 import { JobTracker, Pill, formatClock } from '../components/common';
 import type { Candidate, Media, Timeline } from '../types';
+import { drawVideoComposition } from '../lib/composition';
 import type { PageProps } from '../App';
 
 type TrackKey = 'video' | 'captions' | 'stickers' | 'audio';
 type AnyItem = {
   id?: string; clip_id?: string; path?: string; text?: string; sourceStart?: number; duration?: number;
   start?: number; end?: number; volume?: number; x?: number; y?: number; label?: string;
-  region?: Candidate['region']; regions?: Candidate['regions'];
+  region?: Candidate['region']; regions?: Candidate['regions']; region_layout?: string | null;
 };
 type Selection = { track: TrackKey; index: number } | null;
 
 const emptyTimeline = (): Timeline => ({
   tracks: { video: [], captions: [], stickers: [], audio: [] },
-  aspect: '9:16', resolution: '1080p', caption_style: { preset: 'hype' },
+  aspect: '9:16', resolution: 'source', caption_style: { preset: 'hype' },
 });
 
 export default function Editor({ notify, clipSelection }: PageProps & { clipSelection: string[] }) {
@@ -48,6 +49,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
   const [autoStyle, setAutoStyle] = useState<'hype' | 'minimal' | 'premium'>('hype');
   const [imageResult, setImageResult] = useState('');
   const videoRef = useRef<HTMLVideoElement>(null);
+  const stageCanvasRef = useRef<HTMLCanvasElement>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const scrubbingRef = useRef(false);
 
@@ -123,7 +125,12 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
       if (job.status === 'done') {
         void refreshClips();
         setAutoJob(null);
-        notify('Automatic editing and rendering finished.');
+        const outputs = Array.isArray(job.result?.outputs) ? job.result.outputs.length : 0;
+        const warnings = Array.isArray(job.result?.warnings) ? job.result.warnings as string[] : [];
+        const warningSummary = warnings.length
+          ? ` ${warnings.length} warning(s): ${warnings[0]}${warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}`
+          : '';
+        notify(`Auto Edit exported ${outputs} clip(s).${warningSummary}`);
       }
       if (job.status === 'error') { setAutoJob(null); notify(job.error || job.message); }
       if (job.status === 'cancelled') { setAutoJob(null); notify('Automatic editing cancelled.'); }
@@ -134,7 +141,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     const ids = clips.map((clip) => clip.id || '').filter(Boolean);
     if (!ids.length) { notify('Generate clips with AI Clipper first.'); return; }
     try {
-      const result = await api.autoEdit(ids, autoStyle, timeline.aspect === '16:9' ? '16:9' : timeline.aspect === '1:1' ? '1:1' : '9:16');
+      const result = await api.autoEdit(ids, autoStyle, timeline.aspect, timeline.resolution);
       setAutoJob(result.job_id);
       notify(`Auto-editing ${ids.length} clip(s) with captions, images, motion and SFX…`);
     } catch (error) { notify(String(error)); }
@@ -144,11 +151,11 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     if (!clip.id) return;
     try {
       const result = await api.renderClip(clip.id, {
-        aspect: timeline.aspect, resolution: '1080p',
+        aspect: timeline.aspect, resolution: timeline.resolution, title: clip.title,
         caption_style: { preset: autoStyle },
         sfx: ['whoosh', 'pop'], speed: 1.04, brightness: 0.02,
         contrast: 1.05, saturation: 1.08, blur_background: true,
-        region: clip.region, regions: clip.regions,
+        region: clip.region, regions: clip.regions, region_layout: clip.region_layout,
       });
       setExportJob(result.job_id);
       notify('Rendering this clip with the same automatic edit stack.');
@@ -246,7 +253,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     if (!projectId || !timeline.tracks.video.length) { notify('Add a video clip to the timeline first.'); return; }
     try {
       await save();
-      const result = await api.exportProject(projectId);
+      const result = await api.exportProject(projectId, timeline.aspect, timeline.resolution);
       setExportJob(result.job_id);
     } catch (error) { notify(String(error)); }
   };
@@ -323,7 +330,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
       addItem('video', {
         id: clip.id, clip_id: clip.id, path: sourceMedia.path,
         sourceStart: clip.start, duration: Math.max(0.2, clip.end - clip.start),
-        label: clip.title, region: clip.region, regions: clip.regions,
+        label: clip.title, region: clip.region, regions: clip.regions, region_layout: clip.region_layout,
       });
     }
     notify(`“${clip.title}” added to the timeline.`);
@@ -364,8 +371,50 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
     if (Math.abs(video.currentTime - target) > 0.45 && Number.isFinite(target)) video.currentTime = Math.max(0, target);
   }, [playhead, activeVideo, activeVideoStart]);
 
+  useEffect(() => {
+    const video = videoRef.current;
+    const canvas = stageCanvasRef.current;
+    if (!canvas) return;
+    const draw = () => {
+      if (!video || !activeVideo) {
+        const context = canvas.getContext('2d');
+        if (context) { context.fillStyle = '#05070e'; context.fillRect(0, 0, canvas.width, canvas.height); }
+        return;
+      }
+      drawVideoComposition(video, canvas, {
+        aspect: timeline.aspect,
+        region: activeVideo.region,
+        regions: activeVideo.regions,
+        layout: activeVideo.region_layout,
+        fit: 'cover',
+      });
+    };
+    if (!video || !activeVideo) { draw(); return; }
+    let animation = 0;
+    const tick = () => {
+      draw();
+      if (!video.paused && !video.ended) animation = window.requestAnimationFrame(tick);
+    };
+    const start = () => { draw(); if (!video.paused) animation = window.requestAnimationFrame(tick); };
+    video.addEventListener('loadeddata', start);
+    video.addEventListener('seeked', draw);
+    video.addEventListener('timeupdate', draw);
+    video.addEventListener('play', start);
+    draw();
+    return () => {
+      video.removeEventListener('loadeddata', start);
+      video.removeEventListener('seeked', draw);
+      video.removeEventListener('timeupdate', draw);
+      video.removeEventListener('play', start);
+      if (animation) window.cancelAnimationFrame(animation);
+    };
+  }, [activeVideo, timeline.aspect]);
+
   const visibleCaptions = timeline.tracks.captions.filter((caption) => playhead >= caption.start && playhead <= caption.end);
   const visibleStickers = timeline.tracks.stickers.filter((sticker) => playhead >= sticker.start && playhead <= sticker.end);
+  const activeTitleDuration = activeVideo
+    ? Math.min(activeVideo.duration, Math.max(1.4, Math.min(2.8, activeVideo.duration * 0.22)))
+    : 0;
 
   return (
     <div className="editor">
@@ -376,6 +425,33 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
         </div>
         <Pill tone="violet">Timeline editor</Pill>
       </header>
+
+      <div className="auto-edit-strip">
+        <div className="auto-edit-head">
+          <strong><Sparkles size={14} /> Auto Edit</strong>
+          <span>{clips.length} AI clip(s) ready</span>
+          <select aria-label="Auto Edit export quality" value={timeline.resolution} onChange={(event) => mutate((draft) => { draft.resolution = event.target.value as Timeline['resolution']; })}>
+            <option value="source">Source quality</option><option value="1080p">1080p</option><option value="720p">720p</option>
+          </select>
+          <select aria-label="Auto Edit style" value={autoStyle} onChange={(event) => setAutoStyle(event.target.value as typeof autoStyle)}>
+            <option value="hype">High energy</option><option value="minimal">Minimal</option><option value="premium">Premium</option>
+          </select>
+          <button className="primary" disabled={!clips.length || Boolean(autoJob)} onClick={() => void runAutoEdit()}>
+            {autoJob ? <LoaderCircle size={14} className="spin" /> : <WandSparkles size={14} />} Auto edit &amp; render all
+          </button>
+        </div>
+        {autoJob && <JobTracker jobId={autoJob} label="Automatic editing" />}
+        <div className="auto-edit-clips">
+          {clips.length === 0 && <span className="hint">Generate clips in AI Clipper — they will appear here automatically.</span>}
+          {clips.map((clip) => (
+            <div className="auto-edit-clip" key={clip.id}>
+              <div><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small></div>
+              <button className="icon-btn" title="Render with auto edit" aria-label="Render with auto edit" onClick={() => void renderAutoClip(clip)}><Download size={14} /></button>
+              {clip.output && <a className="icon-btn" title="Download rendered MP4" aria-label="Download rendered MP4" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output) + '&download=true')} download><Check size={14} /></a>}
+            </div>
+          ))}
+        </div>
+      </div>
 
       <div className="editor-body">
         <aside className="asset-panel">
@@ -468,16 +544,23 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
 
         <div className="stage-area">
           <div className="stage-toolbar">
-            <div className="aspect-switch">
-              {(['9:16', '1:1', '16:9'] as const).map((aspect) => (
-                <button key={aspect} className={timeline.aspect === aspect ? 'active' : ''} onClick={() => mutate((draft) => { draft.aspect = aspect; })}>{aspect}</button>
-              ))}
+            <div className="stage-format-controls">
+              <div className="aspect-switch">
+                {(['9:16', '1:1', '16:9'] as const).map((aspect) => (
+                  <button key={aspect} className={timeline.aspect === aspect ? 'active' : ''} onClick={() => mutate((draft) => { draft.aspect = aspect; })}>{aspect}</button>
+                ))}
+              </div>
+              <select className="stage-resolution-select" aria-label="Export resolution" value={timeline.resolution} onChange={(event) => mutate((draft) => { draft.resolution = event.target.value as Timeline['resolution']; })}>
+                <option value="source">Source quality</option><option value="1080p">1080p</option><option value="720p">720p</option>
+              </select>
             </div>
             <span className="stage-time">{formatClock(playhead)} / {formatClock(total)}</span>
           </div>
           <div className={`stage-frame aspect-${timeline.aspect.replace(':', '-')}`}>
+            <canvas ref={stageCanvasRef} className="stage-video-canvas" aria-label="Rendered composition preview" />
             {activeVideo ? (
               <video
+                className="stage-source-video"
                 ref={videoRef}
                 src={mediaUrl(`/media/file?path=${encodeURIComponent(activeVideo.path)}`)}
                 onTimeUpdate={(event) => {
@@ -487,6 +570,7 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
                 onEnded={() => setPlaying(false)}
               />
             ) : <div className="stage-empty"><Film size={38} /><p>Add a video from the media panel to start editing</p></div>}
+            {activeVideo?.clip_id && playhead - activeVideoStart <= activeTitleDuration && <div className="stage-title-preview">{activeVideo.label}</div>}
             {visibleCaptions.map((caption, index) => (
               <div className="stage-caption" key={index}>{caption.text}</div>
             ))}
@@ -539,30 +623,6 @@ export default function Editor({ notify, clipSelection }: PageProps & { clipSele
           {exportOutput && <a className="primary block" href={mediaUrl('/media/file?path=' + encodeURIComponent(exportOutput) + '&download=true')} download><Download size={16} /> Download exported MP4</a>}
           {exportJob && <JobTracker jobId={exportJob} label="Rendering project" />}
         </aside>
-      </div>
-
-      <div className="auto-edit-strip">
-        <div className="auto-edit-head">
-          <strong><Sparkles size={14} /> Auto edit</strong>
-          <span>{clips.length} AI clip(s) ready</span>
-          <select value={autoStyle} onChange={(event) => setAutoStyle(event.target.value as typeof autoStyle)}>
-            <option value="hype">High energy</option><option value="minimal">Minimal</option><option value="premium">Premium</option>
-          </select>
-          <button className="primary" disabled={!clips.length || Boolean(autoJob)} onClick={() => void runAutoEdit()}>
-            {autoJob ? <LoaderCircle size={14} className="spin" /> : <WandSparkles size={14} />} Auto edit &amp; render all
-          </button>
-        </div>
-        {autoJob && <JobTracker jobId={autoJob} label="Automatic editing" />}
-        <div className="auto-edit-clips">
-          {clips.length === 0 && <span className="hint">Generate clips in AI Clipper — they will appear here automatically.</span>}
-          {clips.map((clip) => (
-            <div className="auto-edit-clip" key={clip.id}>
-              <div><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small></div>
-              <button className="icon-btn" title="Render with auto edit" aria-label="Render with auto edit" onClick={() => void renderAutoClip(clip)}><Download size={14} /></button>
-              {clip.output && <a className="icon-btn" title="Download rendered MP4" aria-label="Download rendered MP4" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output) + '&download=true')} download><Check size={14} /></a>}
-            </div>
-          ))}
-        </div>
       </div>
 
       <div className="timeline-panel">

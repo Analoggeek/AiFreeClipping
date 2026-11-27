@@ -1,5 +1,26 @@
 # Release notes
 
+## v5.1.7 — source-quality exports, composition parity and resilient Auto Edit
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.1.7-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/AI-Clipper-Pro-5.1.7-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.1.7-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/AI-Clipper-Pro-5.1.7-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/AI-Clipper-Pro-5.1.7-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/AI-Clipper-Pro-5.1.7-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/AI-Clipper-Pro-5.1.7-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/AI-Clipper-Pro-5.1.7-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.1.7-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/AI-Clipper-Pro-5.1.7-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.1.7-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/AI-Clipper-Pro-5.1.7-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.1.7/manifest.json)
+
+### Changes
+
+- **Composition parity:** Clipper and Editor previews now share crop/region composition rules with FFmpeg exports, including stacked player/gameplay layouts and picture-in-picture.
+- **Quality and folders:** source quality is the default; selected resolution and aspect carry through clip, batch, Auto Edit and project exports. New exports are grouped into date-named folders under the configured export folder.
+- **Resilient Auto Edit:** missing sources are skipped with warnings, transcription failures fall back to the saved candidate transcript or a title card, and titles/captions/crops/effects persist for later batch exports.
+- **Persisted local models:** saved Whisper, Ollama, Vision and Piper selections and local weights are reused after restarting the app.
+- **Polish:** the splash screen uses the packaged brand mark, and finished operations auto-dismiss after five seconds.
+- **Branding remains opt-in:** exports have no app watermark by default; only a user-configured channel logo is applied.
+
 ## v5.1.6 — QuickTime-ready exports, custom branding and creator workflow
 
 ### Download the installers

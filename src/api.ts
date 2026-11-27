@@ -54,14 +54,15 @@ export const api = {
   deleteClip: (id: string) => request<{ ok: boolean; file_deleted: boolean }>(`/api/clips/${id}`, { method: 'DELETE' }),
   deleteClips: (clip_ids: string[]) => request<{ ok: boolean; deleted: number; files_deleted: number }>('/api/clips/bulk-delete', { method: 'DELETE', body: JSON.stringify({ clip_ids }) }),
   renderClip: (id: string, payload: Record<string, unknown>) => post<{ job_id: string }>(`/api/clips/${id}/render`, payload),
-  exportBatch: (clip_ids: string[]) => post<{ job_id: string }>('/api/exports/batch', { clip_ids }),
+  exportBatch: (clip_ids: string[], aspect = '9:16', resolution = 'source') =>
+    post<{ job_id: string }>('/api/exports/batch', { clip_ids, aspect, resolution }),
 
   projects: () => request<{ projects: Project[] }>('/api/projects'),
   createProject: (payload: Record<string, unknown>) => post<{ project: Project }>('/api/projects', payload),
   project: (id: string) => request<{ project: Project }>(`/api/projects/${id}`),
   saveProject: (id: string, timeline: Timeline, name?: string) =>
     request<{ project: Project }>(`/api/projects/${id}`, { method: 'PUT', body: JSON.stringify({ timeline, name }) }),
-  exportProject: (id: string) => post<{ job_id: string }>(`/api/projects/${id}/export`, {}),
+  exportProject: (id: string, aspect: string, resolution: string) => post<{ job_id: string }>(`/api/projects/${id}/export`, { aspect, resolution }),
 
   searchAssets: (query: string, source: string, kind: string) =>
     post<{ results: Array<Record<string, string>> }>('/api/assets/search', { query, source, kind }),
@@ -78,7 +79,7 @@ export const api = {
   installRecommendedModels: () => post<{ job_id: string }>('/api/models/install-recommended', {}),
   autoSetupModels: () => post<{ job_id: string; skipped?: boolean; message?: string }>('/api/models/auto-setup', {}),
   setFolder: (key: string, path: string) => request<{ folders: Record<string, string> }>('/api/folders', { method: 'PUT', body: JSON.stringify({ key, path }) }),
-  autoEdit: (clip_ids: string[], style = 'hype', aspect = '9:16') => post<{ job_id: string }>('/api/auto-edit', { clip_ids, style, aspect }),
+  autoEdit: (clip_ids: string[], style = 'hype', aspect = '9:16', resolution = 'source') => post<{ job_id: string }>('/api/auto-edit', { clip_ids, style, aspect, resolution }),
 
   youtubeStatus: () => request<{ authorized: boolean; available: boolean; clientSecretConfigured: boolean }>('/api/youtube/status'),
   youtubeAuthorize: () => post<{ job_id: string }>('/api/youtube/authorize'),

@@ -158,8 +158,17 @@ def _onnx_detector():
     return detect
 
 
+def _selected_engine(engine: str) -> str:
+    """Resolve the persisted Vision model choice for auto requests."""
+    if engine != "auto":
+        return engine
+    configured = db.get_setting("vision_engine", "auto")
+    return configured if configured in {"yolox", "ultralytics", "motion"} else "auto"
+
+
 def _detector(engine: str):
     """Return a callable(frame) -> [(box, confidence)] using local weights."""
+    engine = _selected_engine(engine)
     if engine == "motion":
         return None
     if engine != "ultralytics":
@@ -171,7 +180,8 @@ def _detector(engine: str):
     try:
         from ultralytics import YOLO  # type: ignore
 
-        name = "yolo11n.pt"
+        local_weights = _weights_dir() / "yolo11n.pt"
+        name = str(local_weights) if local_weights.is_file() else "yolo11n.pt"
         model = YOLO(name)
         classes = [0, 1, 2, 3, 5, 7]  # person, bicycle, car, motorcycle, bus, truck
 

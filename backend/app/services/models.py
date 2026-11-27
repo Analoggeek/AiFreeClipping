@@ -156,7 +156,7 @@ def _activate(model: dict[str, Any]) -> None:
     ids.add(model["id"])
     db.set_setting("installed_models", json.dumps(sorted(ids)))
     activation = {
-        "LLM": {"active_llm": model["id"], "OLLAMA_MODEL": model["id"]},
+        "LLM": {"active_llm": model["id"], "ollama_model": model["id"], "OLLAMA_MODEL": model["id"]},
         "ASR": {
             "whisper_model": model["id"].replace("whisper-", ""),
             "WHISPER_MODEL_PATH": str(_whisper_dir(model["id"])),
@@ -372,9 +372,9 @@ async def status() -> list[dict[str, Any]]:
             short = model["id"].replace("whisper-", "models--Systran--faster-whisper-")
             folder = _whisper_dir(model["id"])
             installed = installed or (
-                folder.exists()
-                or (folder.parent / short).exists()
-                or (folder.parent / "hub" / short).exists()
+                folder.is_dir() and (folder / "model.bin").is_file()
+                or (folder.parent / short / "snapshots").exists()
+                or (folder.parent / "hub" / short / "snapshots").exists()
             )
         elif model.get("file") and _path(model):
             target = _path(model)

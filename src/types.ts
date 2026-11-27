@@ -92,6 +92,7 @@ export type VideoItem = {
   id?: string; clip_id?: string; path: string; sourceStart: number; duration: number;
   label?: string; region?: { x: number; y: number; w: number; h: number } | null;
   regions?: Array<{ x: number; y: number; w: number; h: number }>;
+  region_layout?: string | null;
 };
 export type CaptionItem = { text: string; start: number; end: number };
 export type StickerItem = { path: string; start: number; end: number; x: number; y: number; label?: string };
@@ -105,7 +106,7 @@ export type Timeline = {
     audio: AudioItem[];
   };
   aspect: '9:16' | '1:1' | '16:9';
-  resolution: '720p' | '1080p';
+  resolution: 'source' | '720p' | '1080p';
   caption_style?: { preset: string };
 };
 

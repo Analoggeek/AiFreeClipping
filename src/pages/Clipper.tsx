@@ -6,6 +6,7 @@ import {
 import { api, mediaUrl, pollJob } from '../api';
 import { EmptyState, formatClock, JobTracker, Panel, Pill } from '../components/common';
 import type { Candidate, Media } from '../types';
+import { drawVideoComposition } from '../lib/composition';
 import type { PageProps } from '../App';
 
 type Box = { x: number; y: number; w: number; h: number };
@@ -57,7 +58,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
   const [activeRegionId, setActiveRegionId] = useState('gameplay');
   const [settings, setSettings] = useState({
     count: 5, min_duration: 15, max_duration: 60, platform: 'shorts', style: 'hype',
-    captions: true, sound_effects: true, stickers: true, use_llm: true, music: '',
+    captions: true, sound_effects: true, stickers: true, use_llm: true, music: '', resolution: 'source' as 'source' | '1080p' | '720p',
   });
   const [jobId, setJobId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -138,54 +139,21 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     notify(`Region layout copied to ${selectedMedia.length - 1} other selected video(s).`);
   };
 
-  const cropBox = activeRegion?.box || FULL;
-  const cropAspect = settings.platform === 'landscape' ? 16 / 9 : 9 / 16;
+  const cropAspect = settings.platform === 'landscape' ? '16:9' : '9:16';
   useEffect(() => {
     const video = regionVideoRef.current;
     const canvas = cropCanvasRef.current;
     if (!canvas) return;
-    const context = canvas.getContext('2d');
-    canvas.width = 480;
-    canvas.height = Math.round(480 / cropAspect);
-    if (!video || !context) return;
-    const draw = () => {
-      const frameWidth = video.videoWidth;
-      const frameHeight = video.videoHeight;
-      if (!frameWidth || !frameHeight) return;
-      let x = Math.max(0, Math.min(0.95, cropBox.x));
-      let y = Math.max(0, Math.min(0.95, cropBox.y));
-      let width = Math.max(0.05, Math.min(1 - x, cropBox.w));
-      let height = Math.max(0.05, Math.min(1 - y, cropBox.h));
-      if (width * height < 0.25) {
-        const scale = Math.min(Math.sqrt(0.25 / Math.max(1e-6, width * height)), 1 / Math.max(width, height));
-        const expandedWidth = Math.min(1, width * scale);
-        const expandedHeight = Math.min(1, height * scale);
-        x = Math.max(0, Math.min(x - (expandedWidth - width) / 2, 1 - expandedWidth));
-        y = Math.max(0, Math.min(y - (expandedHeight - height) / 2, 1 - expandedHeight));
-        width = expandedWidth;
-        height = expandedHeight;
-      }
-      const sx = x * frameWidth;
-      const sy = y * frameHeight;
-      const sw = Math.max(1, width * frameWidth);
-      const sh = Math.max(1, height * frameHeight);
-      const outWidth = canvas.width;
-      const outHeight = canvas.height;
-      context.clearRect(0, 0, outWidth, outHeight);
-      context.fillStyle = '#05070e';
-      context.fillRect(0, 0, outWidth, outHeight);
-      const cover = Math.max(outWidth / sw, outHeight / sh);
-      const bgWidth = sw * cover;
-      const bgHeight = sh * cover;
-      context.save();
-      context.filter = 'blur(18px)';
-      context.drawImage(video, sx, sy, sw, sh, (outWidth - bgWidth) / 2, (outHeight - bgHeight) / 2, bgWidth, bgHeight);
-      context.restore();
-      const contain = Math.min(outWidth / sw, outHeight / sh);
-      const fgWidth = sw * contain;
-      const fgHeight = sh * contain;
-      context.drawImage(video, sx, sy, sw, sh, (outWidth - fgWidth) / 2, (outHeight - fgHeight) / 2, fgWidth, fgHeight);
-    };
+    const draw = () => drawVideoComposition(video!, canvas, {
+      aspect: cropAspect,
+      regions: layout.boxes.map((item) => item.box),
+      region: activeRegion?.box || null,
+      layout: layout.preset,
+    });
+    if (!video) {
+      drawVideoComposition({} as HTMLVideoElement, canvas, { aspect: cropAspect });
+      return;
+    }
     let animation = 0;
     const tick = () => {
       draw();
@@ -204,7 +172,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       video.removeEventListener('play', start);
       if (animation) window.cancelAnimationFrame(animation);
     };
-  }, [preview?.id, cropBox.x, cropBox.y, cropBox.w, cropBox.h, cropAspect]);
+  }, [preview?.id, layout, activeRegion?.box, cropAspect]);
 
   const importFiles = async () => {
     if (!window.desktop) { notify('Local file picker works inside the desktop app.'); return; }
@@ -229,7 +197,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
           return {
             media_id: id,
             kind: selection.boxes.length ? 'custom' : 'full',
-            box: selection.boxes[0]?.box,
+            box: selection.boxes.find((item) => item.id === activeRegionId)?.box || selection.boxes[0]?.box,
             boxes: selection.boxes.map((item) => item.box),
             layout: selection.preset,
           };
@@ -256,15 +224,18 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     const preset = ({ hype: 'hype', story: 'minimal', clean: 'minimal', cinematic: 'premium' } as const)[settings.style as 'hype' | 'story' | 'clean' | 'cinematic'] || 'hype';
     return {
       aspect: settings.platform === 'landscape' ? '16:9' : '9:16',
-      resolution: '1080p',
+      resolution: settings.resolution,
       caption_style: { preset: settings.captions ? preset : 'none' },
       sfx: settings.sound_effects ? ['whoosh', 'pop'] : [],
+      music: settings.music.trim() || null, music_volume: 0.18,
       speed: 1, brightness: 0, contrast: 1, saturation: 1,
       blur_background: true, watermark: true,
       // A candidate keeps the exact region chosen when it was analyzed; never
       // let the currently previewed source silently override that saved crop.
       region: clip ? clip.region || null : null,
       regions: clip ? clip.regions || [] : [],
+      region_layout: clip ? clip.region_layout || null : null,
+      title: clip?.title,
     };
   };
 
@@ -290,7 +261,11 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     const ids = checked.length ? checked : candidates.map((clip) => clip.id || '').filter(Boolean);
     if (!ids.length) { notify('No clips to export yet.'); return; }
     try {
-      const result = await api.exportBatch(ids);
+      const result = await api.exportBatch(
+        ids,
+        settings.platform === 'landscape' ? '16:9' : '9:16',
+        settings.resolution,
+      );
       setBatchJob(result.job_id);
     } catch (error) { notify(String(error)); }
   };
@@ -397,12 +372,12 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
               <div className="panel-actions"><button className="ghost-btn" onClick={() => setStep(0)}><ArrowLeft size={15} /> Back</button><button className="primary" onClick={() => setStep(2)}>Next <ArrowRight size={16} /></button></div>
             </div>
             <div className="crop-preview-card">
-              <h3>Live crop preview</h3>
-              <p className="hint">This is the current frame after the selected crop and platform framing.</p>
+              <h3>Rendered composition preview</h3>
+              <p className="hint">All selected player/gameplay regions appear here in the same order and positions as the exported MP4.</p>
               <div className={`crop-preview-frame ${settings.platform === 'landscape' ? 'landscape' : 'portrait'}`}>
                 <canvas ref={cropCanvasRef} aria-label="Live preview of the selected crop" />
               </div>
-              <Pill tone={activeRegion ? 'green' : 'muted'}>{activeRegion ? `${activeRegion.label} · ${Math.round(activeRegion.box.w * 100)}×${Math.round(activeRegion.box.h * 100)}%` : 'Full frame'}</Pill>
+              <Pill tone={layout.boxes.length ? 'green' : 'muted'}>{layout.boxes.length ? layout.boxes.map((item) => item.label).join(' + ') : 'Full frame'}</Pill>
               <small className="crop-preview-time">Preview frame: {previewTime.toFixed(1)}s</small>
             </div>
           </div>
@@ -426,6 +401,11 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
               </select>
             </label>
             <label className="field"><span>Background music path (optional)</span><input value={settings.music} onChange={(event) => setSettings({ ...settings, music: event.target.value })} placeholder="~/.AiFreeClipping/assets/music/track.mp3" /></label>
+            <label className="field"><span>Export quality</span>
+              <select value={settings.resolution} onChange={(event) => setSettings({ ...settings, resolution: event.target.value as typeof settings.resolution })}>
+                <option value="source">Source quality · recommended</option><option value="1080p">1080p</option><option value="720p">720p</option>
+              </select>
+            </label>
           </div>
           <div className="toggle-grid">
             {([

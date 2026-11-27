@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { CheckCircle2, CircleAlert, LoaderCircle, X } from 'lucide-react';
 import { api, pollJob } from '../api';
 import type { Job } from '../types';
@@ -82,17 +82,39 @@ export function JobProgressList({ jobs }: { jobs: Job[] }) {
     try { return JSON.parse(localStorage.getItem('aifreeclip.dismissedJobs') || '[]') as string[]; }
     catch { return []; }
   });
+  const completedAt = useRef<Record<string, number>>({});
+  const saveDismissed = (ids: string[]) => {
+    setDismissed((current) => {
+      const next = [...new Set([...current, ...ids])];
+      try { localStorage.setItem('aifreeclip.dismissedJobs', JSON.stringify(next)); } catch { /* private browsing */ }
+      return next;
+    });
+  };
+  useEffect(() => {
+    const terminal = jobs.filter((job) => ['done', 'error', 'cancelled'].includes(job.status) && !dismissed.includes(job.id));
+    if (!terminal.length) return;
+    const now = Date.now();
+    for (const job of terminal) {
+      if (!completedAt.current[job.id]) {
+        const updated = Date.parse(job.updated_at || job.created_at || '');
+        completedAt.current[job.id] = Number.isFinite(updated) ? Math.min(now, updated) : now;
+      }
+    }
+    const timer = window.setInterval(() => {
+      const expired = terminal
+        .filter((job) => now - completedAt.current[job.id] >= 0 && Date.now() - completedAt.current[job.id] >= 5000)
+        .map((job) => job.id);
+      if (expired.length) saveDismissed(expired);
+    }, 750);
+    return () => window.clearInterval(timer);
+  }, [jobs, dismissed]);
+
   const visible = [...jobs]
     .filter((job) => !dismissed.includes(job.id))
     .sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')));
   const active = visible.filter((job) => job.status === 'running' || job.status === 'queued').length;
   if (!visible.length) return null;
 
-  const saveDismissed = (ids: string[]) => {
-    const next = [...new Set([...dismissed, ...ids])];
-    setDismissed(next);
-    try { localStorage.setItem('aifreeclip.dismissedJobs', JSON.stringify(next)); } catch { /* private browsing */ }
-  };
   const closeJob = (job: Job) => {
     if (job.status === 'running' || job.status === 'queued') void api.cancelJob(job.id).catch(() => undefined);
     saveDismissed([job.id]);

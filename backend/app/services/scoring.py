@@ -138,6 +138,7 @@ def propose(
     platform: str = "shorts",
     regions: dict[str, list[dict[str, float]]] | None = None,
     layouts: dict[str, str] | None = None,
+    focus_regions: dict[str, dict[str, float]] | None = None,
 ) -> list[Candidate]:
     """Greedy non-overlapping window search over fused audio/visual features."""
     candidates: list[Candidate] = []
@@ -201,7 +202,7 @@ def propose(
                         hook=hook[:140],
                         hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
                         transcript=transcript_text[:600],
-                        region=focus_boxes[0] if focus_boxes else None,
+                        region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
                         regions=focus_boxes,
                         region_layout=(layouts or {}).get(media_id),
                     )
@@ -234,7 +235,7 @@ def propose(
                 score=round(score, 2), reasons=chosen_reasons, title=title,
                 hook=hook[:140], hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
                 transcript=transcript_text[:600],
-                region=focus_boxes[0] if focus_boxes else None,
+                region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
                 regions=focus_boxes, region_layout=(layouts or {}).get(media_id),
             ))
             if len(candidates) >= count:

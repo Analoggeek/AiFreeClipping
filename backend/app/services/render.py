@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import os
 import subprocess
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +30,30 @@ CAPTION_PRESETS = {
 
 
 def resolution_for(aspect: str, resolution: str, source: tuple[int, int] = (1080, 1920)) -> tuple[int, int]:
-    if aspect == "source" or resolution == "source":
-        return source
+    """Choose an even output size while preserving the requested aspect ratio.
+
+    ``source`` quality follows the source pixels instead of silently falling
+    back to 1080p. For a changed aspect ratio, it chooses the largest frame of
+    that shape that fits inside the source dimensions, avoiding unnecessary
+    upscaling of the actual source picture.
+    """
+    source_width = max(2, int(source[0] or 1080))
+    source_height = max(2, int(source[1] or 1920))
+    if aspect == "source":
+        return source_width - source_width % 2, source_height - source_height % 2
+    if resolution == "source":
+        ratio = {"9:16": 9 / 16, "1:1": 1.0, "16:9": 16 / 9}.get(aspect)
+        if ratio is None:
+            return RESOLUTIONS[("9:16", "1080p")]
+        if source_width / source_height >= ratio:
+            height = source_height
+            width = int(height * ratio)
+        else:
+            width = source_width
+            height = int(width / ratio)
+        width = max(2, width - width % 2)
+        height = max(2, height - height % 2)
+        return width, height
     return RESOLUTIONS.get((aspect, resolution), RESOLUTIONS[("9:16", "1080p")])
 
 
@@ -64,11 +87,19 @@ def write_ass(
         "MarginL": 40, "MarginR": 40, "MarginV": 90, "Encoding": 1,
     }
     defaults.update(preset)
+    title_defaults = {
+        **defaults,
+        "Name": "Title", "Fontname": "Arial Black", "Fontsize": 68, "PrimaryColour": "&H00FFFFFF",
+        "BackColour": "&H880F111B", "Bold": -1, "BorderStyle": 3,
+        "OutlineColour": "&H008B5CF6", "Outline": 4, "Shadow": 2, "Alignment": 8,
+        "MarginV": 90,
+    }
     header = [
         "[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920",
         "WrapStyle: 2", "ScaledBorderAndShadow: yes", "", "[V4+ Styles]",
         "Format: " + ", ".join(fields),
         "Style: " + ",".join(str(defaults.get(f, "")) for f in fields),
+        "Style: " + ",".join(str(title_defaults.get(f, "")) for f in fields),
         "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     lines: list[str] = []
@@ -81,8 +112,18 @@ def write_ass(
             end = max(start + 0.15, float(caption.get("end", start + 0.8)) - offset)
         except (TypeError, ValueError):
             continue
+        # Keep ASR output from being interpreted as ASS override markup, then
+        # animate title cards and hype captions without changing their timing.
+        is_title = caption.get("kind") == "title"
+        text = text.replace("{", "(").replace("}", ")")
+        event_style = "Default"
+        if is_title:
+            event_style = "Title"
+            text = r"{\an8\fs68\bord4\shad2\c&H00FFFFFF&\3c&H008B5CF6&\fad(160,220)\fscx92\fscy92\t(0,180,\fscx100\fscy100)}" + text
+        elif style and style.get("preset", "hype") in {"hype", "karaoke"}:
+            text = r"{\fad(55,100)\fscx90\fscy90\t(0,90,\fscx100\fscy100)}" + text
         lines.append(
-            f"Dialogue: 0,{format_time(start)[:-2]},{format_time(end)[:-2]},Default,,0,0,0,,{text}"
+            f"Dialogue: 0,{format_time(start)[:-2]},{format_time(end)[:-2]},{event_style},,0,0,0,,{text}"
         )
     path = folder / f"subs_{abs(hash((tuple(lines[:3]), offset, position))) % 10**12}.ass"
     path.write_text("\n".join(header + lines) + "\n", encoding="utf-8")
@@ -164,8 +205,8 @@ def _normalise_contrast(value: Any) -> float:
     return max(0.0, min(2.0, contrast))
 
 
-def _normalise_region(region: Any) -> tuple[float, float, float, float] | None:
-    """Clamp a normalized focus box and expand tiny boxes to a usable crop."""
+def _normalise_region(region: Any, expand_small: bool = True) -> tuple[float, float, float, float] | None:
+    """Clamp a normalized focus box and optionally expand tiny focus crops."""
     if not isinstance(region, dict):
         return None
     try:
@@ -175,7 +216,7 @@ def _normalise_region(region: Any) -> tuple[float, float, float, float] | None:
         height = max(0.05, min(1.0 - y, float(region.get("h", 1))))
     except (TypeError, ValueError):
         return None
-    if width * height < 0.25:
+    if expand_small and width * height < 0.25:
         scale = (0.25 / max(1e-6, width * height)) ** 0.5
         scale = min(scale, 1.0 / max(width, height))
         new_width, new_height = min(1.0, width * scale), min(1.0, height * scale)
@@ -185,12 +226,98 @@ def _normalise_region(region: Any) -> tuple[float, float, float, float] | None:
     return x, y, width, height
 
 
-def _crop_filter(region: Any) -> str | None:
-    box = _normalise_region(region)
+def _crop_filter(region: Any, expand_small: bool = True) -> str | None:
+    box = _normalise_region(region, expand_small=expand_small)
     if box is None:
         return None
     x, y, width, height = box
     return f"crop=iw*{width:.4f}:ih*{height:.4f}:iw*{x:.4f}:ih*{y:.4f}"
+
+
+_COMPOSITE_LAYOUTS = {
+    "top-game-bottom-player": ("vertical", (0.58, 0.42)),
+    "top-player-bottom-game": ("vertical", (0.42, 0.58)),
+    "side-by-side": ("horizontal", (0.62, 0.38)),
+}
+
+
+def _even_pair(total: int, fraction: float) -> tuple[int, int]:
+    first = max(2, min(total - 2, int(round(total * fraction / 2)) * 2))
+    return first, total - first
+
+
+def _compose_regions(
+    input_label: str,
+    trim: str,
+    regions: Any,
+    layout: str | None,
+    output_width: int,
+    output_height: int,
+    prefix: str,
+) -> tuple[list[str], str] | None:
+    """Create a deterministic FFmpeg composite for the multi-region presets.
+
+    The crop order and panel proportions are shared with the browser preview.
+    Custom boxes without a known composition preset continue to use the first
+    selected crop, preserving the earlier single-focus behavior.
+    """
+    selected = [region for region in (regions or []) if isinstance(region, dict)]
+    if layout in _COMPOSITE_LAYOUTS and len(selected) >= 2:
+        axis, fractions = _COMPOSITE_LAYOUTS[layout]
+        if axis == "vertical":
+            first_size, second_size = _even_pair(output_height, fractions[0])
+            targets = [(output_width, first_size), (output_width, second_size)]
+            stack = "vstack"
+        else:
+            first_size, second_size = _even_pair(output_width, fractions[0])
+            targets = [(first_size, output_height), (second_size, output_height)]
+            stack = "hstack"
+        source_labels = [f"{prefix}_src0", f"{prefix}_src1"]
+        filters = [f"[{input_label}]{trim},split=2[{source_labels[0]}][{source_labels[1]}]"]
+        panel_labels = []
+        for index, (region, target, source_label) in enumerate(zip(selected[:2], targets, source_labels)):
+            width, height = target
+            crop = _crop_filter(region, expand_small=False)
+            if not crop:
+                return None
+            label = f"{prefix}_panel{index}"
+            filters.append(
+                f"[{source_label}]{crop},scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,"
+                f"crop={width}:{height}[{label}]"
+            )
+            panel_labels.append(f"[{label}]")
+        result = f"{prefix}_composite"
+        filters.append("".join(panel_labels) + f"{stack}=inputs=2[{result}]")
+        return filters, result
+
+    if layout == "square-player-full-game" and len(selected) >= 2:
+        # The full frame remains the gameplay layer; the second marked region is
+        # composited as a square picture-in-picture player view.
+        pip_size = max(2, int(round(min(output_width, output_height) * 0.34 / 2)) * 2)
+        inset = max(2, int(round(min(output_width, output_height) * 0.04 / 2)) * 2)
+        source_labels = [f"{prefix}_bgsrc", f"{prefix}_fgsrc", f"{prefix}_pipsrc"]
+        filters = [f"[{input_label}]{trim},split=3" + "".join(f"[{label}]" for label in source_labels)]
+        filters.extend([
+            f"[{source_labels[0]}]scale={output_width}:{output_height}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"crop={output_width}:{output_height},gblur=sigma=24[{prefix}_blur]",
+            f"[{source_labels[1]}]scale={output_width}:{output_height}:force_original_aspect_ratio=decrease:flags=lanczos[{prefix}_fit]",
+            f"[{prefix}_blur][{prefix}_fit]overlay=(W-w)/2:(H-h)/2[{prefix}_game]",
+        ])
+        pip_crop = _crop_filter(selected[1], expand_small=False)
+        if not pip_crop:
+            return None
+        filters.append(
+            f"[{source_labels[2]}]{pip_crop},scale={pip_size}:{pip_size}:force_original_aspect_ratio=increase:flags=lanczos,"
+            f"crop={pip_size}:{pip_size}[{prefix}_pip]"
+        )
+        x = min(output_width - pip_size - 2, inset)
+        y = min(output_height - pip_size - 2, inset)
+        filters.append(
+            f"[{prefix}_game][{prefix}_pip]overlay=x={x}:y={y}:eval=init,"
+            f"drawbox=x={x}:y={y}:w={pip_size}:h={pip_size}:color=white@0.9:t=4[{prefix}_composite]"
+        )
+        return filters, f"{prefix}_composite"
+    return None
 
 
 async def encode(args: list[str], duration: float, on_progress=None) -> Path:
@@ -283,30 +410,41 @@ def build_clip_args(
 
     video_parts: list[str] = []
     speed = max(0.25, min(float(options.get("speed", 1)), 4))
-    focus = options.get("region") or ((options.get("regions") or [None])[0] if options.get("regions") else None)
-    trim_parts = [f"trim=start={start:.3f}:end={end:.3f}"]
-    crop = _crop_filter(focus)
-    if crop:
-        # Crop after trimming: the coordinates are relative to the source frame,
-        # while avoiding crop work on frames outside the selected clip interval.
-        trim_parts.append(crop)
-    trim_parts.extend([f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30"])
-    trim = ",".join(trim_parts)
-    if options.get("blur_background", True) and options.get("aspect", "9:16") != "source":
-        video_parts.append(f"[0:v]{trim},split=2[bg][fg]")
-        video_parts.append(
-            f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},gblur=sigma=24[bgb]"
-        )
-        video_parts.append(
-            f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease[fgs]"
-        )
-        video_parts.append(f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2[base]")
-        current = "base"
+    regions = options.get("regions") or []
+    focus = options.get("region") or (regions[0] if regions else None)
+    source_trim = ",".join([
+        f"trim=start={start:.3f}:end={end:.3f}",
+        f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30",
+    ])
+    composed = _compose_regions(
+        "0:v", source_trim, regions, options.get("region_layout"), width, height, "clip"
+    )
+    if composed:
+        filters, current = composed
+        video_parts.extend(filters)
     else:
-        video_parts.append(
-            f"[0:v]{trim},scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height}[base]"
-        )
-        current = "base"
+        trim_parts = [f"trim=start={start:.3f}:end={end:.3f}"]
+        crop = _crop_filter(focus)
+        if crop:
+            # A single-region focus keeps the exact source-relative crop.
+            trim_parts.append(crop)
+        trim_parts.extend([f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30"])
+        trim = ",".join(trim_parts)
+        if options.get("blur_background", True) and options.get("aspect", "9:16") != "source":
+            video_parts.append(f"[0:v]{trim},split=2[bg][fg]")
+            video_parts.append(
+                f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},gblur=sigma=24[bgb]"
+            )
+            video_parts.append(
+                f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos[fgs]"
+            )
+            video_parts.append(f"[bgb][fgs]overlay=(W-w)/2:(H-h)/2[base]")
+            current = "base"
+        else:
+            video_parts.append(
+                f"[0:v]{trim},scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,crop={width}:{height}[base]"
+            )
+            current = "base"
     eq_values = [
         f"brightness={float(options.get('brightness', 0)):.3f}",
         f"contrast={_normalise_contrast(options.get('contrast', 1)):.3f}",
@@ -315,8 +453,16 @@ def build_clip_args(
     video_parts.append(f"[{current}]eq={':'.join(eq_values)}[graded]")
     current = "graded"
     caption_style = options.get("caption_style") or {}
-    captions = options.get("captions") or []
-    if caption_style.get("preset", "hype") != "none" and captions:
+    captions = list(options.get("captions") or [])
+    title = str(options.get("title") or "").strip()
+    if title:
+        captions.append({
+            "text": title[:100], "start": start,
+            "end": min(end, start + max(1.4, min(2.8, duration * 0.22))), "kind": "title",
+        })
+    if caption_style.get("preset", "hype") == "none":
+        captions = [caption for caption in captions if caption.get("kind") == "title"]
+    if captions:
         ass_path = write_ass(captions, caption_style, offset=start, position=caption_style.get("position", "bottom"))
         video_parts.append(
             f"[{current}]subtitles=filename='{escape_filter_path(ass_path)}'[captioned]"
@@ -424,11 +570,11 @@ async def render_timeline(
         raise RuntimeError("Add at least one video clip to the timeline before exporting")
     aspect = timeline.get("aspect", "9:16")
     resolution = timeline.get("resolution", "1080p")
-    width, height = resolution_for(aspect, resolution)
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     args: list[str] = [ffmpeg_binary(), "-y", "-hide_banner", "-loglevel", "error"]
     media_inputs: list[dict[str, Any]] = []
     indexed_video: list[tuple[dict[str, Any], int]] = []
+    source_info: list[dict[str, Any]] = []
     for item in video_items:
         path = str(item.get("path") or "")
         if not Path(path).exists():
@@ -437,8 +583,17 @@ async def render_timeline(
         idx = sum(1 for a in args if a == "-i") - 1
         media_inputs.append(item)
         indexed_video.append((item, idx))
+        source_info.append(probe(path))
     if not indexed_video:
         raise RuntimeError("None of the timeline video files were found on this machine")
+    best_source = max(
+        source_info,
+        key=lambda info: int(info.get("width") or 0) * int(info.get("height") or 0),
+    )
+    width, height = resolution_for(
+        aspect, resolution,
+        (int(best_source.get("width") or 1080), int(best_source.get("height") or 1920)),
+    )
 
     music_items = [item for item in (tracks.get("audio") or []) if Path(str(item.get("path", ""))).exists()]
     for item in music_items:
@@ -454,24 +609,41 @@ async def render_timeline(
     filters: list[str] = []
     vlabels: list[str] = []
     alabels: list[str] = []
+    timeline_titles: list[dict[str, Any]] = []
+    timeline_cursor = 0.0
     video_base = len(indexed_video)
     music_base = video_base
     sticker_base = music_base + len(music_items)
     for position, (item, idx) in enumerate(indexed_video):
         source_in = float(item.get("sourceStart", 0))
         duration = max(0.2, float(item.get("duration", 5)))
-        video_filter = f"trim=start={source_in:.3f}:duration={duration:.3f}"
-        focus = item.get("region") or ((item.get("regions") or [None])[0] if item.get("regions") else None)
-        crop = _crop_filter(focus)
-        if crop:
-            video_filter += "," + crop
-        video_filter += (
-            ",setpts=PTS-STARTPTS,"
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},fps=30"
-        )
-        filters.append(f"[{idx}:v]{video_filter}[v{position}]")
-        vlabels.append(f"[v{position}]")
-        media = probe(str(item.get("path")))
+        if item.get("clip_id") and str(item.get("label") or "").strip():
+            title_end = timeline_cursor + min(duration, max(1.4, min(2.8, duration * 0.22)))
+            timeline_titles.append({
+                "text": str(item["label"])[:100], "start": timeline_cursor,
+                "end": title_end, "kind": "title",
+            })
+        trim = f"trim=start={source_in:.3f}:duration={duration:.3f},setpts=PTS-STARTPTS,fps=30"
+        regions = item.get("regions") or []
+        layout = item.get("region_layout")
+        composed = _compose_regions(f"{idx}:v", trim, regions, layout, width, height, f"timeline{position}")
+        if composed:
+            composed_filters, video_label = composed
+            filters.extend(composed_filters)
+        else:
+            focus = item.get("region") or (regions[0] if regions else None)
+            crop = _crop_filter(focus)
+            video_filter = f"trim=start={source_in:.3f}:duration={duration:.3f}"
+            if crop:
+                video_filter += "," + crop
+            video_filter += (
+                ",setpts=PTS-STARTPTS,"
+                f"scale={width}:{height}:force_original_aspect_ratio=increase:flags=lanczos,crop={width}:{height},fps=30"
+            )
+            video_label = f"v{position}"
+            filters.append(f"[{idx}:v]{video_filter}[{video_label}]")
+        vlabels.append(f"[{video_label}]")
+        media = source_info[position]
         if media.get("audio_codec"):
             filters.append(
                 f"[{idx}:a]atrim=start={source_in:.3f}:duration={duration:.3f},asetpts=PTS-STARTPTS[a{position}]"
@@ -479,14 +651,18 @@ async def render_timeline(
         else:
             filters.append(f"anullsrc=r=48000:cl=stereo,atrim=0:{duration:.3f}[a{position}]")
         alabels.append(f"[a{position}]")
+        timeline_cursor += duration
     filters.append("".join(vlabels) + f"concat=n={len(vlabels)}:v=1:a=0[vcat]")
     filters.append("".join(alabels) + f"concat=n={len(alabels)}:v=0:a=1[acat]")
 
-    total = sum(float(item.get("duration", 5)) for item in video_items)
+    total = timeline_cursor
     current = "vcat"
-    captions = tracks.get("captions") or []
+    captions = list(tracks.get("captions") or []) + timeline_titles
+    caption_style = timeline.get("caption_style") or {"preset": "hype"}
+    if caption_style.get("preset", "hype") == "none":
+        captions = [caption for caption in captions if caption.get("kind") == "title"]
     if captions:
-        ass_path = write_ass(captions, timeline.get("caption_style") or {"preset": "hype"})
+        ass_path = write_ass(captions, caption_style)
         filters.append(f"[{current}]subtitles=filename='{escape_filter_path(ass_path)}'[cap]")
         current = "cap"
     for offset, item in enumerate(sticker_items):
@@ -533,10 +709,12 @@ async def render_timeline(
     return output
 
 
-def export_path(name: str) -> str:
+def export_path(name: str, export_day: date | None = None) -> str:
+    """Return the export path inside a local-date folder for the current day."""
     from ..db import db  # local import avoids a config/db cycle
 
-    configured = db.get_setting("clips_folder", "")
-    folder = Path(configured).expanduser() if configured else EXPORTS
-    folder.mkdir(parents=True, exist_ok=True)
-    return str(folder / f"{safe_name(name)}.mp4")
+    configured = db.get_setting("exports_folder", "") or db.get_setting("clips_folder", "")
+    root = Path(configured).expanduser() if configured else EXPORTS
+    day_folder = root / (export_day or date.today()).isoformat()
+    day_folder.mkdir(parents=True, exist_ok=True)
+    return str(day_folder / f"{safe_name(name)}.mp4")
