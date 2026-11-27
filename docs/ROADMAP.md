@@ -1,5 +1,12 @@
 # Roadmap
 
+## Shipped in v5.2.2
+
+- Editor asset panel now contains only Clips and Media, with Stock, AI Art and SFX shortcuts removed
+- Selecting an AI clip previews it immediately and replaces the existing video selection on the timeline
+- Import local video files from Media and add them to the editable timeline
+- Opening a clip from Clipper no longer creates a duplicate Editor project
+
 ## Shipped in v5.2.1
 
 - Clipper removes stale media IDs from its selection when the library refreshes and revalidates before analysis

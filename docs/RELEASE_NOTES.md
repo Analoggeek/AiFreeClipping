@@ -1,5 +1,24 @@
 # Release notes
 
+## v5.2.2 — streamlined Editor and local media imports
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.2.2-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/AI-Clipper-Pro-5.2.2-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.2.2-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/AI-Clipper-Pro-5.2.2-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/AI-Clipper-Pro-5.2.2-macOS-x64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/AI-Clipper-Pro-5.2.2-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/AI-Clipper-Pro-5.2.2-macOS-arm64.dmg) · [ZIP](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/AI-Clipper-Pro-5.2.2-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.2.2-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/AI-Clipper-Pro-5.2.2-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.2.2-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/AI-Clipper-Pro-5.2.2-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.2/manifest.json)
+
+### Changes
+
+- **Simplified Editor:** the asset panel now contains only **Clips** and **Media**; Stock, AI Art, and SFX tabs and shortcuts have been removed.
+- **Clip preview and replacement:** selecting an AI clip immediately focuses it in the preview and replaces the previous video selection on the timeline instead of appending another clip. Auto Edit layers linked to the replaced clip are cleaned up.
+- **Local media imports:** import supported video files directly from the Editor's Media panel, then add imported videos to the editable timeline.
+- **Cleaner handoff:** opening a clip from Clipper no longer creates a duplicate project before the Editor loads it.
+
 ## v5.2.1 — stale-media recovery during clip discovery
 
 ### Download the installers

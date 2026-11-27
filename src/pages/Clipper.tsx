@@ -496,7 +496,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                         <div className="reasons">{clip.reasons.map((reason) => <Pill key={reason} tone="violet">{reason}</Pill>)}</div>
                         {clip.transcript && <p className="transcript">“{clip.transcript.slice(0, 180)}…”</p>}
                         <div className="candidate-actions">
-                          <button className="chip-btn" onClick={() => { void api.createProject({ name: clip.title.slice(0, 40), clip_id: clipId }).then(() => openEditor(clipId)); }}><Scissors size={14} /> Edit</button>
+                          <button className="chip-btn" onClick={() => openEditor(clipId)}><Scissors size={14} /> Edit</button>
                           <button className="chip-btn" onClick={() => renderOne(clip)}><Download size={14} /> Render</button>
                           <button className="chip-btn" onClick={() => openPublish([clipId])}><Send size={14} /> Publish</button>
                           {clip.output && <a className="chip-btn" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output) + '&download=true')} download><Check size={14} /> Download MP4</a>}
