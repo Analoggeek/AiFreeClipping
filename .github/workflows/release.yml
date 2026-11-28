@@ -195,6 +195,8 @@ jobs:
             local app="$1"
             local framework="$app/Contents/Frameworks/Electron Framework.framework/Electron Framework"
             local executable
+            local framework_arches
+            local executable_arches
             local linked_libraries
             STAGE="checking Electron Framework exists in $(basename "$app")"
             if [ ! -s "$framework" ]; then
@@ -207,16 +209,26 @@ jobs:
               echo "App bundle has no executable: $(basename "$app")" >&2
               exit 1
             fi
-            STAGE="checking $EXPECTED_ARCH architecture in the Electron Framework for $(basename "$app")"
-            if ! lipo -verify_arch "$EXPECTED_ARCH" "$framework"; then
-              echo "Electron Framework does not contain the expected $EXPECTED_ARCH architecture" >&2
+            framework_arches="$(lipo -archs "$framework" 2>&1)" || {
+              STAGE="reading Electron Framework architectures in $(basename "$app")"
+              echo "Could not inspect Electron Framework architectures: $framework_arches" >&2
               exit 1
-            fi
-            STAGE="checking $EXPECTED_ARCH architecture in the app executable for $(basename "$app")"
-            if ! lipo -verify_arch "$EXPECTED_ARCH" "$executable"; then
-              echo "App executable does not contain the expected $EXPECTED_ARCH architecture" >&2
+            }
+            STAGE="checking $EXPECTED_ARCH in Electron Framework for $(basename "$app") (found: $framework_arches)"
+            case " $framework_arches " in
+              *" $EXPECTED_ARCH "*) ;;
+              *) echo "Electron Framework lacks $EXPECTED_ARCH architecture (found: $framework_arches)" >&2; exit 1 ;;
+            esac
+            executable_arches="$(lipo -archs "$executable" 2>&1)" || {
+              STAGE="reading app executable architectures in $(basename "$app")"
+              echo "Could not inspect app executable architectures: $executable_arches" >&2
               exit 1
-            fi
+            }
+            STAGE="checking $EXPECTED_ARCH in app executable for $(basename "$app") (found: $executable_arches)"
+            case " $executable_arches " in
+              *" $EXPECTED_ARCH "*) ;;
+              *) echo "App executable lacks $EXPECTED_ARCH architecture (found: $executable_arches)" >&2; exit 1 ;;
+            esac
             STAGE="checking the app executable's Electron Framework load command in $(basename "$app")"
             linked_libraries="$(otool -L "$executable")"
             if ! printf '%s\n' "$linked_libraries" | grep -E '@rpath/Electron Framework\.framework(/Versions/[^[:space:]/]+)?/Electron Framework([[:space:]]|$)' >/dev/null; then
