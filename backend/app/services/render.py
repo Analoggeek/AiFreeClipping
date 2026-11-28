@@ -85,9 +85,9 @@ def _encoder() -> str:
     return _ENCODER
 
 
-def _video_codec_args() -> list[str]:
+def _video_codec_args(encoder: str | None = None) -> list[str]:
     """Choose encoder flags that produce a broadly playable MP4 on every OS."""
-    encoder = _encoder()
+    encoder = encoder or _encoder()
     if encoder == "libx264":
         args = [
             "-c:v", encoder, "-preset", "veryfast", "-crf", "18", "-profile:v", "high",
@@ -100,8 +100,10 @@ def _video_codec_args() -> list[str]:
     else:
         args = ["-c:v", encoder]
     if encoder.startswith("h264") or encoder == "libx264":
+        # Leave H.264 level selection to the encoder: a fixed 4.1 tag is invalid
+        # for source-resolution exports such as 1440p/4K and can make players reject them.
         args.extend([
-            "-pix_fmt", "yuv420p", "-tag:v", "avc1", "-level:v", "4.1",
+            "-pix_fmt", "yuv420p", "-tag:v", "avc1",
             "-color_range", "tv", "-colorspace", "bt709",
             "-color_primaries", "bt709", "-color_trc", "bt709",
         ])
@@ -480,8 +482,11 @@ async def encode(args: list[str], duration: float, on_progress=None) -> Path:
             text = line.decode("utf-8", "ignore").strip()
             if text.startswith("out_time_ms=") and duration > 0 and on_progress:
                 try:
-                    current = int(text.split("=", 1)[1]) / 1_000_000
-                    on_progress(min(95, current / duration * 100), f"Rendering {current:.1f}s / {duration:.1f}s")
+                    current = max(0, int(text.split("=", 1)[1])) / 1_000_000
+                    on_progress(
+                        min(95, current / duration * 100),
+                        f"Encoded output: {current:.1f}s / {duration:.1f}s",
+                    )
                 except (ValueError, TypeError):
                     pass
         stderr = (await stderr_task).decode("utf-8", "ignore")
@@ -521,9 +526,18 @@ def build_clip_args(
     output: str,
     options: dict[str, Any],
     has_audio: bool = True,
+    *,
+    encoder: str | None = None,
 ) -> list[str]:
     """Pure command builder (unit-testable): all paths passed as argv, never shell."""
-    duration = max(0.5, end - start)
+    requested_start = float(start)
+    source_end = float(end)
+    if not math.isfinite(requested_start) or not math.isfinite(source_end):
+        raise ValueError("Clip start and end times must be finite.")
+    source_start = max(0.0, requested_start)
+    if source_end <= source_start:
+        raise ValueError("Clip end time must be later than its start time.")
+    duration = max(0.5, source_end - source_start)
     width, height = resolution_for(
         options.get("aspect", "9:16"),
         options.get("resolution", "1080p"),
@@ -539,7 +553,9 @@ def build_clip_args(
         input_count += 1
         return index
 
-    add_input("-i", media_path)
+    # Seek at the demuxer so short exports do not decode every preceding frame.
+    # Accurate seeking remains enabled; the filter graph re-bases PTS below.
+    add_input("-ss", f"{source_start:.3f}", "-accurate_seek", "-i", media_path)
     music_index = None
     if options.get("music") and Path(options["music"]).exists():
         music_index = add_input("-stream_loop", "-1", "-i", options["music"])
@@ -574,8 +590,9 @@ def build_clip_args(
         _moving_crop_filter(options.get("crop_path"), options.get("aspect", "9:16"), source_width, source_height)
         if focus is None and not regions else None
     )
+    source_pts = f"setpts=PTS+{source_start:.3f}/TB"
     source_trim = ",".join([
-        f"trim=start={start:.3f}:end={end:.3f}",
+        source_pts, f"trim=start={source_start:.3f}:end={source_end:.3f}",
         f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30",
     ])
     crop: str | None = None
@@ -590,13 +607,13 @@ def build_clip_args(
         # The auto-follow crop fills a portrait canvas directly; it replaces the
         # full-frame blur/contain treatment only when a tracked path is available.
         trim = ",".join([
-            f"trim=start={start:.3f}:end={end:.3f}", moving_crop,
+            source_pts, f"trim=start={source_start:.3f}:end={source_end:.3f}", moving_crop,
             f"setpts=(PTS-STARTPTS)/{speed:.3f}", "fps=30",
         ])
         video_parts.append(f"[0:v]{trim},scale={width}:{height}:flags=lanczos[base]")
         current = "base"
     else:
-        trim_parts = [f"trim=start={start:.3f}:end={end:.3f}"]
+        trim_parts = [source_pts, f"trim=start={source_start:.3f}:end={source_end:.3f}"]
         crop = _crop_filter(focus)
         if crop:
             # A single-region focus keeps the exact source-relative crop.
@@ -669,7 +686,8 @@ def build_clip_args(
         audio_parts = [f"[{silent_index}:a]atrim=0:{duration:.3f},asetpts=PTS-STARTPTS{tempo}[a0]"]
     else:
         audio_parts = [
-            f"[0:a]atrim=start={start:.3f}:end={end:.3f},asetpts=PTS-STARTPTS{tempo},volume=1[a0]"
+            f"[0:a]asetpts=PTS+{source_start:.3f}/TB,atrim=start={source_start:.3f}:end={source_end:.3f},"
+            f"asetpts=PTS-STARTPTS{tempo},volume=1[a0]"
         ]
     if music_index is not None:
         audio_parts.append(
@@ -679,7 +697,8 @@ def build_clip_args(
     for idx, _path, at in sfx_indices:
         delay_ms = int(max(0, at) * 1000)
         audio_parts.append(
-            f"[{idx}:a]adelay={delay_ms}|{delay_ms},volume={float(options.get('sfx_volume', 0.5)):.3f}[as{idx}]"
+            f"[{idx}:a]asetpts=PTS-STARTPTS,adelay={delay_ms}|{delay_ms},"
+            f"volume={float(options.get('sfx_volume', 0.5)):.3f}[as{idx}]"
         )
         audio_inputs.append(f"[as{idx}]")
     mix_inputs = "[a0]" + "".join(audio_inputs)
@@ -689,24 +708,123 @@ def build_clip_args(
     args += [
         "-filter_complex_threads", str(_render_thread_count(options)),
         "-filter_complex", ";".join(video_parts + audio_parts),
-        "-map", "[vout]", "-map", "[aout]", *_thread_args(options), *_video_codec_args(),
+        "-map", "[vout]", "-map", "[aout]", *_thread_args(options), *_video_codec_args(encoder),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
         "-t", f"{duration / speed:.3f}", "-progress", "pipe:1", "-nostats", output,
     ]
     return args
 
 
+class _HardwareCompatibilityError(RuntimeError):
+    """A hardware encoder produced video incompatible with common MP4 players."""
+
+
+class _MP4ValidationError(RuntimeError):
+    """An output is incomplete or missing a required audio/video stream."""
+
+
 def _validate_mp4(path: str | Path) -> None:
-    """Reject empty, non-video, or non-H.264 outputs before marking a clip ready."""
+    """Reject incomplete or poorly supported outputs before marking a clip ready."""
     target = Path(path)
     if not target.exists() or target.stat().st_size < 128:
         raise RuntimeError("Render finished without producing a valid MP4 file.")
     info = probe(target)
     codec = str(info.get("video_codec") or "").lower()
-    if codec and codec != "h264":
-        raise RuntimeError(f"Render produced {codec}, not broadly compatible H.264 video.")
-    if not codec or not info.get("width") or not info.get("height"):
-        raise RuntimeError("Render output could not be verified as a playable video. Check the local FFmpeg installation.")
+    if codec != "h264":
+        raise _HardwareCompatibilityError(
+            f"Render produced {codec or 'unknown video'}, not broadly compatible H.264 video."
+        )
+    try:
+        width, height = int(info.get("width") or 0), int(info.get("height") or 0)
+        duration = float(info.get("duration") or 0)
+    except (TypeError, ValueError, OverflowError):
+        width = height = 0
+        duration = 0.0
+    if width < 2 or height < 2 or width % 2 or height % 2:
+        raise _HardwareCompatibilityError("Render output has invalid dimensions for a compatible H.264 MP4.")
+    if not math.isfinite(duration) or duration <= 0.05:
+        raise RuntimeError("Render output has no usable video duration and may not play correctly.")
+    audio_codec = str(info.get("audio_codec") or "").lower()
+    if audio_codec != "aac":
+        raise RuntimeError(f"Render produced {audio_codec or 'no audio'}, not compatible AAC audio.")
+    format_name = str(info.get("format") or "").lower()
+    format_names = {part.strip() for part in format_name.split(",") if part.strip()}
+    if "mp4" not in format_names:
+        raise _HardwareCompatibilityError(
+            f"Render output container '{format_name or 'unknown'}' is not a verified MP4."
+        )
+
+
+def _software_fallback_allowed(encoder: str) -> bool:
+    forced = os.getenv("AIFREECLIP_ENCODER", "").strip().lower()
+    return (
+        encoder in {"h264_videotoolbox", "h264_nvenc"}
+        and forced in {"", "auto"}
+        and os.getenv("FORCE_SOFTWARE_ENCODER") != "1"
+    )
+
+
+def _replace_video_encoder(args: list[str], encoder: str) -> list[str]:
+    codec_start = args.index("-c:v")
+    codec_end = args.index("-c:a", codec_start)
+    return args[:codec_start] + _video_codec_args(encoder) + args[codec_end:]
+
+
+async def _encode_validated_mp4(
+    args: list[str], duration: float, on_progress=None, *, encoder: str,
+) -> None:
+    """Encode, verify the playable MP4 streams, and retry auto hardware failures in software."""
+    output = Path(args[-1])
+
+    async def encode_and_validate(command: list[str]) -> None:
+        await encode(command, duration, on_progress)
+        try:
+            await asyncio.to_thread(_validate_mp4, output)
+        except asyncio.CancelledError:
+            raise
+        except _HardwareCompatibilityError:
+            raise
+        except Exception as exc:
+            raise _MP4ValidationError(str(exc)) from exc
+
+    async def fallback_or_raise(original_error: Exception) -> None:
+        nonlocal args
+        if not _software_fallback_allowed(encoder):
+            output.unlink(missing_ok=True)
+            raise original_error
+        args = _replace_video_encoder(args, "libx264")
+        output.unlink(missing_ok=True)
+        try:
+            await encode_and_validate(args)
+        except asyncio.CancelledError:
+            output.unlink(missing_ok=True)
+            raise
+        except Exception as fallback_error:
+            output.unlink(missing_ok=True)
+            raise RuntimeError(
+                f"{encoder} rendering failed ({str(original_error).strip()[:500]}); "
+                f"software H.264 fallback also failed ({str(fallback_error).strip()[:500]})."
+            ) from fallback_error
+        global _ENCODER
+        if _ENCODER == encoder:
+            _ENCODER = "libx264"
+
+    try:
+        await encode_and_validate(args)
+    except asyncio.CancelledError:
+        output.unlink(missing_ok=True)
+        raise
+    except _HardwareCompatibilityError as exc:
+        await fallback_or_raise(exc)
+    except _MP4ValidationError:
+        output.unlink(missing_ok=True)
+        raise
+    except Exception as exc:
+        if _software_fallback_allowed(encoder):
+            await fallback_or_raise(exc)
+        else:
+            output.unlink(missing_ok=True)
+            raise
 
 
 async def render_clip(
@@ -722,13 +840,14 @@ async def render_clip(
     options.setdefault("source_width", info.get("width", 1080))
     options.setdefault("source_height", info.get("height", 1920))
     Path(output).parent.mkdir(parents=True, exist_ok=True)
-    args = build_clip_args(media_path, start, end, output, options, has_audio=bool(info.get("audio_codec")))
-    await encode(args, max(0.5, end - start), on_progress)
-    try:
-        await asyncio.to_thread(_validate_mp4, output)
-    except Exception:
-        Path(output).unlink(missing_ok=True)
-        raise
+    encoder = _encoder()
+    args = build_clip_args(
+        media_path, start, end, output, options,
+        has_audio=bool(info.get("audio_codec")), encoder=encoder,
+    )
+    speed = max(0.25, min(float(options.get("speed", 1)), 4))
+    duration = max(0.5, float(end) - max(0.0, float(start))) / speed
+    await _encode_validated_mp4(args, duration, on_progress, encoder=encoder)
     return output
 
 
@@ -753,7 +872,8 @@ async def render_timeline(
     ]
     source_info = await asyncio.gather(*(asyncio.to_thread(probe, path) for _item, path in available_video))
     for item, path in available_video:
-        args += ["-i", path]
+        source_start = max(0.0, float(item.get("sourceStart", 0)))
+        args += ["-ss", f"{source_start:.3f}", "-accurate_seek", "-i", path]
         idx = len(indexed_video)
         media_inputs.append(item)
         indexed_video.append((item, idx))
@@ -789,7 +909,7 @@ async def render_timeline(
     audio_base = len(indexed_video)
     sticker_base = audio_base + len(audio_items)
     for position, (item, idx) in enumerate(indexed_video):
-        source_in = float(item.get("sourceStart", 0))
+        source_in = max(0.0, float(item.get("sourceStart", 0)))
         duration = max(0.2, float(item.get("duration", 5)))
         effects = item.get("effects") if isinstance(item.get("effects"), dict) else {}
         try:
@@ -798,7 +918,7 @@ async def render_timeline(
             speed = 1.0
         source_duration = max(0.05, float(item.get("sourceDuration") or duration * speed))
         trim = (
-            f"trim=start={source_in:.3f}:duration={source_duration:.3f},"
+            f"setpts=PTS+{source_in:.3f}/TB,trim=start={source_in:.3f}:duration={source_duration:.3f},"
             f"setpts=(PTS-STARTPTS)/{speed:.3f},fps=30"
         )
         regions = item.get("regions") or []
@@ -825,7 +945,9 @@ async def render_timeline(
                 if focus is None and not regions else None
             )
             crop = _crop_filter(focus)
-            video_filter = f"trim=start={source_in:.3f}:duration={source_duration:.3f}"
+            video_filter = (
+                f"setpts=PTS+{source_in:.3f}/TB,trim=start={source_in:.3f}:duration={source_duration:.3f}"
+            )
             if moving_crop:
                 video_filter += "," + moving_crop
             elif crop:
@@ -858,7 +980,10 @@ async def render_timeline(
         vlabels.append(f"[{graded}]")
         media = source_info[position]
         if media.get("audio_codec"):
-            audio_filter = f"atrim=start={source_in:.3f}:duration={source_duration:.3f},asetpts=PTS-STARTPTS"
+            audio_filter = (
+                f"asetpts=PTS+{source_in:.3f}/TB,atrim=start={source_in:.3f}:duration={source_duration:.3f},"
+                "asetpts=PTS-STARTPTS"
+            )
             if abs(speed - 1.0) > 0.01:
                 audio_filter += f",{_atempo_filter(speed)}"
             audio_filter += f",atrim=0:{duration:.3f}"
@@ -871,6 +996,7 @@ async def render_timeline(
     filters.append("".join(alabels) + f"concat=n={len(alabels)}:v=0:a=1[acat]")
 
     total = timeline_cursor
+    encoder = _encoder()
     current = "vcat"
     for offset, item in enumerate(sticker_items):
         start = float(item.get("start", 0))
@@ -914,16 +1040,11 @@ async def render_timeline(
     args += [
         "-filter_complex_threads", str(_render_thread_count()),
         "-filter_complex", ";".join(filters), "-map", "[vout]", "-map", "[aout]",
-        *_thread_args(), *_video_codec_args(),
+        *_thread_args(), *_video_codec_args(encoder),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
         "-t", f"{total:.3f}", "-progress", "pipe:1", "-nostats", output,
     ]
-    await encode(args, total, on_progress)
-    try:
-        await asyncio.to_thread(_validate_mp4, output)
-    except Exception:
-        Path(output).unlink(missing_ok=True)
-        raise
+    await _encode_validated_mp4(args, total, on_progress, encoder=encoder)
     return output
 
 

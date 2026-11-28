@@ -32,6 +32,7 @@ def _probe_from_text(text: str) -> dict[str, Any]:
         duration = int(h) * 3600 + int(m) * 60 + float(s)
     video_codec = re.search(r"Video:\s*([a-zA-Z0-9_]+)", text)
     audio_codec = re.search(r"Audio:\s*([a-zA-Z0-9_]+)", text)
+    format_match = re.search(r"Input #\d+,\s*(.*?),\s+from\s+", text)
     color = {"color_primaries": "", "color_transfer": "", "color_space": "", "color_range": ""}
     pixel_format = re.search(r"Video:.*?\b(?:yuv|gbr)[a-zA-Z0-9_]*\(([^)]*)\)", text)
     if pixel_format:
@@ -56,7 +57,7 @@ def _probe_from_text(text: str) -> dict[str, Any]:
         "audio_codec": audio_codec.group(1) if audio_codec else "",
         **color,
         "bitrate": 0,
-        "format": "",
+        "format": format_match.group(1).strip() if format_match else "",
     }
 
 

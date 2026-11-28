@@ -73,12 +73,33 @@ def test_clip_command_has_expected_filters(tmp_path: Path):
     args = build_clip_args("/tmp/input.mp4", 10, 25, "/tmp/out.mp4", options, has_audio=True)
     joined = " ".join(args)
     assert "-i" in args
-    assert "trim=start=10.000:end=25.000" in joined
+    source_input = args.index("-i")
+    assert args.index("-ss") < source_input
+    assert args[args.index("-ss") + 1] == "10.000"
+    assert "-accurate_seek" in args[:source_input]
+    assert "setpts=PTS+10.000/TB,trim=start=10.000:end=25.000" in joined
     assert "subtitles" not in joined
     assert "[vout]" in joined and "[aout]" in joined
-    assert "amix=inputs=3" in joined  # voice + music + one sfx
+    assert "amix=inputs=3" in joined  # source audio + music + one sfx
+    assert "asetpts=PTS-STARTPTS,adelay=" in joined
     assert "-progress" in args
     assert "shell" not in joined
+
+
+@pytest.mark.parametrize(
+    ("start", "end"),
+    [(float("nan"), 1), (0, float("inf")), (1, 1), (2, 1)],
+)
+def test_clip_builder_rejects_non_finite_or_reversed_times(start: float, end: float):
+    with pytest.raises(ValueError, match="finite|later"):
+        build_clip_args("/tmp/input.mp4", start, end, "/tmp/out.mp4", {}, has_audio=False)
+
+
+def test_clip_builder_clamps_negative_source_start_to_zero():
+    args = build_clip_args("/tmp/input.mp4", -2, 3, "/tmp/out.mp4", {}, has_audio=False)
+    assert args[args.index("-ss") + 1] == "0.000"
+    graph = args[args.index("-filter_complex") + 1]
+    assert "trim=start=0.000:end=3.000" in graph
 
 
 def test_small_focus_region_is_expanded_to_a_usable_crop():

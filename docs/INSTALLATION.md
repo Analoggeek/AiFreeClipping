@@ -46,6 +46,8 @@ The initial model download needs internet access. Once models are installed, ana
 
 ## Source install
 
+Requires Node.js 22.12+ and Python 3.11+.
+
 ```bash
 npm install
 python3 -m venv .venv && source .venv/bin/activate

@@ -1,5 +1,14 @@
 # Roadmap
 
+## In progress for v6.0.2 — accurate, verified MP4 exports
+
+- Refresh Electron and the packaging toolchain to patched versions, sandbox the desktop windows, and require Node 22.12+ for development builds
+- Seek to nonzero source offsets for shorter decode work while preserving absolute timestamps for reframing/keyframes
+- Fall back from automatically selected hardware encoding to software H.264 when rendering fails or produces incompatible video
+- Let H.264 encoders select a resolution-appropriate level instead of mislabeling source-resolution 1440p/4K as level 4.1
+- Validate H.264/AAC streams, MP4 container, dimensions and duration before accepting exports
+- Exercise clip and timeline rendering with synthetic media, non-keyframe seek offsets and full FFmpeg decode
+
 ## Shipped in v6.0.1 — more responsive, reliable rendering
 
 - Bound Auto Edit and batch-export concurrency to a shared CPU budget, including FFmpeg codec and filter-graph threads

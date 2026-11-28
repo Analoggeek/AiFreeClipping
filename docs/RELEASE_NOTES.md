@@ -1,5 +1,27 @@
 # Release notes
 
+## v6.0.2 — reliable MP4 rendering and source-accurate reframing
+
+### Downloads
+
+- **Windows x64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/AI-Clipper-Pro-6.0.2-Windows-x64.exe)
+- **Windows ARM64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/AI-Clipper-Pro-6.0.2-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/AI-Clipper-Pro-6.0.2-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/AI-Clipper-Pro-6.0.2-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/AI-Clipper-Pro-6.0.2-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/AI-Clipper-Pro-6.0.2-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-6.0.2-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/AI-Clipper-Pro-6.0.2-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-6.0.2-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/AI-Clipper-Pro-6.0.2-Linux-amd64.deb)
+- [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.2/manifest.json)
+
+### Changes
+
+- Upgrade the desktop shell to patched Electron 45.5 and electron-builder 26.18, enable sandboxing in both desktop windows, update vulnerable build-time dependencies, and declare the Node 22.12+ development requirement; `npm audit` is clean.
+- Seek directly to each clip's source time before decoding, with accurate keyframe seeking and timestamp re-basing in both clip and timeline exports. This avoids repeatedly decoding the beginning of long source videos for later clips.
+- If automatically selected VideoToolbox/NVENC encoding fails or produces an incompatible video stream, retry with software H.264; explicitly forced encoder choices remain respected.
+- Remove the fixed H.264 level 4.1 tag. Source-resolution 1440p/4K exports now let the encoder signal a level matching their frame size, avoiding invalid level metadata that can make decoders reject the video.
+- Verify each output's H.264/AAC streams, dimensions, duration and MP4 container using ffprobe or the bundled FFmpeg probe fallback before saving it as rendered.
+- Clarify progress text so it reports encoded output time rather than implying wall-clock elapsed time.
+- Add end-to-end FFmpeg tests that render from non-keyframe source offsets, verify selected frames and audio, and decode complete outputs.
+
 ## v6.0.1 — more responsive, reliable rendering
 
 ### Download the installers

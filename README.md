@@ -62,7 +62,7 @@ The engine, FFmpeg and icons are bundled; model weights install from the app's *
 ### 2. Run from source
 
 ```bash
-# Node 20+ and Python 3.11+
+# Node 22.12+ and Python 3.11+
 npm install
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements.txt

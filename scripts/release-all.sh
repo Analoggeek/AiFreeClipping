@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # AI Clipper Pro — one command to build every offline installer.
 #   bash scripts/release-all.sh                      # build installers for THIS machine
-#   bash scripts/release-all.sh 6.0.1 --all           # build the complete cross-platform matrix (no release)
-#   bash scripts/release-all.sh 6.0.1 --all --publish # build and publish all supported installers
+#   bash scripts/release-all.sh 6.0.2 --all           # build the complete cross-platform matrix (no release)
+#   bash scripts/release-all.sh 6.0.2 --all --publish # build and publish all supported installers
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -146,7 +146,7 @@ const payload = {
   builtAt: new Date().toISOString(),
   buildMode: mode,
   installers: fs.existsSync('release') ? fs.readdirSync('release').filter(f => /\.(exe|dmg|AppImage|deb|zip)$/i.test(f)) : [],
-  components: ['Electron 33', 'React 18', 'FastAPI', 'yt-dlp', 'FFmpeg', 'faster-whisper', 'YOLOX/YOLO11 + ByteTrack', 'Ollama Gemma', 'ComfyUI SDXL (optional)', 'Piper TTS (optional)'],
+  components: ['Electron 45', 'React 18', 'FastAPI', 'yt-dlp', 'FFmpeg', 'faster-whisper', 'YOLOX/YOLO11 + ByteTrack', 'Ollama Gemma', 'ComfyUI SDXL (optional)', 'Piper TTS (optional)'],
 };
 fs.writeFileSync(target, JSON.stringify(payload, null, 2) + '\n');
 NODE
