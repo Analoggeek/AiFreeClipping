@@ -48,7 +48,7 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 
 Download the right installer from the [latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest) and open it. The engine, FFmpeg and icons are bundled. Model weights install from the app's **Local Models** page.
 
-**Staged v5.2.6 installer links** (the asset URLs are ready, but the installers have not been built or published yet):
+**Direct v5.2.6 downloads** (even if the GitHub **Assets** panel is collapsed, these links go straight to the files):
 
 | Platform | Direct installer |
 |---|---|

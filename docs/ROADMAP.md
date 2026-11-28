@@ -1,6 +1,6 @@
 # Roadmap
 
-## Prepared for v5.2.6
+## Shipped in v5.2.6
 
 - Offline Whisper captions reuse cached transcripts, map word-level timings onto matching timeline clips, and keep each word editable
 - Preserve the caption-template design while exposing 136 selectable looks and 44 font families in the Inspector

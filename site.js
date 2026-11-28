@@ -114,7 +114,7 @@
         }
       });
     } catch (_) {
-      // Static v5.2.6 candidate links may not resolve until its installers are published.
+      // Static fallback links point to the published v5.2.6 installer files.
     }
   })();
 })();
