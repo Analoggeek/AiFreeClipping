@@ -66,7 +66,7 @@ npm run build
 
 if [ "$MODE" = "ci" ]; then
   echo "== 4/6 Local Python engine =="
-  echo "Skipped — each native GitHub runner packages its matching engine."
+  echo "Skipped — each GitHub Actions matrix job packages its engine bundle."
 else
   echo "== 4/6 Local Python engine =="
   if [ "$SKIP_BACKEND" -eq 1 ]; then

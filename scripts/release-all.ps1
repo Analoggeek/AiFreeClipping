@@ -39,7 +39,7 @@ if (Test-Path '.venv\Scripts\python.exe') { $Python = '.venv\Scripts\python.exe'
 Invoke-Checked "$Python scripts/generate-icons.py"
 Invoke-Checked 'npm run build'
 if ($All) {
-  Write-Host 'Skipping local Python-engine packaging; each native runner builds its matching engine.'
+  Write-Host 'Skipping local Python-engine packaging; each GitHub Actions matrix job builds its engine bundle.'
 } elseif ($SkipBackend) {
   Invoke-Checked "$Python scripts/package-backend.py --skip-pyinstaller"
 } else {
