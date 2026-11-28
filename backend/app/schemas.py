@@ -33,6 +33,30 @@ class FolderPatch(BaseModel):
     path: str
 
 
+class CaptionStyle(BaseModel):
+    preset: Literal["hype", "karaoke", "minimal", "premium", "none"] = "hype"
+    template_id: str | None = Field(default=None, max_length=100)
+    font_family: str | None = Field(default=None, max_length=80)
+    font_size: int = Field(default=62, ge=12, le=180)
+    primary_color: str = "&H00FFFFFF"
+    outline_color: str = "&H00000000"
+    background_color: str | None = None
+    background_opacity: float = Field(default=0, ge=0, le=1)
+    bold: bool | None = None
+    italic: bool = False
+    uppercase: bool = False
+    outline: float | None = Field(default=None, ge=0, le=20)
+    shadow: float | None = Field(default=None, ge=0, le=20)
+    spacing: float = Field(default=0, ge=0, le=20)
+    position: Literal["auto", "bottom", "center", "top", "split", "custom"] = "bottom"
+    x: float | None = Field(default=None, ge=0, le=1)
+    y: float | None = Field(default=None, ge=0, le=1)
+
+
+class AutoEditReuseSettings(BaseModel):
+    caption_style: CaptionStyle
+
+
 class AutoEditRequest(BaseModel):
     clip_ids: list[str]
     style: Literal["hype", "minimal", "premium"] = "hype"
@@ -44,6 +68,7 @@ class AutoEditRequest(BaseModel):
     blur_background: bool = True
     music: str | None = None
     music_volume: float = Field(default=0.18, ge=0, le=1)
+    reuse_settings: AutoEditReuseSettings | None = None
 
 
 class MediaInfo(BaseModel):
@@ -97,14 +122,6 @@ class ClipProposalRequest(BaseModel):
     music: str | None = None
     use_llm: bool = True
     llm_model: str | None = None
-
-
-class CaptionStyle(BaseModel):
-    preset: Literal["hype", "karaoke", "minimal", "premium", "none"] = "hype"
-    font_size: int = 62
-    primary_color: str = "&H00FFFFFF"
-    outline_color: str = "&H00000000"
-    position: Literal["bottom", "center", "top"] = "bottom"
 
 
 class RenderRequest(BaseModel):

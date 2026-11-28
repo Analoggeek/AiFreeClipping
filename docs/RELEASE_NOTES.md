@@ -1,5 +1,25 @@
 # Release notes
 
+## v5.2.6 — offline captions and a flexible Editor
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.2.6-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.2.6-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.2.6-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.2.6-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/manifest.json)
+
+### Changes
+
+- Add offline Whisper captioning that reuses a saved local transcript first, installs word-level captions on matching timeline clips, and keeps each word's text and timing editable. Missing local weights produce an actionable message instead of a model download during transcription.
+- Preserve the existing caption-template experience and add **136 selectable looks** across **44 font families**, searchable in the Inspector's Templates tab, with styling shared by preview and export.
+- Make the Media, Shorts preview, Inspector and Timeline areas resizable by dragging their dividers; resize the Shorts player from its corner handle. Layout choices persist locally, work in the responsive stacked layout, and can be restored with **Reset layout** without changing project or caption edits.
+- Carry caption style, placement and size into Auto Edit when requested, without replacing the target project's aspect ratio or resolution.
+- Keep the selected caption style and seam-aware placement consistent through timeline rendering, individual rendering and Auto Edit.
+
 ## v5.2.5 — verified installers for every platform
 
 ### Download the installers

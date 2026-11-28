@@ -1,4 +1,4 @@
-import type { AutoEditTimelineEdit, Timeline, VideoItem } from '../types';
+import type { AutoEditTimelineEdit, CaptionStyleSettings, Timeline, VideoItem } from '../types';
 
 function numberOr(value: unknown, fallback: number): number {
   const parsed = Number(value);
@@ -30,6 +30,7 @@ export function appendAutoEditTimeline(
     const video: VideoItem = {
       id: `auto-${edit.clip_id}`,
       clip_id: edit.clip_id,
+      media_id: edit.media_id,
       path: edit.source_path,
       sourceStart,
       sourceDuration,
@@ -56,6 +57,9 @@ export function appendAutoEditTimeline(
         start: cursor + (start - sourceStart) / speed,
         end: cursor + (end - sourceStart) / speed,
         kind: caption.kind || 'caption',
+        x: caption.x,
+        y: caption.y,
+        scale: caption.scale,
         auto_edit_clip_id: edit.clip_id,
       });
     }
@@ -84,7 +88,8 @@ export function appendAutoEditTimeline(
 
     next.aspect = edit.aspect;
     next.resolution = edit.resolution;
-    next.caption_style = (effects.caption_style as { preset: string } | undefined) || next.caption_style;
+    const editCaptionStyle = effects.caption_style as CaptionStyleSettings | undefined;
+    if (editCaptionStyle) next.caption_style = { ...editCaptionStyle };
     cursor += duration;
   }
   return { timeline: next, start: firstStart };

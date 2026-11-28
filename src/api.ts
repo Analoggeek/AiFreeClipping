@@ -1,4 +1,4 @@
-import type { AutoEditOptions, Capabilities, Candidate, HardwareInfo, Job, Media, ModelInfo, Project, Timeline } from './types';
+import type { AutoEditOptions, AutoEditReuseSettings, Capabilities, Candidate, HardwareInfo, Job, Media, ModelInfo, Project, Timeline } from './types';
 
 const query = new URLSearchParams(window.location.search);
 const token = window.desktop?.token?.() || query.get('token') || localStorage.getItem('aifreeclip.token') || '';
@@ -45,7 +45,7 @@ export const api = {
   playlist: (id: string) => request<{ playlist: Record<string, unknown>; media: Media[] }>(`/api/playlists/${id}`),
 
   transcribe: (media_id: string) => post<{ job_id: string }>('/api/analysis/transcribe', { media_id }),
-  transcript: (media_id: string) => request<{ transcript: { segments?: Array<{ start: number; end: number; text: string }> } }>(`/api/analysis/${media_id}/transcript`),
+  transcript: (media_id: string) => request<{ transcript: { segments?: Array<{ start: number; end: number; text: string; words?: Array<{ word: string; start: number; end: number; probability?: number }> }>; text?: string } }>(`/api/analysis/${media_id}/transcript`),
   propose: (payload: Record<string, unknown>) => post<{ job_id: string }>('/api/clips/propose', payload),
   clips: () => request<{ clips: Candidate[] }>('/api/clips'),
   patchClip: (id: string, patch: Partial<Candidate>) => request<{ clip: Candidate }>(`/api/clips/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
@@ -86,7 +86,8 @@ export const api = {
   installRecommendedModels: () => post<{ job_id: string }>('/api/models/install-recommended', {}),
   autoSetupModels: () => post<{ job_id: string; skipped?: boolean; message?: string }>('/api/models/auto-setup', {}),
   setFolder: (key: string, path: string) => request<{ folders: Record<string, string> }>('/api/folders', { method: 'PUT', body: JSON.stringify({ key, path }) }),
-  autoEdit: (clip_ids: string[], options: AutoEditOptions) => post<{ job_id: string }>('/api/auto-edit', { clip_ids, ...options }),
+  autoEdit: (clip_ids: string[], options: AutoEditOptions, reuseSettings?: AutoEditReuseSettings) =>
+    post<{ job_id: string }>('/api/auto-edit', { clip_ids, ...options, ...(reuseSettings ? { reuse_settings: reuseSettings } : {}) }),
 
   youtubeStatus: () => request<{ authorized: boolean; available: boolean; clientSecretConfigured: boolean }>('/api/youtube/status'),
   youtubeAuthorize: () => post<{ job_id: string }>('/api/youtube/authorize'),

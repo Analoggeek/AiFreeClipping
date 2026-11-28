@@ -55,7 +55,7 @@ Simple React state + polling (`src/api.ts: pollJob`) keeps the UI responsive wit
 }
 ```
 
-It is saved through `PUT /api/projects/{id}` and rendered by `POST /api/projects/{id}/export`.
+It is saved through `PUT /api/projects/{id}` and rendered by `POST /api/projects/{id}/export`. Caption styling (template ID, font, color, spacing and placement) remains part of the project timeline; individual words can also retain their own timing, position and scale. Editor panel sizes and preview scale are stored separately in browser local storage, so resetting the layout never changes project edits.
 
 ## Security
 

@@ -38,8 +38,8 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 | **Download** | Paste a YouTube/Instagram/TikTok/Twitch URL (or 1000+ yt-dlp sites), choose max quality, subtitles, and full playlists with item selection. Local file import works too. |
 | **Understand** | Whisper word timings, YOLOX Nano ONNX + ByteTrack-style tracking (Torch-free in packaged builds), scene changes and hardware-matched Gemma 2/3 reranking. |
 | **Clip** | Several non-overlapping viral candidates from one source or a batch of videos. Draw source-aware focus regions, adjust split proportions and outline styles, then carry the selected composition into every render. |
-| **Enhance** | Four selectable caption styles, editable transcript-grounded social copy, procedural royalty-free SFX, music beds, stickers, blurred-background 9:16 reframing, speed/color controls and an optional user-supplied channel watermark. |
-| **Edit** | CapCut-style timeline with video/caption/sticker/audio tracks, split/trim/inspector, generated clips that add directly to the timeline, stock search and Nano Banana / SDXL art. |
+| **Enhance** | Offline word-timed captions, 136 selectable looks, 44 font families, editable transcript-grounded social copy, procedural royalty-free SFX, music beds, stickers, blurred-background 9:16 reframing, speed/color controls and an optional user-supplied channel watermark. |
+| **Edit** | CapCut-style timeline with resizable Media, Shorts preview, Inspector and Timeline panels; drag-resizable player, reset-to-default layout, editable word timings, split/trim, generated clips, stock search and Nano Banana / SDXL art. |
 | **Publish** | Select all, export or delete chosen clips; parallel H.264/AAC 1080p exports with `+faststart`, direct MP4 downloads and optional resumable YouTube uploads. |
 
 ## Quick start
@@ -48,18 +48,18 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 
 Download the right installer from the [latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest) and open it. The engine, FFmpeg and icons are bundled. Model weights install from the app's **Local Models** page.
 
-**Direct v5.2.5 downloads** (even if the GitHub **Assets** panel is collapsed, these links go straight to the files):
+**Staged v5.2.6 installer links** (the asset URLs are ready, but the installers have not been built or published yet):
 
 | Platform | Direct installer |
 |---|---|
-| Windows x64 | [AI-Clipper-Pro-5.2.5-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-Windows-x64.exe) |
-| Windows ARM64 | [AI-Clipper-Pro-5.2.5-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-Windows-arm64.exe) |
-| macOS Intel DMG | [AI-Clipper-Pro-5.2.5-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-macOS-x64.dmg) |
-| macOS Intel ZIP (alternate) | [AI-Clipper-Pro-5.2.5-macOS-x64.zip](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-macOS-x64.zip) |
-| macOS Apple Silicon DMG | [AI-Clipper-Pro-5.2.5-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-macOS-arm64.dmg) |
-| macOS Apple Silicon ZIP (alternate) | [AI-Clipper-Pro-5.2.5-macOS-arm64.zip](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-macOS-arm64.zip) |
-| Linux AppImage | [AI-Clipper-Pro-5.2.5-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-Linux-x86_64.AppImage) |
-| Linux Debian/Ubuntu | [AI-Clipper-Pro-5.2.5-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-Linux-amd64.deb) |
+| Windows x64 | [AI-Clipper-Pro-5.2.6-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Windows-x64.exe) |
+| Windows ARM64 | [AI-Clipper-Pro-5.2.6-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Windows-arm64.exe) |
+| macOS Intel DMG | [AI-Clipper-Pro-5.2.6-macOS-x64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-x64.dmg) |
+| macOS Intel ZIP (alternate) | [AI-Clipper-Pro-5.2.6-macOS-x64.zip](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-x64.zip) |
+| macOS Apple Silicon DMG | [AI-Clipper-Pro-5.2.6-macOS-arm64.dmg](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-arm64.dmg) |
+| macOS Apple Silicon ZIP (alternate) | [AI-Clipper-Pro-5.2.6-macOS-arm64.zip](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-arm64.zip) |
+| Linux AppImage | [AI-Clipper-Pro-5.2.6-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Linux-x86_64.AppImage) |
+| Linux Debian/Ubuntu | [AI-Clipper-Pro-5.2.6-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Linux-amd64.deb) |
 
 The v5.2.5 macOS DMGs use a read-only, uncompressed image format. If Finder still says the disk is unreadable, first verify [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/SHA256SUMS.txt) with `shasum -a 256 -c SHA256SUMS.txt`; if the checksum passes but mounting fails, use the matching ZIP above, unzip it, and drag `AI Clipper Pro.app` to Applications. When replacing a v5.2.4 install that crashes with a missing Electron Framework, remove the old app from Applications and install a fresh v5.2.5 ZIP. If the DMG mounts but copying reports **Error code -36**, run `dot_clean` on the mounted volume and retry. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"` if macOS blocks it.
 
@@ -134,7 +134,7 @@ Each rendered clip records the exact hardware used, and **Apply look to all** ap
 ## Build installers
 
 ```bash
-bash scripts/release-all.sh 5.2.5 --all --publish
+bash scripts/release-all.sh 5.2.6 --all
 ```
 
 The script builds Windows x64/ARM64, macOS Intel/Apple Silicon and Linux x64 installers on native GitHub runners, then publishes them with `SHA256SUMS.txt`. See [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).

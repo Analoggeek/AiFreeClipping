@@ -1,5 +1,12 @@
 # Roadmap
 
+## Prepared for v5.2.6
+
+- Offline Whisper captions reuse cached transcripts, map word-level timings onto matching timeline clips, and keep each word editable
+- Preserve the caption-template design while exposing 136 selectable looks and 44 font families in the Inspector
+- Drag-resize the Media, Shorts preview, Inspector and Timeline panels; resize the Shorts player directly and reset saved layout dimensions from the top bar
+- Reuse caption style, placement and size in Auto Edit without carrying over aspect ratio or resolution
+
 ## Shipped in v5.2.5
 
 - Rebuild all Windows, macOS, and Linux installers together, validate each platform's native package format, and verify every published artifact against its SHA-256 manifest

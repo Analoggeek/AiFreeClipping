@@ -713,7 +713,12 @@ async def render_clip_endpoint(clip_id: str, payload: RenderRequest):
             else saved_effects.get("outline_style") or metadata.get("outline_style") or "clean"
         )
         options["crop_path"] = metadata.get("crop_path") or []
-        options["title"] = req.title or clip.get("title") or metadata.get("title")
+        if "title" in supplied:
+            options["title"] = req.title
+        elif "title" in saved_effects:
+            options["title"] = saved_effects["title"]
+        else:
+            options["title"] = clip.get("title") or metadata.get("title")
         if req.captions is None:
             analysis = last_analysis(clip["media_id"], "transcript") or {}
             options["captions"] = _caption_words_in_window(
@@ -855,6 +860,11 @@ async def auto_edit(payload: AutoEditRequest):
             if split_ratio is None:
                 split_ratio = metadata.get("split_ratio")
             outline_style = effects.get("outline_style") or metadata.get("outline_style") or "clean"
+            region_layout = effects.get("region_layout") or metadata.get("region_layout")
+            caption_style = (
+                req.reuse_settings.caption_style.model_dump(exclude_none=True)
+                if req.reuse_settings else {"preset": req.style, "position": "auto"}
+            )
             requested_music = req.music if req.music is not None else effects.get("music")
             music = str(requested_music or "").strip() or None
             if music:
@@ -886,12 +896,19 @@ async def auto_edit(payload: AutoEditRequest):
                 sticker = str(sticker_path) if sticker_path.is_file() else None
             sticker_position = effects.get("sticker_position") or {"x": 0.72, "y": 0.16, "scale": 0.22}
             title = str(row.get("title") or metadata.get("title") or "Untitled clip").strip()[:100]
+            timeline_captions = captions[:180] if req.captions else []
+            if not timeline_captions and title:
+                title_duration = min(source_duration, max(1.4, min(2.8, source_duration * 0.22)))
+                timeline_captions = [{
+                    "text": title, "start": clip_start,
+                    "end": clip_start + title_duration, "kind": "title",
+                }]
             style_effects = styles[req.style]
             timeline_duration = source_duration / float(style_effects["speed"])
             options = {
                 "aspect": req.aspect, "resolution": req.resolution,
-                "caption_style": {"preset": req.style, "position": "bottom"},
-                "captions": captions[:180], "title": title,
+                "caption_style": caption_style,
+                "captions": captions[:180], "title": title if not captions else None,
                 "sfx": [{"name": item["name"], "at": item["at"]} for item in sfx_items],
                 "sfx_volume": effects.get("sfx_volume", 0.5),
                 "music": music,
@@ -901,7 +918,7 @@ async def auto_edit(payload: AutoEditRequest):
                 "blur_background": req.blur_background,
                 "watermark": bool(watermark_path), "watermark_path": watermark_path,
                 "region": focus, "regions": regions,
-                "region_layout": effects.get("region_layout") or metadata.get("region_layout"),
+                "region_layout": region_layout,
                 "split_ratio": split_ratio, "outline_style": outline_style,
                 "crop_path": metadata.get("crop_path") or [],
             }
@@ -951,7 +968,7 @@ async def auto_edit(payload: AutoEditRequest):
                 "region_layout": options.get("region_layout"),
                 "split_ratio": split_ratio, "outline_style": outline_style,
                 "crop_path": metadata.get("crop_path") or [],
-                "captions": captions[:180] if req.captions else [],
+                "captions": timeline_captions,
                 "audio": auto_audio, "stickers": auto_stickers,
                 "effects": {key: value for key, value in options.items() if key != "crop_path"},
             })
@@ -1043,7 +1060,7 @@ async def export_batch(payload: ExportAllRequest):
                     "split_ratio": split_ratio,
                     "outline_style": outline_style,
                     "crop_path": metadata.get("crop_path") or [],
-                    "title": effects.get("title") or clip.get("title"),
+                    "title": effects.get("title") if "title" in effects else clip.get("title"),
                 }
                 await render.render_clip(
                     media["path"], float(clip["start"]), float(clip["end"]), output, options,

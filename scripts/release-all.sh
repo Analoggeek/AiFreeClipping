@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # AI Clipper Pro — one command to build every offline installer.
 #   bash scripts/release-all.sh                 # build installers for THIS machine
-#   bash scripts/release-all.sh 1.0.1 --all     # all platforms via GitHub Actions
-#   bash scripts/release-all.sh 1.0.1 --all --publish  # also create a GitHub Release
+#   bash scripts/release-all.sh 1.0.1 --all     # cross-platform GitHub Actions build + release
+#   bash scripts/release-all.sh 1.0.1 --publish # local build for this host + GitHub Release
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -22,7 +22,7 @@ for arg in "$@"; do
     -h|--help)
       echo "Usage: bash scripts/release-all.sh [version] [--all] [--publish] [--skip-backend]"
       echo "  --all      dispatch the GitHub Actions matrix (Windows x64/arm64, macOS Intel/Apple Silicon, Linux x64)"
-      echo "  --publish  create a GitHub Release with all artifacts and SHA256 checksums"
+      echo "  --publish  publish a local host build; --all publishes from GitHub Actions after matrix checks pass"
       exit 0 ;;
     *) ARGS+=("$arg") ;;
   esac
@@ -105,10 +105,16 @@ NODE
 (cd release && find . -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -print0 | sort -z | xargs -0 -r sha256sum > SHA256SUMS.txt)
 
 if [ "$PUBLISH" -eq 1 ]; then
-  echo "== Publishing GitHub Release =="
   command -v gh >/dev/null || { echo "gh CLI required for --publish" >&2; exit 1; }
-  gh release create "v$VERSION" release/* --target "$(git rev-parse HEAD)" --generate-notes --title "AI Clipper Pro v$VERSION" || \
-    gh release upload "v$VERSION" release/* --clobber
+  if [ "$MODE" = "ci" ]; then
+    echo "== Verifying the GitHub Actions release =="
+    # The all-platform workflow publishes once its matrix build and asset checks pass.
+    gh release view "v$VERSION" --json tagName,url
+  else
+    echo "== Publishing GitHub Release =="
+    gh release create "v$VERSION" release/* --target "$(git rev-parse HEAD)" --generate-notes --title "AI Clipper Pro v$VERSION" || \
+      gh release upload "v$VERSION" release/* --clobber
+  fi
 fi
 
 echo "Done. Installers and checksums are in ./release"

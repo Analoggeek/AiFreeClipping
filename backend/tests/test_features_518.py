@@ -85,6 +85,46 @@ def test_timeline_export_preserves_short_source_duration(tmp_path, monkeypatch):
     assert "setpts=(PTS-STARTPTS)/0.250" in graph
 
 
+def test_timeline_export_uses_explicit_caption_tracks_not_video_labels(tmp_path, monkeypatch):
+    source = tmp_path / "caption-source.mp4"
+    source.write_bytes(b"synthetic media")
+    captured: dict = {}
+    monkeypatch.setattr(render, "probe", lambda _path: {"width": 640, "height": 360, "audio_codec": None})
+
+    def capture_write_ass(captions, *_args, **_kwargs):
+        captured["captions"] = [dict(caption) for caption in captions]
+        return str(tmp_path / "captions.ass")
+
+    async def capture_encode(args, duration, on_progress=None):
+        captured["args"] = args
+        captured["duration"] = duration
+
+    monkeypatch.setattr(render, "write_ass", capture_write_ass)
+    monkeypatch.setattr(render, "encode", capture_encode)
+    monkeypatch.setattr(render, "_validate_mp4", lambda _path: None)
+    asyncio.run(render.render_timeline({
+        "aspect": "9:16", "resolution": "720p", "caption_style": {"preset": "hype"},
+        "tracks": {
+            "video": [{
+                "clip_id": "auto-edit-clip", "path": str(source), "sourceStart": 0,
+                "duration": 2, "label": "Generated clip name must not appear",
+            }],
+            "captions": [
+                {"text": "Spoken caption stays", "start": 0.2, "end": 0.8, "kind": "caption"},
+                {"text": "Intentional title track stays", "start": 0, "end": 1, "kind": "title"},
+            ],
+            "stickers": [], "audio": [],
+        },
+    }, str(tmp_path / "caption-export.mp4")))
+
+    assert [caption["text"] for caption in captured["captions"]] == [
+        "Spoken caption stays", "Intentional title track stays",
+    ]
+    assert captured["captions"][1]["kind"] == "title"
+    graph = captured["args"][captured["args"].index("-filter_complex") + 1]
+    assert "subtitles=" in graph
+
+
 def test_timeline_export_preserves_composition_speed_effects_and_timed_tracks(tmp_path, monkeypatch):
     source = tmp_path / "source.mp4"
     music = tmp_path / "music.wav"

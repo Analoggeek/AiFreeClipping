@@ -351,6 +351,7 @@ def test_render_endpoint_uses_the_candidate_saved_crop_by_default(tmp_path, monk
         "metadata": dumps({
             "region": region, "regions": [region], "reasons": [],
             "crop_path": [[1.0, 0.3], [3.0, 0.7]],
+            "effects": {"title": None},
         }), "created_at": now(),
     })
     captured = {}
@@ -382,6 +383,7 @@ def test_render_endpoint_uses_the_candidate_saved_crop_by_default(tmp_path, monk
         assert captured["options"]["region"] == region
         assert captured["options"]["crop_path"] == [[1.0, 0.3], [3.0, 0.7]]
         assert captured["options"]["contrast"] == 1.0
+        assert captured["options"]["title"] is None
         assert captured["options"]["watermark_path"] is None
         saved = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")["metadata"]
         assert saved["region"] == region and saved["hardware"]["encoder"] == "test"

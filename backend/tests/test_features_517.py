@@ -200,7 +200,9 @@ def test_timeline_export_uses_source_quality_and_renders_title_cards(tmp_path):
                 ],
                 "region_layout": "top-game-bottom-player",
             }],
-            "captions": [], "stickers": [], "audio": [],
+            "captions": [{
+                "text": "A test title card", "start": 0, "end": 1, "kind": "title",
+            }], "stickers": [], "audio": [],
         },
     }, str(output)))
 
@@ -407,7 +409,7 @@ def test_tts_uses_the_persisted_voice_and_custom_model_folder(tmp_path, monkeypa
         db.set_setting("tts_voice", old_voice)
 
 
-def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captions(tmp_path, monkeypatch):
+def test_auto_edit_transcription_fallback_and_batch_keep_caption_tracks_and_title_fallbacks(tmp_path, monkeypatch):
     source = tmp_path / "source.mp4"
     music = tmp_path / "music.wav"
     source.write_bytes(b"synthetic source")
@@ -473,7 +475,7 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
         assert recipe["captions"][0]["text"] == "The creator lands an incredible final move."
         assert [track["kind"] for track in recipe["audio"]] == ["music", "sfx", "sfx"]
         assert auto_options["resolution"] == "source"
-        assert auto_options["title"] == "Creator's winning moment"
+        assert auto_options["title"] is None  # Speech captions replace the generated clip-name overlay.
         assert auto_options["region_layout"] == "top-game-bottom-player"
         assert auto_options["crop_path"] == [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]]
         assert auto_options["regions"] == [region_a, region_b]
@@ -486,6 +488,7 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
         stored_clip = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
         assert stored_clip["output"] == auto_job["result"]["outputs"][0]["output"]
         assert stored_clip["metadata"]["effects"]["captions"] == auto_options["captions"]
+        assert stored_clip["metadata"]["effects"]["title"] is None
         assert stored_clip["metadata"]["effects"]["region_layout"] == "top-game-bottom-player"
 
         batch_response = client.post("/api/exports/batch", headers=HEADERS, json={"clip_ids": [clip_id]})
@@ -499,7 +502,7 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
         assert batch_options["regions"] == [region_a, region_b]
         assert batch_options["region_layout"] == "top-game-bottom-player"
         assert batch_options["crop_path"] == [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]]
-        assert batch_options["title"] == "Creator's winning moment"
+        assert batch_options["title"] is None
         assert batch_options["music"] == str(music)
         assert batch_options["watermark_path"] is None
 
@@ -513,7 +516,38 @@ def test_auto_edit_transcription_fallback_and_batch_keep_titles_crops_and_captio
         no_music_job = _wait_for_job(no_music_job_id)
         assert no_music_job["status"] == "done", no_music_job
         assert auto_options["music"] is None and auto_options["captions"] == [] and auto_options["sfx"] == []
+        assert auto_options["title"] == "Creator's winning moment"
+        fallback_title = no_music_job["result"]["edits"][0]["captions"]
+        assert fallback_title == [{
+            "text": "Creator's winning moment", "start": 2.0, "end": 3.4, "kind": "title",
+        }]
         assert no_music_job["result"]["edits"][0]["audio"] == []
+
+        auto_options.clear()
+        reuse_response = client.post("/api/auto-edit", headers=HEADERS, json={
+            "clip_ids": [clip_id], "style": "hype", "captions": True,
+            "reuse_settings": {
+                "caption_style": {
+                    "preset": "minimal", "font_family": "Georgia", "font_size": 44,
+                    "primary_color": "#fefefe", "outline_color": "#112233",
+                    "position": "top", "bold": False,
+                },
+            },
+        })
+        assert reuse_response.status_code == 200
+        reuse_job_id = reuse_response.json()["job_id"]
+        jobs_to_delete.append(reuse_job_id)
+        reuse_job = _wait_for_job(reuse_job_id)
+        assert reuse_job["status"] == "done", reuse_job
+        reused_recipe = reuse_job["result"]["edits"][0]
+        assert reused_recipe["aspect"] == "9:16" and reused_recipe["resolution"] == "source"
+        assert auto_options["aspect"] == "9:16" and auto_options["resolution"] == "source"
+        assert auto_options["caption_style"]["preset"] == "minimal"
+        assert auto_options["caption_style"]["font_family"] == "Georgia"
+        assert auto_options["caption_style"]["font_size"] == 44
+        assert auto_options["caption_style"]["position"] == "top"
+        assert auto_options["speed"] == pytest.approx(1.04)
+        assert auto_options["sfx"]  # Auto Edit still contributes non-caption edits.
     finally:
         for job_id in jobs_to_delete:
             db.delete("jobs", "id", job_id)

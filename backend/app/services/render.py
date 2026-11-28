@@ -30,6 +30,92 @@ CAPTION_PRESETS = {
 }
 
 
+def _ass_colour(value: Any, fallback: str = "&H00FFFFFF", opacity: float | None = None) -> str:
+    """Convert editor hex colours to ASS's alpha-blue-green-red representation."""
+    raw = str(value or "").strip()
+    if raw.startswith("&H"):
+        colour = raw.upper()
+        return colour if len(colour) == 10 else fallback
+    if raw.startswith("#"):
+        raw = raw[1:]
+    if len(raw) == 3 and all(char in "0123456789abcdefABCDEF" for char in raw):
+        raw = "".join(char * 2 for char in raw)
+    if len(raw) != 6 or any(char not in "0123456789abcdefABCDEF" for char in raw):
+        return fallback
+    red, green, blue = raw[0:2], raw[2:4], raw[4:6]
+    alpha = 0 if opacity is None else max(0, min(255, round((1 - float(opacity)) * 255)))
+    return f"&H{alpha:02X}{blue.upper()}{green.upper()}{red.upper()}"
+
+
+def _split_caption_anchor(layout: str | None, split_ratio: Any = None) -> tuple[float, float] | None:
+    """Place captions just above a stacked seam, or beside a vertical seam."""
+    try:
+        ratio = float(split_ratio)
+    except (TypeError, ValueError):
+        ratio = 0.58 if layout == "top-game-bottom-player" else 0.42 if layout == "top-player-bottom-game" else 0.62
+    ratio = max(0.25, min(0.75, ratio))
+    if layout in {"top-game-bottom-player", "top-player-bottom-game"}:
+        return 0.5, max(0.08, ratio - 0.055)
+    if layout == "side-by-side":
+        return max(0.08, ratio - 0.055), 0.5
+    return None
+
+
+def _caption_style_for_layout(style: dict[str, Any], layout: str | None, split_ratio: Any = None) -> dict[str, Any]:
+    """Resolve auto/seam placement for a single clip without overriding manual coordinates."""
+    resolved = dict(style)
+    position = str(resolved.get("position") or "bottom")
+    if position not in {"auto", "split"}:
+        return resolved
+    anchor = _split_caption_anchor(layout, split_ratio)
+    if anchor:
+        resolved["position"] = "custom"
+        resolved["x"], resolved["y"] = anchor
+    else:
+        resolved["position"] = "bottom"
+        resolved.pop("x", None)
+        resolved.pop("y", None)
+    return resolved
+
+
+def _timeline_caption_positions(
+    captions: list[dict[str, Any]], video_items: list[dict[str, Any]], style: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Resolve each auto-placed caption against the video segment under its time."""
+    if style.get("position", "bottom") not in {"auto", "split"}:
+        return captions
+    positioned: list[dict[str, Any]] = []
+    for caption in captions:
+        item = dict(caption)
+        if item.get("x") is None and item.get("y") is None:
+            try:
+                caption_start = float(item.get("start", 0))
+            except (TypeError, ValueError):
+                caption_start = 0
+            cursor = 0.0
+            match: dict[str, Any] | None = None
+            for video in video_items:
+                duration = max(0.05, float(video.get("duration", 0) or 0))
+                if item.get("auto_edit_clip_id") and video.get("clip_id") == item.get("auto_edit_clip_id"):
+                    match = video
+                    break
+                if cursor <= caption_start < cursor + duration:
+                    match = video
+                    break
+                cursor += duration
+            if match:
+                effects = match.get("effects") if isinstance(match.get("effects"), dict) else {}
+                layout = match.get("region_layout") or effects.get("region_layout")
+                ratio = match.get("split_ratio")
+                if ratio is None:
+                    ratio = effects.get("split_ratio")
+                anchor = _split_caption_anchor(layout, ratio)
+                if anchor:
+                    item["x"], item["y"] = anchor
+        positioned.append(item)
+    return positioned
+
+
 def resolution_for(aspect: str, resolution: str, source: tuple[int, int] = (1080, 1920)) -> tuple[int, int]:
     """Choose an even output size while preserving the requested aspect ratio.
 
@@ -62,18 +148,59 @@ def write_ass(
     captions: list[dict[str, Any]],
     style: dict[str, Any] | None = None,
     offset: float = 0,
-    position: str = "bottom",
+    position: str | None = None,
 ) -> str:
-    """Write a styled Advanced SubStation Alpha subtitle file."""
+    """Write styled ASS captions, including normalized editor placement."""
+    style = style or {}
     folder = CACHE / "subtitles"
     folder.mkdir(parents=True, exist_ok=True)
-    preset = dict(CAPTION_PRESETS.get(style.get("preset", "hype") if style else "hype", CAPTION_PRESETS["hype"]))
-    if style:
-        for key in ("font_size", "primary_color", "outline_color"):
-            if key in style and style[key] is not None:
-                preset[{"font_size": "Fontsize", "primary_color": "PrimaryColour", "outline_color": "OutlineColour"}[key]] = style[key]
-    alignment = {"bottom": 2, "center": 5, "top": 8}.get(position, 2)
-    preset.update({"Alignment": alignment, "MarginV": 90 if alignment == 2 else 20, "BorderStyle": 1})
+    preset = dict(CAPTION_PRESETS.get(style.get("preset", "hype"), CAPTION_PRESETS["hype"]))
+    if "FontName" in preset:
+        preset["Fontname"] = preset.pop("FontName")
+    if style.get("font_family"):
+        font_name = "".join(char for char in str(style["font_family"]) if char.isalnum() or char in " ._-")[:64]
+        if font_name:
+            preset["Fontname"] = font_name
+    if style.get("font_size") is not None:
+        try:
+            preset["Fontsize"] = max(12, min(180, int(float(style["font_size"]))))
+        except (TypeError, ValueError):
+            pass
+    if style.get("primary_color") is not None:
+        preset["PrimaryColour"] = _ass_colour(style["primary_color"], preset.get("PrimaryColour", "&H00FFFFFF"))
+    if style.get("outline_color") is not None:
+        preset["OutlineColour"] = _ass_colour(style["outline_color"], preset.get("OutlineColour", "&H00000000"))
+    for source, target in (("outline", "Outline"), ("shadow", "Shadow")):
+        if style.get(source) is not None:
+            try:
+                preset[target] = max(0, min(20, float(style[source])))
+            except (TypeError, ValueError):
+                pass
+    if style.get("bold") is not None:
+        preset["Bold"] = -1 if style["bold"] else 0
+    if style.get("italic") is not None:
+        preset["Italic"] = -1 if style["italic"] else 0
+    if style.get("spacing") is not None:
+        try:
+            preset["Spacing"] = max(0, min(20, float(style["spacing"])))
+        except (TypeError, ValueError):
+            pass
+    try:
+        background_opacity = max(0, min(1, float(style.get("background_opacity") or 0)))
+    except (TypeError, ValueError):
+        background_opacity = 0
+    if style.get("background_color") and background_opacity > 0:
+        preset["BackColour"] = _ass_colour(
+            style["background_color"], "&H80000000", background_opacity,
+        )
+        preset["BorderStyle"] = 3
+
+    requested_position = str(position or style.get("position") or "bottom")
+    if requested_position in {"auto", "split"}:
+        requested_position = "bottom"
+    alignment = {"bottom": 2, "center": 5, "top": 8, "custom": 5}.get(requested_position, 2)
+    margin_v = 90 if alignment in {2, 8} else 20
+    preset.update({"Alignment": alignment, "MarginV": margin_v})
     fields = [
         "Name", "Fontname", "Fontsize", "PrimaryColour", "SecondaryColour", "OutlineColour",
         "BackColour", "Bold", "Italic", "Underline", "StrikeOut", "ScaleX", "ScaleY",
@@ -92,8 +219,8 @@ def write_ass(
         **defaults,
         "Name": "Title", "Fontname": "Arial Black", "Fontsize": 68, "PrimaryColour": "&H00FFFFFF",
         "BackColour": "&H880F111B", "Bold": -1, "BorderStyle": 3,
-        "OutlineColour": "&H008B5CF6", "Outline": 4, "Shadow": 2, "Alignment": 8,
-        "MarginV": 90,
+        "OutlineColour": "&H008B5CF6", "Outline": 4, "Shadow": 2,
+        "Alignment": 8, "MarginV": 90,
     }
     header = [
         "[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920",
@@ -113,20 +240,36 @@ def write_ass(
             end = max(start + 0.15, float(caption.get("end", start + 0.8)) - offset)
         except (TypeError, ValueError):
             continue
-        # Keep ASR output from being interpreted as ASS override markup, then
-        # animate title cards and hype captions without changing their timing.
         is_title = caption.get("kind") == "title"
+        if style.get("uppercase"):
+            text = text.upper()
+        # Keep ASR output from being interpreted as ASS override markup.
         text = text.replace("{", "(").replace("}", ")")
-        event_style = "Default"
+        event_style = "Title" if is_title else "Default"
+        overrides: list[str] = []
+        x = caption.get("x", style.get("x") if requested_position == "custom" else None)
+        y = caption.get("y", style.get("y") if requested_position == "custom" else None)
+        try:
+            if x is not None or y is not None:
+                px = max(0, min(1, float(x if x is not None else 0.5))) * 1080
+                py = max(0, min(1, float(y if y is not None else 0.84))) * 1920
+                overrides.append(f"\\an5\\pos({px:.0f},{py:.0f})")
+        except (TypeError, ValueError):
+            pass
+        try:
+            scale = max(0.4, min(2.5, float(caption.get("scale", 1))))
+            if abs(scale - 1) > 0.01:
+                overrides.append(f"\\fscx{scale * 100:.0f}\\fscy{scale * 100:.0f}")
+        except (TypeError, ValueError):
+            pass
         if is_title:
-            event_style = "Title"
-            text = r"{\an8\fs68\bord4\shad2\c&H00FFFFFF&\3c&H008B5CF6&\fad(160,220)\fscx92\fscy92\t(0,180,\fscx100\fscy100)}" + text
-        elif style and style.get("preset", "hype") in {"hype", "karaoke"}:
-            text = r"{\fad(55,100)\fscx90\fscy90\t(0,90,\fscx100\fscy100)}" + text
-        lines.append(
-            f"Dialogue: 0,{format_time(start)[:-2]},{format_time(end)[:-2]},{event_style},,0,0,0,,{text}"
-        )
-    path = folder / f"subs_{abs(hash((tuple(lines[:3]), offset, position))) % 10**12}.ass"
+            overrides = [r"\an8\fs68\bord4\shad2\c&H00FFFFFF&\3c&H008B5CF6&\fad(160,220)\fscx92\fscy92\t(0,180,\fscx100\fscy100)", *overrides]
+        elif style.get("preset", "hype") in {"hype", "karaoke"}:
+            overrides = [r"\fad(55,100)\fscx90\fscy90\t(0,90,\fscx100\fscy100)", *overrides]
+        if overrides:
+            text = "{" + "".join(overrides) + "}" + text
+        lines.append(f"Dialogue: 0,{format_time(start)[:-2]},{format_time(end)[:-2]},{event_style},,0,0,0,,{text}")
+    path = folder / f"subs_{abs(hash((tuple(lines[:3]), offset, requested_position, tuple(sorted(style.items()))))) % 10**12}.ass"
     path.write_text("\n".join(header + lines) + "\n", encoding="utf-8")
     return str(path)
 
@@ -693,6 +836,9 @@ def build_clip_args(
     video_parts.append(f"[{current}]eq={':'.join(eq_values)}[graded]")
     current = "graded"
     caption_style = options.get("caption_style") or {}
+    caption_style = _caption_style_for_layout(
+        caption_style, options.get("region_layout"), options.get("split_ratio"),
+    )
     captions = list(options.get("captions") or [])
     title = str(options.get("title") or "").strip()
     if title:
@@ -852,7 +998,6 @@ async def render_timeline(
     filters: list[str] = []
     vlabels: list[str] = []
     alabels: list[str] = []
-    timeline_titles: list[dict[str, Any]] = []
     timeline_cursor = 0.0
     audio_base = len(indexed_video)
     sticker_base = audio_base + len(audio_items)
@@ -865,12 +1010,6 @@ async def render_timeline(
         except (TypeError, ValueError):
             speed = 1.0
         source_duration = max(0.05, float(item.get("sourceDuration") or duration * speed))
-        if item.get("clip_id") and str(item.get("label") or "").strip():
-            title_end = timeline_cursor + min(duration, max(1.4, min(2.8, duration * 0.22)))
-            timeline_titles.append({
-                "text": str(item["label"])[:100], "start": timeline_cursor,
-                "end": title_end, "kind": "title",
-            })
         trim = (
             f"trim=start={source_in:.3f}:duration={source_duration:.3f},"
             f"setpts=(PTS-STARTPTS)/{speed:.3f},fps=30"
@@ -946,10 +1085,13 @@ async def render_timeline(
 
     total = timeline_cursor
     current = "vcat"
-    captions = list(tracks.get("captions") or []) + timeline_titles
-    caption_style = timeline.get("caption_style") or {"preset": "hype"}
+    # Only explicit caption-track items belong on the video. A video clip's
+    # label is editor metadata, not subtitle text.
+    captions = list(tracks.get("captions") or [])
+    caption_style = {"preset": "hype", "position": "auto", **(timeline.get("caption_style") or {})}
     if caption_style.get("preset", "hype") == "none":
         captions = [caption for caption in captions if caption.get("kind") == "title"]
+    captions = _timeline_caption_positions(captions, video_items, caption_style)
     if captions:
         ass_path = write_ass(captions, caption_style)
         filters.append(f"[{current}]subtitles=filename='{escape_filter_path(ass_path)}'[cap]")

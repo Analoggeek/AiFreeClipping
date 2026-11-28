@@ -36,7 +36,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [online, setOnline] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('aifreeclip.theme') === 'light' ? 'light' : 'dark');
-  const [version, setVersion] = useState('5.2.5');
+  const [version, setVersion] = useState('5.2.6');
   const [mediaSelection, setMediaSelection] = useState<string[]>([]);
   const [clipSelection, setClipSelection] = useState<string[]>([]);
   const [folder, setFolder] = useState('');
