@@ -44,13 +44,20 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 
 ## Quick start
 
-### 1. Install an offline build (recommended)
+### 1. Install v6.0.0 (recommended)
 
-Download the right installer from the [latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest) and open it. The engine, FFmpeg and icons are bundled. Model weights install from the app's **Local Models** page.
+The v6.0.0 installers include the app, Python engine, FFmpeg and platform icons. Download the build for your machine:
 
-**Release status:** v6.0.0 is being prepared; it has not been published. Until the all-target build is verified and released, the [latest published installers](https://github.com/Analoggeek/AiFreeClipping/releases/latest) remain the supported download set.
+- **Windows x64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-x64.exe)
+- **Windows ARM64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.zip)
+- **Linux x64 AppImage:** [AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-amd64.deb)
 
-macOS builds include a matching ZIP fallback. If a DMG will not mount, verify its checksum from the release assets and use the corresponding ZIP. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"` if macOS blocks it.
+[View the v6.0.0 release and all assets](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v6.0.0) · [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/manifest.json)
+
+The engine, FFmpeg and icons are bundled; model weights install from the app's **Local Models** page. If a macOS DMG will not mount, verify its checksum and use the matching ZIP. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"` if macOS blocks it. [Latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest).
 
 ### 2. Run from source
 

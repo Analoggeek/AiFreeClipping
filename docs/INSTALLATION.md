@@ -1,16 +1,17 @@
 # Installation & offline setup
 
-## Installers and release status
+## v6.0.0 installers
 
-Installers are built by `scripts/release-all.sh` and `.github/workflows/release.yml`. The all-target matrix produces:
+The published [AI Clipper Pro v6.0.0 release](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v6.0.0) includes direct downloads for every supported target:
 
-- **Windows:** NSIS x64 and ARM64 installers
-- **macOS:** Intel and Apple Silicon, each as DMG and ZIP
-- **Linux x64:** AppImage and Debian package
+- **Windows x64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-x64.exe)
+- **Windows ARM64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.zip)
+- **Linux x64:** [AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-x86_64.AppImage) · [Debian/Ubuntu DEB](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-amd64.deb)
+- [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/manifest.json)
 
-Each installer contains the React UI, Electron shell, PyInstaller-bundled Python engine, FFmpeg, platform icons and app assets. The Windows ARM64 installer uses the x64 Python engine under Windows' x64 compatibility layer because the currently supported Python dependency set lacks a complete `win_arm64` wheel set. macOS DMGs are read-only and each DMG/ZIP is checked for a runnable, architecture-matched app bundle.
-
-**v6.0.0 is a release candidate under preparation, not a published release.** The latest-release link continues to point to the most recently published installer set until all five platform build jobs are verified and a v6.0.0 GitHub Release is created.
+Installers are built by `scripts/release-all.sh` and `.github/workflows/release.yml`. Each includes the React UI, Electron shell, PyInstaller-bundled Python engine, FFmpeg, platform icons and app assets. The Windows ARM64 installer uses the x64 Python engine under Windows' x64 compatibility layer because the currently supported Python dependency set lacks a complete `win_arm64` wheel set. macOS DMGs are read-only and each DMG/ZIP is checked for a runnable, architecture-matched app bundle.
 
 If Finder reports that a disk image is unreadable, verify its checksum against the release's `SHA256SUMS.txt`; if it still will not mount, use the matching macOS ZIP and move `AI Clipper Pro.app` to Applications.
 
