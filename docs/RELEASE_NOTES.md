@@ -14,8 +14,8 @@
 
 ### Changes
 
-- Rebuild every supported Windows, macOS, and Linux installer from the same v5.2.5 source.
-- Verify Windows PE headers and Linux AppImage/DEB structure; for both macOS architectures, mount/copy the DMG and extract the ZIP, then confirm the app's Electron Framework binary is present and matches the target CPU.
+- Rebuild every supported Windows, macOS, and Linux installer from the same v5.2.5 source, with one CPU architecture per Windows/macOS matrix job so each package contains the matching local engine.
+- Verify Windows PE headers and Linux AppImage/DEB structure; for both macOS architectures, mount/copy the DMG and extract the ZIP, then confirm the app's Electron Framework binary is present, linked by the app executable, and matches the target CPU.
 - Download every published installer and compare it against its SHA-256 manifest before the release workflow succeeds.
 - Keep both macOS architecture ZIPs as first-class alternatives if a local DMG download is damaged or will not mount. For v5.2.4 installations reporting a missing Electron Framework, remove the old app and replace it with the matching v5.2.5 ZIP.
 

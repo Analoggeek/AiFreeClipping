@@ -61,18 +61,7 @@
     "asar": true,
     "win": {
       "target": [
-        {
-          "target": "nsis",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "nsis",
-          "arch": [
-            "arm64"
-          ]
-        }
+        "nsis"
       ],
       "icon": "brand/icon.ico",
       "artifactName": "AI-Clipper-Pro-${version}-Windows-${arch}.${ext}"
@@ -86,30 +75,8 @@
     },
     "mac": {
       "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "x64"
-          ]
-        },
-        {
-          "target": "zip",
-          "arch": [
-            "arm64"
-          ]
-        }
+        "dmg",
+        "zip"
       ],
       "icon": "brand/icon.icns",
       "category": "public.app-category.video",
