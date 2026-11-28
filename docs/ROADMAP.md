@@ -1,5 +1,34 @@
 # Roadmap
 
+## Shipped in v6.0.1 — more responsive, reliable rendering
+
+- Bound Auto Edit and batch-export concurrency to a shared CPU budget, including FFmpeg codec and filter-graph threads
+- Reduce blur-fill cost by blurring a downscaled background while retaining a full-resolution foreground
+- Stream finished Auto Edit clips into the editable timeline, continue after per-clip render failures, and support stopping a batch without discarding completed work
+- Add large-batch confirmation, faster-resolution guidance and performance regressions
+
+## Shipped in v6.0.0
+
+- Retire caption/subtitle editing, subtitle download, social-copy fields and text-overlay rendering while retaining Whisper internally for transcript-aware clip scoring
+- Remove YouTube OAuth and channel uploads; preserve YouTube as a source-download site through yt-dlp
+- Preserve remaining video/sticker/audio timeline editing, composition controls, Auto Edit and MP4 export, including safe cleanup of legacy project metadata
+- Publish and verify all eight release artifacts across Windows x64/ARM64, macOS Intel/Apple Silicon DMG/ZIP and Linux x64 AppImage/DEB
+
+## Carried forward from the superseded v5.2.7 candidate — not released as v5.2.7
+
+- Confirmed, reference-safe clearing of app-managed downloads from the effective folder; imported originals and still-referenced files/library entries are retained
+- Flexible timeline insertion at the playhead or a drag-selected point, clip reordering and movable overlays with linked timing preserved
+- Ollama v0.40.19 asset mapping and streaming Linux `.tar.zst` extraction, covered by mocked platform/model-install tests
+- Installer compression tuned where supported; Windows, macOS and Linux targets unchanged and macOS DMGs kept as UDRO
+- No v5.2.7 GitHub Release or release assets published
+
+## Shipped in v5.2.6 (historical; caption features retired in v6.0.0)
+
+- Offline Whisper captions reuse cached transcripts, map word-level timings onto matching timeline clips, and keep each word editable
+- Preserve the caption-template design while exposing 136 selectable looks and 44 font families in the Inspector
+- Drag-resize the Media, Shorts preview, Inspector and Timeline panels; resize the Shorts player directly and reset saved layout dimensions from the top bar
+- Reuse caption style, placement and size in Auto Edit without carrying over aspect ratio or resolution
+
 ## Shipped in v5.2.5
 
 - Rebuild all Windows, macOS, and Linux installers together, validate each platform's native package format, and verify every published artifact against its SHA-256 manifest
@@ -66,7 +95,7 @@
 - Existing SDXL checkpoint selection and configurable ComfyUI checkpoint folder
 - Neutral-contrast Rec.709 H.264/AAC MP4s, with optional custom channel watermark and no default app logo
 - Explicit MP4 download filenames and QuickTime-friendly output metadata
-- Publish Select all, rendered-only selection, bulk export and shared-file-safe deletion
+- Export view supports Select all, rendered-only selection, bulk export and shared-file-safe deletion
 - Scrollable borderless Operations widget with cancellation and dismissal controls
 - Cancellation cleanup, unique export names and regression tests for these failure paths
 
@@ -127,9 +156,6 @@
 - [ ] GPU-assisted preview rendering and proxy workflow for 4K sources
 - [ ] Native Apple Silicon Metal acceleration toggle for Whisper/YOLO
 - [ ] Keyframe animation and masking in the editor
-- [ ] Multi-language caption translation with local Gemma
-- [ ] Viral-score analytics feedback loop from YouTube Analytics (opt-in)
-- [ ] Scheduled publishing queue with rate-limit-aware batching
 - [ ] Code-signed/notarized installers when developer certificates are available
 - [ ] Dedicated model-pack installer with resumable offline mirrors
 

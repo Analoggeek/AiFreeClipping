@@ -1,7 +1,7 @@
 {
   "name": "ai-clipper-pro",
-  "version": "5.2.5",
-  "description": "Local-first AI video clipping, editing and publishing studio — made by analoggeek",
+  "version": "6.0.1",
+  "description": "Local-first AI video clipping, editing and exporting studio — made by analoggeek",
   "author": "analoggeek",
   "license": "MIT",
   "private": true,
@@ -14,6 +14,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "test": "python3 -m pytest backend/tests -q",
+    "test:timeline": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/test-timeline-placement.mjs",
     "dist": "electron-builder --publish never",
     "dist:win": "electron-builder --win --publish never",
     "dist:mac": "electron-builder --mac --publish never",
@@ -59,7 +60,9 @@
       }
     ],
     "asar": true,
+    "compression": "maximum",
     "win": {
+      "compression": "maximum",
       "target": [
         "nsis"
       ],
@@ -74,6 +77,7 @@
       "deleteAppDataOnUninstall": false
     },
     "mac": {
+      "compression": "maximum",
       "target": [
         "dmg",
         "zip"
@@ -89,7 +93,11 @@
       "sign": false,
       "format": "UDRO"
     },
+    "deb": {
+      "compression": "xz"
+    },
     "linux": {
+      "compression": "maximum",
       "target": [
         {
           "target": "AppImage",

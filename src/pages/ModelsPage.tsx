@@ -235,7 +235,7 @@ export default function ModelsPage({ notify }: { notify: (message: string) => vo
           <li><Package size={16} /><div><strong>1. Whisper Small or Medium</strong><p>Small is lighter on low-memory machines; Medium is recommended from 16 GB RAM for improved multilingual accuracy.</p></div></li>
           <li><Zap size={16} /><div><strong>2. YOLOX Nano ONNX + ByteTrack</strong><p>A compact 4 MB detector for player/gameplay tracking, including inside packaged builds.</p></div></li>
           <li><Sparkles size={16} /><div><strong>3. Gemma sized for your system</strong><p>Choose a compact 4B model for entry hardware, 7B for balanced acceleration, or 12B on high-memory GPUs and Apple Silicon.</p></div></li>
-          <li><KeyRound size={16} /><div><strong>4. Optional image and cloud services</strong><p>SDXL, Nano Banana, YouTube, Pexels and Pixabay stay optional so setup avoids large downloads you may not need.</p></div></li>
+          <li><KeyRound size={16} /><div><strong>4. Optional image and cloud services</strong><p>SDXL, Nano Banana, Pexels and Pixabay stay optional so setup avoids large downloads you may not need.</p></div></li>
         </ol>
       </Panel>
     </div>

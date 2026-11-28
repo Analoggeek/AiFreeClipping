@@ -38,14 +38,17 @@ export const api = {
 
   inspect: (url: string, mode = 'auto') => post<{ info: Record<string, unknown> }>('/api/downloads/inspect', { url, mode }),
   download: (payload: Record<string, unknown>) => post<{ job_id: string }>('/api/downloads', payload),
+  clearDownloadStorage: (folder: string, confirmed: boolean) => request<{
+    folder: string; folder_exists: boolean; media_removed: number; media_kept_shared: number;
+    media_kept_error: number; files_deleted: number; files_kept_shared: number;
+    files_missing: number; file_errors: string[];
+  }>('/api/downloads/storage', { method: 'DELETE', body: JSON.stringify({ folder, confirmed }) }),
   media: () => request<{ media: Media[] }>('/api/media'),
   importMedia: (paths: string[]) => post<{ media: Media[] }>('/api/media/import', { paths }),
   deleteMedia: (id: string, deleteFile = true) => request<{ ok: boolean; file_deleted: boolean; file_error?: string | null; file_kept_shared?: boolean }>(`/api/media/${id}?delete_file=${deleteFile}`, { method: 'DELETE' }),
   playlists: () => request<{ playlists: Array<{ id: string; title: string; url: string; items: unknown[] }> }>('/api/playlists'),
   playlist: (id: string) => request<{ playlist: Record<string, unknown>; media: Media[] }>(`/api/playlists/${id}`),
 
-  transcribe: (media_id: string) => post<{ job_id: string }>('/api/analysis/transcribe', { media_id }),
-  transcript: (media_id: string) => request<{ transcript: { segments?: Array<{ start: number; end: number; text: string }> } }>(`/api/analysis/${media_id}/transcript`),
   propose: (payload: Record<string, unknown>) => post<{ job_id: string }>('/api/clips/propose', payload),
   clips: () => request<{ clips: Candidate[] }>('/api/clips'),
   patchClip: (id: string, patch: Partial<Candidate>) => request<{ clip: Candidate }>(`/api/clips/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
@@ -86,11 +89,9 @@ export const api = {
   installRecommendedModels: () => post<{ job_id: string }>('/api/models/install-recommended', {}),
   autoSetupModels: () => post<{ job_id: string; skipped?: boolean; message?: string }>('/api/models/auto-setup', {}),
   setFolder: (key: string, path: string) => request<{ folders: Record<string, string> }>('/api/folders', { method: 'PUT', body: JSON.stringify({ key, path }) }),
-  autoEdit: (clip_ids: string[], options: AutoEditOptions) => post<{ job_id: string }>('/api/auto-edit', { clip_ids, ...options }),
+  autoEdit: (clip_ids: string[], options: AutoEditOptions) =>
+    post<{ job_id: string }>('/api/auto-edit', { clip_ids, ...options }),
 
-  youtubeStatus: () => request<{ authorized: boolean; available: boolean; clientSecretConfigured: boolean }>('/api/youtube/status'),
-  youtubeAuthorize: () => post<{ job_id: string }>('/api/youtube/authorize'),
-  youtubeUpload: (payload: Record<string, unknown>) => post<{ job_id: string }>('/api/youtube/upload', payload),
 
   settings: () => request<{ values: Record<string, string>; capabilities: Record<string, unknown> }>('/api/settings'),
   saveSettings: (values: Record<string, string>) => request<{ values: Record<string, string> }>('/api/settings', { method: 'PUT', body: JSON.stringify({ values }) }),

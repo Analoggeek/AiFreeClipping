@@ -32,5 +32,5 @@
     <rect x="972" y="476" width="158" height="200" rx="12"/>
   </g>
   <g fill="url(#accent)" font-family="Inter,Arial" font-size="22" font-weight="800"><text x="318" y="514">01</text><text x="486" y="514">02</text><text x="654" y="514">03</text><text x="822" y="514">04</text><text x="990" y="514">05</text></g>
-  <g fill="#cbd2ec" font-family="Inter,Arial" font-size="13" font-weight="700"><text x="318" y="562">Download</text><text x="486" y="562">Understand</text><text x="654" y="562">Clip</text><text x="822" y="562">Edit</text><text x="990" y="562">Publish</text></g>
+  <g fill="#cbd2ec" font-family="Inter,Arial" font-size="13" font-weight="700"><text x="318" y="562">Download</text><text x="486" y="562">Understand</text><text x="654" y="562">Clip</text><text x="822" y="562">Edit</text><text x="990" y="562">Export</text></g>
 </svg>

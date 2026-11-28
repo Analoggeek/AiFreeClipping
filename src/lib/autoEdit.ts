@@ -14,7 +14,6 @@ export function appendAutoEditTimeline(
   const next = structuredClone(current);
   const editIds = new Set(edits.map((edit) => edit.clip_id));
   next.tracks.video = next.tracks.video.filter((item) => !item.clip_id || !editIds.has(item.clip_id));
-  next.tracks.captions = next.tracks.captions.filter((item) => !item.auto_edit_clip_id || !editIds.has(item.auto_edit_clip_id));
   next.tracks.stickers = next.tracks.stickers.filter((item) => !item.auto_edit_clip_id || !editIds.has(item.auto_edit_clip_id));
   next.tracks.audio = next.tracks.audio.filter((item) => !item.auto_edit_clip_id || !editIds.has(item.auto_edit_clip_id));
 
@@ -30,6 +29,7 @@ export function appendAutoEditTimeline(
     const video: VideoItem = {
       id: `auto-${edit.clip_id}`,
       clip_id: edit.clip_id,
+      media_id: edit.media_id,
       path: edit.source_path,
       sourceStart,
       sourceDuration,
@@ -45,20 +45,6 @@ export function appendAutoEditTimeline(
       auto_edit: true,
     };
     next.tracks.video.push(video);
-
-    for (const caption of edit.captions || []) {
-      const text = String(caption.text ?? caption.word ?? '').trim();
-      const start = Math.max(sourceStart, numberOr(caption.start, sourceStart));
-      const end = Math.min(sourceStart + sourceDuration, numberOr(caption.end, start));
-      if (!text || end <= start) continue;
-      next.tracks.captions.push({
-        text,
-        start: cursor + (start - sourceStart) / speed,
-        end: cursor + (end - sourceStart) / speed,
-        kind: caption.kind || 'caption',
-        auto_edit_clip_id: edit.clip_id,
-      });
-    }
 
     for (const audio of edit.audio || []) {
       const start = Math.max(0, numberOr(audio.start, 0));
@@ -84,7 +70,6 @@ export function appendAutoEditTimeline(
 
     next.aspect = edit.aspect;
     next.resolution = edit.resolution;
-    next.caption_style = (effects.caption_style as { preset: string } | undefined) || next.caption_style;
     cursor += duration;
   }
   return { timeline: next, start: firstStart };

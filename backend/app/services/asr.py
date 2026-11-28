@@ -1,4 +1,4 @@
-"""Local speech-to-text with faster-whisper (word-level timestamps for karaoke captions)."""
+"""Local speech-to-text with faster-whisper for transcript-aware clip scoring."""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +12,7 @@ _MODELS: dict[tuple, Any] = {}
 
 
 def _resolve_whisper_model(model: str | None = None) -> str:
-    """Resolve the selected model first, then use matching persisted local weights."""
+    """Resolve installed local weights only; inference must not fetch a model."""
     from ..db import db
 
     selected_setting = model or env("WHISPER_MODEL") or db.get_setting("whisper_model", "")
@@ -28,13 +28,25 @@ def _resolve_whisper_model(model: str | None = None) -> str:
     if installed_path.is_dir() and (installed_path / "model.bin").is_file():
         return str(installed_path)
 
+    repo_cache = f"models--Systran--faster-whisper-{selected}"
+    for cache_root in (hf_root, hf_root / "hub"):
+        snapshots = cache_root / repo_cache / "snapshots"
+        if snapshots.is_dir():
+            candidates = sorted(snapshots.iterdir(), key=lambda path: path.stat().st_mtime, reverse=True)
+            for candidate in candidates:
+                if candidate.is_dir() and (candidate / "model.bin").is_file():
+                    return str(candidate)
+
     configured = env("WHISPER_MODEL_PATH") or db.get_setting("WHISPER_MODEL_PATH", "")
     configured_path = Path(configured).expanduser() if configured else None
     if configured_path and configured_path.is_dir() and (configured_path / "model.bin").is_file():
         configured_model = configured_path.name.removeprefix("whisper-")
         if not selected_setting or configured_model == selected:
             return str(configured_path)
-    return selected
+    raise RuntimeError(
+        f"Whisper {selected} is not installed locally. Install a Whisper model from the Models page; "
+        "speech transcription runs on-device and does not download models while working."
+    )
 
 
 def _load(size: str, device: str, compute: str):

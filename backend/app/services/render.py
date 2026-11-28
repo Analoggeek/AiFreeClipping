@@ -1,4 +1,4 @@
-"""ffmpeg rendering engine: viral clips, captions, stickers, SFX, music and full projects."""
+"""FFmpeg rendering engine for video clips, stickers, SFX, music and full projects."""
 from __future__ import annotations
 
 import asyncio
@@ -9,9 +9,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from ..config import CACHE, EXPORTS, ffmpeg_binary
+from ..config import EXPORTS, ffmpeg_binary
 from .sfx import sfx_path
-from .utils import escape_filter_path, format_time, probe, safe_name
+from .utils import probe, safe_name
 
 RESOLUTIONS = {
     ("9:16", "1080p"): (1080, 1920),
@@ -21,15 +21,6 @@ RESOLUTIONS = {
     ("16:9", "1080p"): (1920, 1080),
     ("16:9", "720p"): (1280, 720),
 }
-CAPTION_PRESETS = {
-    "hype": {"FontName": "Arial Black", "Fontsize": 70, "Bold": -1, "Outline": 5, "PrimaryColour": "&H00FFFFFF", "OutlineColour": "&H00000000", "BackColour": "&H80000000"},
-    "karaoke": {"FontName": "Arial", "Fontsize": 66, "Bold": -1, "Outline": 4, "PrimaryColour": "&H0000FFFF", "OutlineColour": "&H00000000"},
-    "minimal": {"FontName": "Arial", "Fontsize": 52, "Bold": 0, "Outline": 2, "PrimaryColour": "&H00FFFFFF", "OutlineColour": "&H00000000"},
-    "premium": {"FontName": "Georgia", "Fontsize": 60, "Bold": -1, "Outline": 3, "PrimaryColour": "&H0000F0FF", "OutlineColour": "&H00141414"},
-    "none": {},
-}
-
-
 def resolution_for(aspect: str, resolution: str, source: tuple[int, int] = (1080, 1920)) -> tuple[int, int]:
     """Choose an even output size while preserving the requested aspect ratio.
 
@@ -57,78 +48,6 @@ def resolution_for(aspect: str, resolution: str, source: tuple[int, int] = (1080
         return width, height
     return RESOLUTIONS.get((aspect, resolution), RESOLUTIONS[("9:16", "1080p")])
 
-
-def write_ass(
-    captions: list[dict[str, Any]],
-    style: dict[str, Any] | None = None,
-    offset: float = 0,
-    position: str = "bottom",
-) -> str:
-    """Write a styled Advanced SubStation Alpha subtitle file."""
-    folder = CACHE / "subtitles"
-    folder.mkdir(parents=True, exist_ok=True)
-    preset = dict(CAPTION_PRESETS.get(style.get("preset", "hype") if style else "hype", CAPTION_PRESETS["hype"]))
-    if style:
-        for key in ("font_size", "primary_color", "outline_color"):
-            if key in style and style[key] is not None:
-                preset[{"font_size": "Fontsize", "primary_color": "PrimaryColour", "outline_color": "OutlineColour"}[key]] = style[key]
-    alignment = {"bottom": 2, "center": 5, "top": 8}.get(position, 2)
-    preset.update({"Alignment": alignment, "MarginV": 90 if alignment == 2 else 20, "BorderStyle": 1})
-    fields = [
-        "Name", "Fontname", "Fontsize", "PrimaryColour", "SecondaryColour", "OutlineColour",
-        "BackColour", "Bold", "Italic", "Underline", "StrikeOut", "ScaleX", "ScaleY",
-        "Spacing", "Angle", "BorderStyle", "Outline", "Shadow", "Alignment",
-        "MarginL", "MarginR", "MarginV", "Encoding",
-    ]
-    defaults = {
-        "Name": "Default", "Fontname": "Arial", "Fontsize": 64, "PrimaryColour": "&H00FFFFFF",
-        "SecondaryColour": "&H0000FFFF", "OutlineColour": "&H00000000", "BackColour": "&H80000000",
-        "Bold": -1, "Italic": 0, "Underline": 0, "StrikeOut": 0, "ScaleX": 100, "ScaleY": 100,
-        "Spacing": 0, "Angle": 0, "BorderStyle": 1, "Outline": 4, "Shadow": 0, "Alignment": 2,
-        "MarginL": 40, "MarginR": 40, "MarginV": 90, "Encoding": 1,
-    }
-    defaults.update(preset)
-    title_defaults = {
-        **defaults,
-        "Name": "Title", "Fontname": "Arial Black", "Fontsize": 68, "PrimaryColour": "&H00FFFFFF",
-        "BackColour": "&H880F111B", "Bold": -1, "BorderStyle": 3,
-        "OutlineColour": "&H008B5CF6", "Outline": 4, "Shadow": 2, "Alignment": 8,
-        "MarginV": 90,
-    }
-    header = [
-        "[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920",
-        "WrapStyle: 2", "ScaledBorderAndShadow: yes", "", "[V4+ Styles]",
-        "Format: " + ", ".join(fields),
-        "Style: " + ",".join(str(defaults.get(f, "")) for f in fields),
-        "Style: " + ",".join(str(title_defaults.get(f, "")) for f in fields),
-        "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-    ]
-    lines: list[str] = []
-    for caption in captions:
-        text = str(caption.get("text") or caption.get("word") or "").replace("\n", "\\N").strip()
-        if not text:
-            continue
-        try:
-            start = max(0, float(caption.get("start", 0)) - offset)
-            end = max(start + 0.15, float(caption.get("end", start + 0.8)) - offset)
-        except (TypeError, ValueError):
-            continue
-        # Keep ASR output from being interpreted as ASS override markup, then
-        # animate title cards and hype captions without changing their timing.
-        is_title = caption.get("kind") == "title"
-        text = text.replace("{", "(").replace("}", ")")
-        event_style = "Default"
-        if is_title:
-            event_style = "Title"
-            text = r"{\an8\fs68\bord4\shad2\c&H00FFFFFF&\3c&H008B5CF6&\fad(160,220)\fscx92\fscy92\t(0,180,\fscx100\fscy100)}" + text
-        elif style and style.get("preset", "hype") in {"hype", "karaoke"}:
-            text = r"{\fad(55,100)\fscx90\fscy90\t(0,90,\fscx100\fscy100)}" + text
-        lines.append(
-            f"Dialogue: 0,{format_time(start)[:-2]},{format_time(end)[:-2]},{event_style},,0,0,0,,{text}"
-        )
-    path = folder / f"subs_{abs(hash((tuple(lines[:3]), offset, position))) % 10**12}.ass"
-    path.write_text("\n".join(header + lines) + "\n", encoding="utf-8")
-    return str(path)
 
 
 _ENCODER: str | None = None
@@ -189,10 +108,21 @@ def _video_codec_args() -> list[str]:
     return args
 
 
-def _thread_args() -> list[str]:
-    """Use all available cores for software filters without oversubscribing."""
-    workers = max(1, min(8, int(os.getenv("RENDER_WORKERS") or (os.cpu_count() or 4))))
-    return ["-threads", str(workers), "-filter_threads", str(workers)]
+def _render_thread_count(options: dict[str, Any] | None = None) -> int:
+    """Resolve the per-render thread cap shared by all FFmpeg processing stages."""
+    requested = (options or {}).get("render_threads")
+    if requested is None:
+        requested = os.getenv("RENDER_THREADS") or os.getenv("RENDER_WORKERS") or (os.cpu_count() or 4)
+    try:
+        return max(1, min(8, int(requested)))
+    except (TypeError, ValueError):
+        return max(1, min(8, os.cpu_count() or 4))
+
+
+def _thread_args(options: dict[str, Any] | None = None) -> list[str]:
+    """Set codec and simple-filter threads to the shared per-render budget."""
+    threads = _render_thread_count(options)
+    return ["-threads", str(threads), "-filter_threads", str(threads)]
 
 
 def _normalise_contrast(value: Any) -> float:
@@ -535,35 +465,47 @@ def _compose_regions(
 
 
 async def encode(args: list[str], duration: float, on_progress=None) -> Path:
-    """Run ffmpeg and stream its progress into the job tracker."""
+    """Run FFmpeg while draining both pipes so diagnostics cannot stall rendering."""
     output = Path(args[-1])
     process = await asyncio.create_subprocess_exec(
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
-    assert process.stdout is not None
+    assert process.stdout is not None and process.stderr is not None
+    stderr_task = asyncio.create_task(process.stderr.read())
     try:
         while True:
             line = await process.stdout.readline()
             if not line:
                 break
             text = line.decode("utf-8", "ignore").strip()
-            if text.startswith("out_time_ms=") and duration > 0:
+            if text.startswith("out_time_ms=") and duration > 0 and on_progress:
                 try:
                     current = int(text.split("=", 1)[1]) / 1_000_000
-                    if on_progress:
-                        on_progress(min(95, current / duration * 100), f"Rendering {current:.1f}s / {duration:.1f}s")
-                except ValueError:
+                    on_progress(min(95, current / duration * 100), f"Rendering {current:.1f}s / {duration:.1f}s")
+                except (ValueError, TypeError):
                     pass
-        stderr = (await process.stderr.read()).decode("utf-8", "ignore") if process.stderr else ""
+        stderr = (await stderr_task).decode("utf-8", "ignore")
         code = await process.wait()
     except asyncio.CancelledError:
         if process.returncode is None:
             process.terminate()
             try:
-                await asyncio.wait_for(process.communicate(), timeout=5)
+                await asyncio.wait_for(process.wait(), timeout=5)
             except asyncio.TimeoutError:
                 process.kill()
-                await process.communicate()
+                await process.wait()
+        await asyncio.gather(stderr_task, return_exceptions=True)
+        output.unlink(missing_ok=True)
+        raise
+    except Exception:
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+        await asyncio.gather(stderr_task, return_exceptions=True)
         output.unlink(missing_ok=True)
         raise
     if code != 0 or not output.exists() or output.stat().st_size == 0:
@@ -663,8 +605,13 @@ def build_clip_args(
         trim = ",".join(trim_parts)
         if options.get("blur_background", True) and options.get("aspect", "9:16") != "source":
             video_parts.append(f"[0:v]{trim},split=2[bg][fg]")
+            blur_width = max(2, (width // 4) - (width // 4) % 2)
+            blur_height = max(2, (height // 4) - (height // 4) % 2)
+            blur_sigma = max(1, round(24 * min(blur_width / width, blur_height / height)))
             video_parts.append(
-                f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},gblur=sigma=24[bgb]"
+                f"[bg]scale={blur_width}:{blur_height}:force_original_aspect_ratio=increase,"
+                f"crop={blur_width}:{blur_height},gblur=sigma={blur_sigma},"
+                f"scale={width}:{height}:flags=bilinear[bgb]"
             )
             video_parts.append(
                 f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos[fgs]"
@@ -692,22 +639,6 @@ def build_clip_args(
     ]
     video_parts.append(f"[{current}]eq={':'.join(eq_values)}[graded]")
     current = "graded"
-    caption_style = options.get("caption_style") or {}
-    captions = list(options.get("captions") or [])
-    title = str(options.get("title") or "").strip()
-    if title:
-        captions.append({
-            "text": title[:100], "start": start,
-            "end": min(end, start + max(1.4, min(2.8, duration * 0.22))), "kind": "title",
-        })
-    if caption_style.get("preset", "hype") == "none":
-        captions = [caption for caption in captions if caption.get("kind") == "title"]
-    if captions:
-        ass_path = write_ass(captions, caption_style, offset=start, position=caption_style.get("position", "bottom"))
-        video_parts.append(
-            f"[{current}]subtitles=filename='{escape_filter_path(ass_path)}'[captioned]"
-        )
-        current = "captioned"
     if sticker_index:
         position = options.get("sticker_position") or {}
         scale = float(position.get("scale", 0.22))
@@ -756,8 +687,9 @@ def build_clip_args(
         f"{mix_inputs}amix=inputs={1 + len(audio_inputs)}:duration=first:normalize=0,apad,atrim=0:{duration / speed:.3f}[aout]"
     )
     args += [
+        "-filter_complex_threads", str(_render_thread_count(options)),
         "-filter_complex", ";".join(video_parts + audio_parts),
-        "-map", "[vout]", "-map", "[aout]", *_thread_args(), *_video_codec_args(),
+        "-map", "[vout]", "-map", "[aout]", *_thread_args(options), *_video_codec_args(),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
         "-t", f"{duration / speed:.3f}", "-progress", "pipe:1", "-nostats", output,
     ]
@@ -785,7 +717,7 @@ async def render_clip(
     options: dict[str, Any],
     on_progress=None,
 ) -> str:
-    info = probe(media_path)
+    info = await asyncio.to_thread(probe, media_path)
     options = dict(options)
     options.setdefault("source_width", info.get("width", 1080))
     options.setdefault("source_height", info.get("height", 1920))
@@ -793,7 +725,7 @@ async def render_clip(
     args = build_clip_args(media_path, start, end, output, options, has_audio=bool(info.get("audio_codec")))
     await encode(args, max(0.5, end - start), on_progress)
     try:
-        _validate_mp4(output)
+        await asyncio.to_thread(_validate_mp4, output)
     except Exception:
         Path(output).unlink(missing_ok=True)
         raise
@@ -815,15 +747,16 @@ async def render_timeline(
     media_inputs: list[dict[str, Any]] = []
     indexed_video: list[tuple[dict[str, Any], int]] = []
     source_info: list[dict[str, Any]] = []
-    for item in video_items:
-        path = str(item.get("path") or "")
-        if not Path(path).exists():
-            continue
+    available_video = [
+        (item, str(item.get("path") or "")) for item in video_items
+        if Path(str(item.get("path") or "")).is_file()
+    ]
+    source_info = await asyncio.gather(*(asyncio.to_thread(probe, path) for _item, path in available_video))
+    for item, path in available_video:
         args += ["-i", path]
-        idx = sum(1 for a in args if a == "-i") - 1
+        idx = len(indexed_video)
         media_inputs.append(item)
         indexed_video.append((item, idx))
-        source_info.append(probe(path))
     if not indexed_video:
         raise RuntimeError("None of the timeline video files were found on this machine")
     best_source = max(
@@ -852,7 +785,6 @@ async def render_timeline(
     filters: list[str] = []
     vlabels: list[str] = []
     alabels: list[str] = []
-    timeline_titles: list[dict[str, Any]] = []
     timeline_cursor = 0.0
     audio_base = len(indexed_video)
     sticker_base = audio_base + len(audio_items)
@@ -865,12 +797,6 @@ async def render_timeline(
         except (TypeError, ValueError):
             speed = 1.0
         source_duration = max(0.05, float(item.get("sourceDuration") or duration * speed))
-        if item.get("clip_id") and str(item.get("label") or "").strip():
-            title_end = timeline_cursor + min(duration, max(1.4, min(2.8, duration * 0.22)))
-            timeline_titles.append({
-                "text": str(item["label"])[:100], "start": timeline_cursor,
-                "end": title_end, "kind": "title",
-            })
         trim = (
             f"trim=start={source_in:.3f}:duration={source_duration:.3f},"
             f"setpts=(PTS-STARTPTS)/{speed:.3f},fps=30"
@@ -946,14 +872,6 @@ async def render_timeline(
 
     total = timeline_cursor
     current = "vcat"
-    captions = list(tracks.get("captions") or []) + timeline_titles
-    caption_style = timeline.get("caption_style") or {"preset": "hype"}
-    if caption_style.get("preset", "hype") == "none":
-        captions = [caption for caption in captions if caption.get("kind") == "title"]
-    if captions:
-        ass_path = write_ass(captions, caption_style)
-        filters.append(f"[{current}]subtitles=filename='{escape_filter_path(ass_path)}'[cap]")
-        current = "cap"
     for offset, item in enumerate(sticker_items):
         start = float(item.get("start", 0))
         end = float(item.get("end", min(total, start + 3)))
@@ -994,6 +912,7 @@ async def render_timeline(
     )
     filters.append(f"[{current}]scale=in_range=auto:out_range=tv,setsar=1,format=yuv420p[vout]")
     args += [
+        "-filter_complex_threads", str(_render_thread_count()),
         "-filter_complex", ";".join(filters), "-map", "[vout]", "-map", "[aout]",
         *_thread_args(), *_video_codec_args(),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
@@ -1001,7 +920,7 @@ async def render_timeline(
     ]
     await encode(args, total, on_progress)
     try:
-        _validate_mp4(output)
+        await asyncio.to_thread(_validate_mp4, output)
     except Exception:
         Path(output).unlink(missing_ok=True)
         raise

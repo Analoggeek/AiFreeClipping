@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, ShieldCheck, Sparkles, Trash2, Volume2, Youtube } from 'lucide-react';
+import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, LoaderCircle, ShieldCheck, Sparkles, Trash2, Volume2 } from 'lucide-react';
 import { api } from '../api';
 import type { AutoEditOptions } from '../types';
 import { Panel } from '../components/common';
@@ -9,7 +9,6 @@ const FIELDS = [
   { key: 'gemini_api_key', label: 'Gemini API key (Nano Banana)', icon: KeyRound, placeholder: 'Optional — leave empty for fully local SDXL', secret: true },
   { key: 'pexels_api_key', label: 'Pexels API key', icon: KeyRound, placeholder: 'Free key from pexels.com/api' },
   { key: 'pixabay_api_key', label: 'Pixabay API key', icon: KeyRound, placeholder: 'Free key from pixabay.com/api/docs' },
-  { key: 'youtube_client_secret', label: 'YouTube OAuth client_secret.json path', icon: Youtube, placeholder: '~/.AiFreeClipping/client_secret.json' },
   { key: 'ollama_model', label: 'Ollama model', icon: Cpu, placeholder: 'gemma2:7b' },
   { key: 'whisper_model', label: 'Whisper model', icon: Sparkles, placeholder: 'small / medium / large-v3' },
   { key: 'comfy_checkpoint', label: 'ComfyUI SDXL checkpoint', icon: HardDrive, placeholder: 'sd_xl_base_1.0.safetensors' },
@@ -17,13 +16,14 @@ const FIELDS = [
 
 const AUTO_EDIT_DEFAULTS: AutoEditOptions = {
   style: 'hype', aspect: '9:16', resolution: 'source',
-  captions: true, sound_effects: true, stickers: true, blur_background: true,
+  sound_effects: true, stickers: true, blur_background: true,
   music: '', music_volume: 0.18,
 };
 
 export default function SettingsPage({ notify }: { notify: (message: string) => void }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [folders, setFolders] = useState<Record<string, string>>({});
+  const [clearingDownloads, setClearingDownloads] = useState(false);
   const [autoEdit, setAutoEdit] = useState<AutoEditOptions>(AUTO_EDIT_DEFAULTS);
 
   useEffect(() => {
@@ -35,7 +35,6 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
         style: ['hype', 'minimal', 'premium'].includes(saved.auto_edit_style) ? saved.auto_edit_style as AutoEditOptions['style'] : AUTO_EDIT_DEFAULTS.style,
         aspect: ['9:16', '1:1', '16:9'].includes(saved.auto_edit_aspect) ? saved.auto_edit_aspect as AutoEditOptions['aspect'] : AUTO_EDIT_DEFAULTS.aspect,
         resolution: ['source', '720p', '1080p'].includes(saved.auto_edit_resolution) ? saved.auto_edit_resolution as AutoEditOptions['resolution'] : AUTO_EDIT_DEFAULTS.resolution,
-        captions: saved.auto_edit_captions === undefined ? true : !['0', 'false'].includes(saved.auto_edit_captions.toLowerCase()),
         sound_effects: saved.auto_edit_sound_effects === undefined ? true : !['0', 'false'].includes(saved.auto_edit_sound_effects.toLowerCase()),
         stickers: saved.auto_edit_stickers === undefined ? true : !['0', 'false'].includes(saved.auto_edit_stickers.toLowerCase()),
         blur_background: saved.auto_edit_blur_background === undefined ? true : !['0', 'false'].includes(saved.auto_edit_blur_background.toLowerCase()),
@@ -53,7 +52,6 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
         auto_edit_style: autoEdit.style,
         auto_edit_aspect: autoEdit.aspect,
         auto_edit_resolution: autoEdit.resolution,
-        auto_edit_captions: String(autoEdit.captions),
         auto_edit_sound_effects: String(autoEdit.sound_effects),
         auto_edit_stickers: String(autoEdit.stickers),
         auto_edit_blur_background: String(autoEdit.blur_background),
@@ -71,6 +69,44 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
     if (!paths.length) return;
     setValues((current) => ({ ...current, watermark_path: paths[0] }));
     notify('Logo selected. Save settings to use it on new exports.');
+  };
+
+  const clearDownloadedMedia = async () => {
+    const folder = folders.downloads;
+    if (!folder) { notify('The downloads folder is still loading. Try again in a moment.'); return; }
+    const confirmed = window.confirm(
+      `Permanently clear unreferenced app-managed downloads from this folder?\n\n${folder}\n\nDownloads still needed by a saved project, rendered clip, or another library item will remain on disk and in the library. Imported originals, unrelated files, and files the app cannot safely delete will not be touched.`,
+    );
+    if (!confirmed) return;
+    setClearingDownloads(true);
+    try {
+      const result = await api.clearDownloadStorage(folder, true);
+      if (!result.folder_exists) {
+        notify(`Downloads folder not found; nothing was deleted: ${result.folder}`);
+        return;
+      }
+      if (!result.media_removed) {
+        const kept = [
+          result.media_kept_shared ? `${result.media_kept_shared} referenced download(s)` : '',
+          result.media_kept_error ? `${result.media_kept_error} download(s) with file errors` : '',
+        ].filter(Boolean).join(' and ');
+        notify(kept
+          ? `Nothing was deleted in ${result.folder}; kept ${kept}.`
+          : `No app-managed downloads were found in ${result.folder}.`);
+        return;
+      }
+      const summary = [
+        `removed ${result.media_removed} library item(s)`,
+        `deleted ${result.files_deleted} file(s)`,
+        result.media_kept_shared ? `preserved ${result.media_kept_shared} referenced download item${result.media_kept_shared === 1 ? '' : 's'}` : '',
+        result.files_kept_shared ? `kept ${result.files_kept_shared} shared file${result.files_kept_shared === 1 ? '' : 's'}` : '',
+        result.media_kept_error ? `kept ${result.media_kept_error} item${result.media_kept_error === 1 ? '' : 's'} because file deletion failed` : '',
+        result.files_missing ? `${result.files_missing} source file(s) were already missing` : '',
+        result.file_errors.length ? `${result.file_errors.length} file operation(s) failed` : '',
+      ].filter(Boolean).join('; ');
+      notify(`Downloads cleared in ${result.folder}: ${summary}.`);
+    } catch (error) { notify(String(error)); }
+    finally { setClearingDownloads(false); }
   };
 
   return (
@@ -128,15 +164,23 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
           </label>
         </div>
         <div className="toggle-grid">
-          <label className="toggle"><input type="checkbox" checked={autoEdit.captions} onChange={(event) => setAutoEdit((current) => ({ ...current, captions: event.target.checked }))} /><span><Sparkles size={16} /></span>Generate captions</label>
           <label className="toggle"><input type="checkbox" checked={autoEdit.sound_effects} onChange={(event) => setAutoEdit((current) => ({ ...current, sound_effects: event.target.checked }))} /><span><Volume2 size={16} /></span>Add sound effects</label>
           <label className="toggle"><input type="checkbox" checked={autoEdit.stickers} onChange={(event) => setAutoEdit((current) => ({ ...current, stickers: event.target.checked }))} /><span><ImagePlus size={16} /></span>Use saved stickers</label>
           <label className="toggle"><input type="checkbox" checked={autoEdit.blur_background} onChange={(event) => setAutoEdit((current) => ({ ...current, blur_background: event.target.checked }))} /><span><HardDrive size={16} /></span>Blur-fill unused frame</label>
         </div>
-        <p className="hint">Click Save settings to keep these choices. Auto Edit will build editable video, caption, sticker, and audio tracks in the timeline as well as render each finished clip.</p>
+        <p className="hint">Click Save settings to keep these choices. Auto Edit adds each finished clip to the timeline as soon as it renders. Large source-quality batches can take longer; choose 720p for faster exports.</p>
       </Panel>
 
-      <Panel title="Local folders" subtitle="All media, projects and models live on this machine">
+      <Panel
+        title="Local folders"
+        subtitle="All media, projects and models live on this machine"
+        action={(
+          <button className="chip-btn clear-downloads-btn" disabled={clearingDownloads || !folders.downloads} onClick={() => void clearDownloadedMedia()}>
+            {clearingDownloads ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />}
+            {clearingDownloads ? 'Clearing downloads…' : 'Clear downloads'}
+          </button>
+        )}
+      >
         <div className="folder-grid">
           {Object.entries(folders || {}).map(([key, value]) => (
             <div className="folder-card" key={key}>
@@ -155,10 +199,14 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
             </div>
           ))}
         </div>
+        <p className="hint downloads-clear-note">
+          Clear downloads only removes unreferenced files registered as app downloads under <strong>{folders.downloads || 'the downloads folder'}</strong>.
+          Imported originals, unrelated files, and downloads still used by projects, rendered clips, or another library item remain on disk and in the library.
+        </p>
       </Panel>
 
       <Panel title="Privacy & runtime" subtitle="Managed automatically in the sidebar hardware panel">
-        <div className="notice"><ShieldCheck size={18} /><div><strong>Privacy by design</strong><p>The local API binds to 127.0.0.1 and requires a token generated on each launch. Cloud features (Nano Banana, stock search, YouTube upload) are opt-in and only run when you supply your own key. Live CPU, RAM, disk and GPU usage is shown in the sidebar.</p></div></div>
+        <div className="notice"><ShieldCheck size={18} /><div><strong>Privacy by design</strong><p>The local API binds to 127.0.0.1 and requires a token generated on each launch. Cloud features such as Nano Banana and stock search are opt-in and only run when you supply your own key. Live CPU, RAM, disk and GPU usage is shown in the sidebar.</p></div></div>
       </Panel>
 
       <Panel title="About" subtitle="Built for creators who want speed without leaving their machine">
@@ -166,7 +214,7 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
           <img src={logo} alt="AI Clipper Pro logo" />
           <div>
             <h3>AI Clipper Pro</h3>
-            <p>A local-first AI video clipping and editing studio. Download, discover viral moments, polish and publish — with Gemma, Whisper, YOLOX + ByteTrack, FFmpeg and optional Nano Banana / ComfyUI.</p>
+            <p>A local-first AI video clipping and editing studio. Download, discover engaging moments, polish and export — with Gemma, Whisper, YOLOX + ByteTrack, FFmpeg and optional Nano Banana / ComfyUI.</p>
             <a className="chip-btn" href="https://github.com/Analoggeek/AiFreeClipping" target="_blank" rel="noreferrer"><ExternalLink size={14} /> Source & documentation</a>
           </div>
         </div>

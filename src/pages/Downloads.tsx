@@ -10,7 +10,6 @@ export default function Downloads({ notify, openClipper }: PageProps) {
   const [quality, setQuality] = useState('max');
   const [url, setUrl] = useState('');
   const [folder, setFolder] = useState('');
-  const [subtitles, setSubtitles] = useState(false);
   const [info, setInfo] = useState<Record<string, unknown> | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -41,7 +40,7 @@ export default function Downloads({ notify, openClipper }: PageProps) {
     if (!url.trim()) { notify('Paste a video or playlist URL first.'); return; }
     setBusy(true);
     try {
-      const result = await api.download({ url: url.trim(), mode, quality, folder: folder || undefined, subtitles });
+      const result = await api.download({ url: url.trim(), mode, quality, folder: folder || undefined });
       setJobId(result.job_id);
       notify('Download started. You can keep working while it runs.');
     } catch (error) { notify(String(error)); } finally { setBusy(false); }
@@ -110,7 +109,6 @@ export default function Downloads({ notify, openClipper }: PageProps) {
               <button className="ghost-btn" onClick={pickFolder}><FolderPlus size={15} /> Browse</button>
             </div>
           </label>
-          <label className="check"><input type="checkbox" checked={subtitles} onChange={(event) => setSubtitles(event.target.checked)} /> Save subtitles when available</label>
         </div>
         {info && (
           <div className="info-card">

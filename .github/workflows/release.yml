@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 5.2.5)'
+        description: 'Release version (e.g. 6.0.0)'
         required: true
-        default: '5.2.5'
+        default: '6.0.1'
       only_platform:
         description: 'Build only one platform (leave all for the full matrix)'
         required: false
@@ -21,6 +21,11 @@ on:
         description: 'Comma-separated run IDs to publish (skips builds, e.g. 123,456)'
         required: false
         default: ''
+      build_only:
+        description: 'Build and verify installers without publishing a GitHub Release (safe default)'
+        required: false
+        type: boolean
+        default: true
   push:
     tags:
       - 'v*'
@@ -88,6 +93,37 @@ jobs:
       - name: Bundle local Python engine + ffmpeg
         shell: bash
         run: python scripts/package-backend.py --platform ${{ matrix.platform }} --arch ${{ matrix.arch }}
+
+      - name: Verify Windows engine architecture
+        if: matrix.platform == 'win'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - "backend/runtime/windows-${{ matrix.arch }}/ai-clipper-backend.exe" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          # Windows ARM64 uses the x64 backend under OS emulation because the
+          # currently supported Python dependency set lacks complete win_arm64 wheels.
+          expected_machine = 0x8664
+          with path.open("rb") as stream:
+              dos_header = stream.read(64)
+              if dos_header[:2] != b"MZ":
+                  raise SystemExit(f"{path.name} is not a Windows PE executable")
+              pe_offset = int.from_bytes(dos_header[0x3C:0x40], "little")
+              stream.seek(pe_offset)
+              pe_signature = stream.read(4)
+              machine = int.from_bytes(stream.read(2), "little")
+          if pe_signature != b"PE\0\0":
+              raise SystemExit(f"{path.name} has no valid PE signature")
+          if machine != expected_machine:
+              raise SystemExit(
+                  f"{path.name} is machine 0x{machine:04x}; expected x64 "
+                  f"(0x{expected_machine:04x})"
+              )
+          print(f"Verified bundled Windows x64 engine for {path.parent.name} installer")
+          PY
 
       - name: Build React UI
         run: npm run build
@@ -313,10 +349,48 @@ jobs:
           path: release/*
           if-no-files-found: error
 
-  publish:
-    name: Publish GitHub Release
+  verify_all_targets:
+    name: Verify complete all-target artifact set
     needs: build
     if: ${{ (inputs.only_platform == '' || inputs.only_platform == 'all') && inputs.publish_from_runs == '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Require all eight expected installers
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ inputs.version || github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${RELEASE_VERSION#v}"
+          expected=(
+            "AI-Clipper-Pro-${VERSION}-Windows-x64.exe"
+            "AI-Clipper-Pro-${VERSION}-Windows-arm64.exe"
+            "AI-Clipper-Pro-${VERSION}-macOS-x64.dmg"
+            "AI-Clipper-Pro-${VERSION}-macOS-x64.zip"
+            "AI-Clipper-Pro-${VERSION}-macOS-arm64.dmg"
+            "AI-Clipper-Pro-${VERSION}-macOS-arm64.zip"
+            "AI-Clipper-Pro-${VERSION}-Linux-x86_64.AppImage"
+            "AI-Clipper-Pro-${VERSION}-Linux-amd64.deb"
+          )
+          for file in "${expected[@]}"; do
+            test -s "release/$file" || { echo "Missing all-target artifact: $file" >&2; exit 1; }
+            echo "Verified: $file"
+          done
+          actual="$(find release -maxdepth 1 -type f \
+            \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' \) | wc -l | tr -d '[:space:]')"
+          test "$actual" = "${#expected[@]}" || {
+            echo "Expected ${#expected[@]} installer files, found $actual" >&2
+            exit 1
+          }
+
+  publish:
+    name: Publish GitHub Release
+    needs: verify_all_targets
+    if: ${{ (inputs.only_platform == '' || inputs.only_platform == 'all') && inputs.publish_from_runs == '' && inputs.build_only != true }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -408,8 +482,6 @@ jobs:
           find release/.run-* -mindepth 2 -maxdepth 2 -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) -exec cp -f {} release/installers/ \;
           find release -mindepth 1 -type d -name '.run-*' -exec rm -rf {} +
           ls -lh release/installers | tee -a "$GITHUB_STEP_SUMMARY"
-          BODY="$(find release/installers -maxdepth 1 -type f -printf '%f %s bytes\n' | sort)"
-          gh issue create --title "v5 release asset diagnostics (temporary)" --body "$BODY" >/dev/null || true
       - name: Checksums and manifest
         shell: bash
         run: |

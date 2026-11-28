@@ -1,5 +1,70 @@
 # Release notes
 
+## v6.0.1 — more responsive, reliable rendering
+
+### Download the installers
+
+The published [AI Clipper Pro v6.0.1 release](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v6.0.1) includes direct downloads for every supported target:
+
+- **Windows x64:** [AI-Clipper-Pro-6.0.1-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-6.0.1-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-6.0.1-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-6.0.1-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Linux-amd64.deb)
+- [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/manifest.json)
+
+### Changes
+
+- Bound Auto Edit and batch-export concurrency to a shared per-render CPU budget, including FFmpeg's codec, simple-filter and complex-filter thread pools, to reduce oversubscription on large batches.
+- Downscale blur-fill backgrounds before blurring, then upscale them behind the full-quality foreground.
+- Add completed Auto Edit clips to the editable timeline as they finish, continue after an individual FFmpeg render failure with a warning, and let users stop a batch while keeping completed work.
+- Confirm before Auto Edit batches larger than 12 clips and explain that 720p can reduce export time.
+- Add regression coverage for render budgets, blur-fill filter quality, and incremental results when an individual render fails.
+
+## v6.0.0 — streamlined local editing and cross-platform installers
+
+### Download the installers
+
+Direct downloads for the published v6.0.0 release:
+
+- **Windows x64:** [AI-Clipper-Pro-6.0.0-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-6.0.0-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-6.0.0-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-6.0.0-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-amd64.deb)
+- [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/manifest.json)
+
+### Changes
+
+- Remove caption/subtitle editing, subtitle downloads, social-copy fields, and text-overlay rendering. Whisper remains an internal transcript signal for clip scoring and review context; exported videos do not include generated subtitles.
+- Remove YouTube OAuth, channel authorization and upload support. YouTube remains available as a yt-dlp source-download site.
+- Keep the video, sticker and audio timeline tracks, source cropping/composition, Auto Edit, local asset workflows and MP4 exports. Old project caption tracks and text-render metadata are cleaned when projects are loaded or saved.
+- Keep clip titles as metadata and editable labels; they are not rendered as text overlays.
+- Improve download cleanup and flexible timeline placement, and update Ollama model asset mapping/streaming extraction and supported installer compression.
+- Publish a verified installer matrix for Windows x64/ARM64, macOS Intel and Apple Silicon DMG/ZIP, and Linux x64 AppImage/DEB. The Windows ARM64 installer uses the x64 Python engine under Windows' compatibility layer.
+
+## v5.2.6 — offline captions and a flexible Editor (historical; caption features retired in v6.0.0)
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.2.6-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.2.6-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.2.6-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.2.6-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/AI-Clipper-Pro-5.2.6-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.6/manifest.json)
+
+### Changes
+
+- Add offline Whisper captioning that reuses a saved local transcript first, installs word-level captions on matching timeline clips, and keeps each word's text and timing editable. Missing local weights produce an actionable message instead of a model download during transcription.
+- Preserve the existing caption-template experience and add **136 selectable looks** across **44 font families**, searchable in the Inspector's Templates tab, with styling shared by preview and export.
+- Make the Media, Shorts preview, Inspector and Timeline areas resizable by dragging their dividers; resize the Shorts player from its corner handle. Layout choices persist locally, work in the responsive stacked layout, and can be restored with **Reset layout** without changing project or caption edits.
+- Carry caption style, placement and size into Auto Edit when requested, without replacing the target project's aspect ratio or resolution.
+- Keep the selected caption style and seam-aware placement consistent through timeline rendering, individual rendering and Auto Edit.
+
 ## v5.2.5 — verified installers for every platform
 
 ### Download the installers

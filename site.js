@@ -61,7 +61,7 @@
   const screens = {
     overview: { src: 'assets/screen-overview.svg', title: 'Dashboard', detail: 'Library, live hardware usage and the complete creation pipeline.' },
     clipper: { src: 'assets/screen-clipper.svg', title: 'AI Clipper', detail: 'Region lock, ranked viral moments and one-click effect copying.' },
-    editor: { src: 'assets/screen-editor.svg', title: 'Timeline Editor', detail: 'Multi-track editing, captions, stickers, stock media and live inspector.' },
+    editor: { src: 'assets/screen-editor.svg', title: 'Timeline Editor', detail: 'Video, sticker and audio tracks with a responsive preview and live inspector.' },
   };
   const image = document.getElementById('screen-image');
   const title = document.getElementById('screen-title');
@@ -99,7 +99,7 @@
       const response = await fetch('https://api.github.com/repos/Analoggeek/AiFreeClipping/releases/latest');
       if (!response.ok) throw new Error('release lookup failed');
       const release = await response.json();
-      const tag = release.tag_name || 'v5.2.5';
+      const tag = release.tag_name || 'latest published';
       const versionLine = document.getElementById('version-line');
       if (versionLine) {
         versionLine.textContent = `Latest release ${tag} — direct installer links below (GitHub keeps binaries in the collapsible Assets panel). Includes the app, Python engine and FFmpeg; models install inside the app.`;
@@ -114,7 +114,7 @@
         }
       });
     } catch (_) {
-      // Static fallback links point straight to the latest 5.2.5 installer files.
+      // Static fallback links point to the latest-release page, never a stale versioned asset.
     }
   })();
 })();

@@ -12,7 +12,6 @@ class DownloadRequest(BaseModel):
     quality: Literal["max", "1080p", "720p", "audio"] = "max"
     folder: str | None = None
     playlist_items: str | None = None
-    subtitles: bool = False
     cookies_file: str | None = None
 
 
@@ -24,6 +23,11 @@ class DeleteClipsRequest(BaseModel):
     clip_ids: list[str] = Field(default_factory=list)
 
 
+class ClearDownloadsRequest(BaseModel):
+    folder: str
+    confirmed: bool = False
+
+
 class ComfyCheckpointRequest(BaseModel):
     path: str
 
@@ -33,12 +37,12 @@ class FolderPatch(BaseModel):
     path: str
 
 
+
 class AutoEditRequest(BaseModel):
     clip_ids: list[str]
     style: Literal["hype", "minimal", "premium"] = "hype"
     aspect: Literal["9:16", "1:1", "16:9"] = "9:16"
     resolution: Literal["720p", "1080p", "source"] = "source"
-    captions: bool = True
     sound_effects: bool = True
     stickers: bool = True
     blur_background: bool = True
@@ -58,12 +62,6 @@ class MediaInfo(BaseModel):
     playlist_id: str | None = None
     created_at: str = ""
 
-
-class TranscribeRequest(BaseModel):
-    media_id: str
-    model: str | None = None
-    language: str | None = None
-    word_timestamps: bool = True
 
 
 class VisionRequest(BaseModel):
@@ -91,7 +89,6 @@ class ClipProposalRequest(BaseModel):
     max_duration: float = 60
     platform: Literal["shorts", "reels", "tiktok", "landscape"] = "shorts"
     style: Literal["hype", "story", "clean", "cinematic"] = "hype"
-    captions: bool = True
     sound_effects: bool = True
     stickers: bool = True
     music: str | None = None
@@ -99,21 +96,11 @@ class ClipProposalRequest(BaseModel):
     llm_model: str | None = None
 
 
-class CaptionStyle(BaseModel):
-    preset: Literal["hype", "karaoke", "minimal", "premium", "none"] = "hype"
-    font_size: int = 62
-    primary_color: str = "&H00FFFFFF"
-    outline_color: str = "&H00000000"
-    position: Literal["bottom", "center", "top"] = "bottom"
-
-
 class RenderRequest(BaseModel):
     clip_id: str | None = None
     output: str | None = None
     aspect: Literal["9:16", "1:1", "16:9", "source"] = "9:16"
     resolution: Literal["720p", "1080p", "source"] = "source"
-    caption_style: CaptionStyle = Field(default_factory=CaptionStyle)
-    captions: list[dict[str, Any]] | None = None
     sticker: str | None = None
     sticker_position: dict[str, float] = Field(default_factory=lambda: {"x": 0.72, "y": 0.16, "scale": 0.22})
     music: str | None = None
@@ -127,7 +114,6 @@ class RenderRequest(BaseModel):
     blur_background: bool = True
     watermark: bool = True
     hardware: bool = False
-    title: str | None = None
     region: dict[str, float] | None = None
     regions: list[dict[str, float]] = Field(default_factory=list)
     region_layout: str | None = None
@@ -192,16 +178,6 @@ class AssetDownloadRequest(BaseModel):
 
 class ModelInstallRequest(BaseModel):
     model_id: str
-
-
-class YouTubeUploadRequest(BaseModel):
-    clip_id: str
-    title: str
-    description: str = ""
-    tags: list[str] = Field(default_factory=list)
-    privacy: Literal["private", "unlisted", "public"] = "private"
-    publish_at: str | None = None
-    made_for_kids: bool = False
 
 
 class SettingsPatch(BaseModel):

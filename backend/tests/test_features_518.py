@@ -32,7 +32,7 @@ def test_speed_treated_multi_region_timeline_export_is_playable(tmp_path):
     subprocess.run(command, check=True, capture_output=True)
 
     asyncio.run(render.render_timeline({
-        "aspect": "9:16", "resolution": "720p", "caption_style": {"preset": "none"},
+        "aspect": "9:16", "resolution": "720p",
         "tracks": {
             "video": [{
                 "clip_id": "speed-edit", "path": str(source), "sourceStart": 0,
@@ -43,8 +43,7 @@ def test_speed_treated_multi_region_timeline_export_is_playable(tmp_path):
                 ],
                 "region_layout": "top-player-bottom-game",
                 "effects": {"speed": 1.25, "brightness": 0.02, "contrast": 1.05, "saturation": 1.08},
-            }],
-            "captions": [], "stickers": [], "audio": [],
+            }], "stickers": [], "audio": [],
         },
     }, str(output)))
 
@@ -73,8 +72,7 @@ def test_timeline_export_preserves_short_source_duration(tmp_path, monkeypatch):
                 "path": str(source), "sourceStart": 0, "sourceDuration": 0.05,
                 "duration": 0.2, "crop_path": [[0.0, 0.2], [0.05, 0.8]],
                 "effects": {"speed": 0.25},
-            }],
-            "captions": [], "stickers": [], "audio": [],
+            }], "stickers": [], "audio": [],
         },
     }, str(tmp_path / "short-export.mp4")))
 
@@ -105,7 +103,7 @@ def test_timeline_export_preserves_composition_speed_effects_and_timed_tracks(tm
     monkeypatch.setattr(render, "_validate_mp4", lambda _path: None)
 
     timeline = {
-        "aspect": "9:16", "resolution": "720p", "caption_style": {"preset": "none"},
+        "aspect": "9:16", "resolution": "720p",
         "tracks": {
             "video": [{
                 "clip_id": "edit-clip", "path": str(source), "sourceStart": 1.0,
@@ -116,8 +114,7 @@ def test_timeline_export_preserves_composition_speed_effects_and_timed_tracks(tm
                 ],
                 "region_layout": "top-player-bottom-game",
                 "effects": {"speed": 1.25, "brightness": 0.02, "contrast": 1.1, "saturation": 1.2},
-            }],
-            "captions": [], "stickers": [{
+            }], "stickers": [{
                 "path": str(sticker), "start": 0.1, "end": 0.8,
                 "x": 0.7, "y": 0.15, "scale": 0.2,
             }],

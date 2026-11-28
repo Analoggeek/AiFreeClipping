@@ -15,6 +15,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNTIME = ROOT / "backend" / "runtime"
+PLATFORM_ALIASES = {"win": "windows", "mac": "macos", "darwin": "macos"}
+
+
+def normalize_platform(value: str) -> str:
+    """Accept release-matrix labels and normalize them to Electron runtime names."""
+    return PLATFORM_ALIASES.get(value.lower(), value.lower())
 
 
 def detect() -> tuple[str, str]:
@@ -43,6 +49,7 @@ def ffmpeg_candidates() -> list[Path]:
 
 
 def build(plat: str, arch: str, skip_pyinstaller: bool = False) -> Path:
+    plat = normalize_platform(plat)
     target = RUNTIME / f"{plat}-{arch}"
     target.mkdir(parents=True, exist_ok=True)
     if not skip_pyinstaller:

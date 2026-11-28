@@ -4,6 +4,7 @@ uvicorn[standard]>=0.30,<1.0
 pydantic>=2.7,<3.0
 httpx>=0.27,<1.0
 certifi>=2024.2.2
+zstandard>=0.22,<1.0
 yt-dlp>=2025.1.1
 imageio-ffmpeg>=0.5.1
 
