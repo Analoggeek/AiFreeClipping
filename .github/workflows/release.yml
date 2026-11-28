@@ -195,19 +195,36 @@ jobs:
             local app="$1"
             local framework="$app/Contents/Frameworks/Electron Framework.framework/Electron Framework"
             local executable
+            local linked_libraries
+            STAGE="checking Electron Framework exists in $(basename "$app")"
             if [ ! -s "$framework" ]; then
               echo "Electron Framework is missing from $(basename "$app")" >&2
               exit 1
             fi
             executable="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -u+x -print -quit)"
             if [ -z "$executable" ]; then
+              STAGE="checking the app executable in $(basename "$app")"
               echo "App bundle has no executable: $(basename "$app")" >&2
               exit 1
             fi
-            lipo -verify_arch "$EXPECTED_ARCH" "$framework"
-            lipo -verify_arch "$EXPECTED_ARCH" "$executable"
-            if ! otool -L "$executable" | grep -E '@rpath/Electron Framework\.framework(/Versions/[^[:space:]/]+)?/Electron Framework([[:space:]]|$)' >/dev/null; then
+            STAGE="checking $EXPECTED_ARCH architecture in the Electron Framework for $(basename "$app")"
+            if ! lipo -verify_arch "$EXPECTED_ARCH" "$framework"; then
+              echo "Electron Framework does not contain the expected $EXPECTED_ARCH architecture" >&2
+              exit 1
+            fi
+            STAGE="checking $EXPECTED_ARCH architecture in the app executable for $(basename "$app")"
+            if ! lipo -verify_arch "$EXPECTED_ARCH" "$executable"; then
+              echo "App executable does not contain the expected $EXPECTED_ARCH architecture" >&2
+              exit 1
+            fi
+            STAGE="checking the app executable's Electron Framework load command in $(basename "$app")"
+            linked_libraries="$(otool -L "$executable")"
+            if ! printf '%s\n' "$linked_libraries" | grep -E '@rpath/Electron Framework\.framework(/Versions/[^[:space:]/]+)?/Electron Framework([[:space:]]|$)' >/dev/null; then
               echo "App executable does not declare the expected Electron Framework load dependency" >&2
+              printf '%s\n' "$linked_libraries" >&2
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                printf 'Dependency listing for `%s` did not contain the Electron Framework load reference:\n\n```text\n%s\n```\n' "$(basename "$executable")" "$linked_libraries" >> "$GITHUB_STEP_SUMMARY"
+              fi
               exit 1
             fi
           }
