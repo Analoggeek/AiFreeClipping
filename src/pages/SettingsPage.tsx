@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, ShieldCheck, Sparkles, Trash2, Volume2, Youtube } from 'lucide-react';
+import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, LoaderCircle, ShieldCheck, Sparkles, Trash2, Volume2, Youtube } from 'lucide-react';
 import { api } from '../api';
 import type { AutoEditOptions } from '../types';
 import { Panel } from '../components/common';
@@ -24,6 +24,7 @@ const AUTO_EDIT_DEFAULTS: AutoEditOptions = {
 export default function SettingsPage({ notify }: { notify: (message: string) => void }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [folders, setFolders] = useState<Record<string, string>>({});
+  const [clearingDownloads, setClearingDownloads] = useState(false);
   const [autoEdit, setAutoEdit] = useState<AutoEditOptions>(AUTO_EDIT_DEFAULTS);
 
   useEffect(() => {
@@ -71,6 +72,44 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
     if (!paths.length) return;
     setValues((current) => ({ ...current, watermark_path: paths[0] }));
     notify('Logo selected. Save settings to use it on new exports.');
+  };
+
+  const clearDownloadedMedia = async () => {
+    const folder = folders.downloads;
+    if (!folder) { notify('The downloads folder is still loading. Try again in a moment.'); return; }
+    const confirmed = window.confirm(
+      `Permanently clear unreferenced app-managed downloads from this folder?\n\n${folder}\n\nDownloads still needed by a saved project, rendered clip, or another library item will remain on disk and in the library. Imported originals, unrelated files, and files the app cannot safely delete will not be touched.`,
+    );
+    if (!confirmed) return;
+    setClearingDownloads(true);
+    try {
+      const result = await api.clearDownloadStorage(folder, true);
+      if (!result.folder_exists) {
+        notify(`Downloads folder not found; nothing was deleted: ${result.folder}`);
+        return;
+      }
+      if (!result.media_removed) {
+        const kept = [
+          result.media_kept_shared ? `${result.media_kept_shared} referenced download(s)` : '',
+          result.media_kept_error ? `${result.media_kept_error} download(s) with file errors` : '',
+        ].filter(Boolean).join(' and ');
+        notify(kept
+          ? `Nothing was deleted in ${result.folder}; kept ${kept}.`
+          : `No app-managed downloads were found in ${result.folder}.`);
+        return;
+      }
+      const summary = [
+        `removed ${result.media_removed} library item(s)`,
+        `deleted ${result.files_deleted} file(s)`,
+        result.media_kept_shared ? `preserved ${result.media_kept_shared} referenced download item${result.media_kept_shared === 1 ? '' : 's'}` : '',
+        result.files_kept_shared ? `kept ${result.files_kept_shared} shared file${result.files_kept_shared === 1 ? '' : 's'}` : '',
+        result.media_kept_error ? `kept ${result.media_kept_error} item${result.media_kept_error === 1 ? '' : 's'} because file deletion failed` : '',
+        result.files_missing ? `${result.files_missing} source file(s) were already missing` : '',
+        result.file_errors.length ? `${result.file_errors.length} file operation(s) failed` : '',
+      ].filter(Boolean).join('; ');
+      notify(`Downloads cleared in ${result.folder}: ${summary}.`);
+    } catch (error) { notify(String(error)); }
+    finally { setClearingDownloads(false); }
   };
 
   return (
@@ -136,7 +175,16 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
         <p className="hint">Click Save settings to keep these choices. Auto Edit will build editable video, caption, sticker, and audio tracks in the timeline as well as render each finished clip.</p>
       </Panel>
 
-      <Panel title="Local folders" subtitle="All media, projects and models live on this machine">
+      <Panel
+        title="Local folders"
+        subtitle="All media, projects and models live on this machine"
+        action={(
+          <button className="chip-btn clear-downloads-btn" disabled={clearingDownloads || !folders.downloads} onClick={() => void clearDownloadedMedia()}>
+            {clearingDownloads ? <LoaderCircle size={14} className="spin" /> : <Trash2 size={14} />}
+            {clearingDownloads ? 'Clearing downloads…' : 'Clear downloads'}
+          </button>
+        )}
+      >
         <div className="folder-grid">
           {Object.entries(folders || {}).map(([key, value]) => (
             <div className="folder-card" key={key}>
@@ -155,6 +203,10 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
             </div>
           ))}
         </div>
+        <p className="hint downloads-clear-note">
+          Clear downloads only removes unreferenced files registered as app downloads under <strong>{folders.downloads || 'the downloads folder'}</strong>.
+          Imported originals, unrelated files, and downloads still used by projects, rendered clips, or another library item remain on disk and in the library.
+        </p>
       </Panel>
 
       <Panel title="Privacy & runtime" subtitle="Managed automatically in the sidebar hardware panel">

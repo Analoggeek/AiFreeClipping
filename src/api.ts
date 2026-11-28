@@ -38,6 +38,11 @@ export const api = {
 
   inspect: (url: string, mode = 'auto') => post<{ info: Record<string, unknown> }>('/api/downloads/inspect', { url, mode }),
   download: (payload: Record<string, unknown>) => post<{ job_id: string }>('/api/downloads', payload),
+  clearDownloadStorage: (folder: string, confirmed: boolean) => request<{
+    folder: string; folder_exists: boolean; media_removed: number; media_kept_shared: number;
+    media_kept_error: number; files_deleted: number; files_kept_shared: number;
+    files_missing: number; file_errors: string[];
+  }>('/api/downloads/storage', { method: 'DELETE', body: JSON.stringify({ folder, confirmed }) }),
   media: () => request<{ media: Media[] }>('/api/media'),
   importMedia: (paths: string[]) => post<{ media: Media[] }>('/api/media/import', { paths }),
   deleteMedia: (id: string, deleteFile = true) => request<{ ok: boolean; file_deleted: boolean; file_error?: string | null; file_kept_shared?: boolean }>(`/api/media/${id}?delete_file=${deleteFile}`, { method: 'DELETE' }),

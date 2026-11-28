@@ -1,5 +1,16 @@
 # Release notes
 
+## Unreleased — v5.2.7 candidate
+
+> Unreleased candidate: no v5.2.7 GitHub Release or release assets are published. Manual CI dispatch defaults to build-and-verify only.
+
+### Candidate changes
+
+- Clear app-managed downloads from the effective downloads folder in Settings after showing the folder and asking for explicit confirmation. Imported originals and unrelated files stay untouched; downloads and their library entries remain when a project, rendered clip or another library item still references them.
+- Add videos and AI clips at the playhead or drag them to a specific timeline position. Inserting within a clip splits it; dragging existing video clips reorders them while linked captions and Auto Edit overlays follow. Captions, stickers and audio items can also be repositioned.
+- Update the bundled Ollama runtime pin to v0.40.19, use the official platform/architecture assets, and stream-extract Linux `.tar.zst` archives without writing a second multi-gigabyte tar file.
+- Enable maximum compression where the existing installer targets support it and XZ compression for Debian packages. Preserve the native installer targets and the macOS read-only, uncompressed UDRO DMG format.
+
 ## v5.2.6 — offline captions and a flexible Editor
 
 ### Download the installers

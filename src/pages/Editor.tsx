@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import {
   Captions, Clapperboard, Download, Film, ImagePlus, Layers3, LoaderCircle,
   Mic2, Pause, Play, Plus, RotateCcw, Save, SkipBack, SkipForward, Split, Trash2,
@@ -9,6 +9,7 @@ import { JobTracker, Pill, formatClock } from '../components/common';
 import type { AutoEditOptions, AutoEditReuseSettings, AutoEditTimelineEdit, CaptionPosition, CaptionStyleSettings, Candidate, Media, Timeline, VideoItem } from '../types';
 import { appendAutoEditTimeline } from '../lib/autoEdit';
 import { captionsForMedia, type TranscriptSegment } from '../lib/captions';
+import { insertionBoundaryAtTime, insertVideoAtTime, moveVideoToTime, removeVideoAtIndex } from '../lib/timelinePlacement';
 import { CAPTION_FONT_FAMILIES, CAPTION_LOOKS, CAPTION_LOOK_CATEGORIES, type CaptionLook } from '../lib/captionLooks';
 import { drawVideoComposition } from '../lib/composition';
 import type { PageProps } from '../App';
@@ -38,6 +39,11 @@ type AnyItem = {
   auto_edit?: boolean; auto_edit_clip_id?: string; kind?: string;
 };
 type Selection = { track: TrackKey; index: number } | null;
+type TimelineDragPayload =
+  | { kind: 'media'; id: string }
+  | { kind: 'clip'; id: string }
+  | { kind: 'timeline'; track: TrackKey; index: number };
+type TimelineDropMarker = { track: TrackKey; time: number };
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -216,6 +222,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
   const [autoEditOptions, setAutoEditOptions] = useState<AutoEditOptions>(DEFAULT_AUTO_EDIT);
   const [autoEditSettingsLoaded, setAutoEditSettingsLoaded] = useState(false);
   const [deletingMediaId, setDeletingMediaId] = useState<string | null>(null);
+  const [dropMarker, setDropMarker] = useState<TimelineDropMarker | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const stageCanvasRef = useRef<HTMLCanvasElement>(null);
   const stageAreaRef = useRef<HTMLDivElement>(null);
@@ -223,6 +230,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
   const layoutResizeRef = useRef<ActiveLayoutResize | null>(null);
   const captionDragRef = useRef<{ index: number; pointerId: number } | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
+  const timelineDragRef = useRef<TimelineDragPayload | null>(null);
   const timelineStateRef = useRef(timeline);
   const projectStateRef = useRef({ id: projectId, name: projectName });
   const scrubbingRef = useRef(false);
@@ -468,37 +476,27 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     setPlaying(false);
   };
 
-  const replaceTimelineClip = (item: VideoItem) => {
-    const next = structuredClone(timelineStateRef.current);
-    const replacedClipIds = new Set(next.tracks.video.map((video) => video.clip_id).filter((id): id is string => Boolean(id)));
-    const replacedVideoIds = new Set(next.tracks.video.flatMap((video) => [video.id, video.clip_id]).filter((id): id is string => Boolean(id)));
-    next.tracks.video = [item];
-    next.tracks.captions = next.tracks.captions.filter((caption) =>
-      (!caption.auto_edit_clip_id || !replacedClipIds.has(caption.auto_edit_clip_id))
-      && (!caption.auto_caption_video_id || !replacedVideoIds.has(caption.auto_caption_video_id)),
-    );
-    next.tracks.stickers = next.tracks.stickers.filter((sticker) => !sticker.auto_edit_clip_id || !replacedClipIds.has(sticker.auto_edit_clip_id));
-    next.tracks.audio = next.tracks.audio.filter((audio) => !audio.auto_edit_clip_id || !replacedClipIds.has(audio.auto_edit_clip_id));
-    commitTimeline(next);
-    focusVideoItem(0, 0);
-  };
-
   const removeSelected = () => {
     if (!selected) return;
-    const item = (timeline.tracks[selected.track] as unknown as AnyItem[])[selected.index];
-    mutate((draft) => {
-      (draft.tracks[selected.track] as unknown as AnyItem[]).splice(selected.index, 1);
-      if (selected.track === 'video') {
-        const videoId = item?.id || item?.clip_id;
-        if (videoId) draft.tracks.captions = draft.tracks.captions.filter((caption) => caption.auto_caption_video_id !== videoId);
+    const item = (timelineStateRef.current.tracks[selected.track] as unknown as AnyItem[])[selected.index];
+    if (selected.track === 'video') {
+      const next = removeVideoAtIndex(timelineStateRef.current, selected.index).timeline;
+      const videoId = item?.id || item?.clip_id;
+      if (videoId) next.tracks.captions = next.tracks.captions.filter((caption) => caption.auto_caption_video_id !== videoId);
+      if (item?.auto_edit && item.clip_id && !next.tracks.video.some((entry) => entry.clip_id === item.clip_id)) {
+        next.tracks.captions = next.tracks.captions.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
+        next.tracks.stickers = next.tracks.stickers.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
+        next.tracks.audio = next.tracks.audio.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
       }
-      if (selected.track === 'video' && item?.auto_edit && item.clip_id
-        && !draft.tracks.video.some((entry) => entry.clip_id === item.clip_id)) {
-        draft.tracks.captions = draft.tracks.captions.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
-        draft.tracks.stickers = draft.tracks.stickers.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
-        draft.tracks.audio = draft.tracks.audio.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
-      }
-    });
+      commitTimeline(next);
+      if (next.tracks.video.length) {
+        const index = Math.min(selected.index, next.tracks.video.length - 1);
+        const start = next.tracks.video.slice(0, index).reduce((sum, clip) => sum + clip.duration, 0);
+        focusVideoItem(index, start);
+      } else setSelected(null);
+      return;
+    }
+    mutate((draft) => { (draft.tracks[selected.track] as unknown as AnyItem[]).splice(selected.index, 1); });
     setSelected(null);
   };
 
@@ -796,7 +794,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     if (added) await autoCaptionsForMedia(source);
   };
 
-  const addMediaToTimeline = async (item: Media): Promise<boolean> => {
+  const addMediaToTimeline = async (item: Media, atTime = playhead): Promise<boolean> => {
     const video: VideoItem = {
       id: `media-${item.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       media_id: item.id,
@@ -805,26 +803,20 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       duration: Math.min(30, Math.max(3, item.duration || 10)),
       label: item.title,
     };
+    let current = timelineStateRef.current;
     if (!projectStateRef.current.id) {
       try {
-        const created = await api.createProject({ name: item.title, media_id: item.id });
-        const next = created.project.timeline || emptyTimeline();
-        if (next.tracks.video.length) next.tracks.video[0] = { ...next.tracks.video[0], id: video.id, media_id: item.id };
-        else next.tracks.video.push(video);
+        const created = await api.createProject({ name: item.title });
+        current = created.project.timeline || emptyTimeline();
         projectStateRef.current = { id: created.project.id, name: created.project.name };
         setProjectId(created.project.id);
         setProjectName(created.project.name);
-        commitTimeline(next);
-        focusVideoItem(0, 0);
       } catch (error) { notify(String(error)); return false; }
-    } else {
-      const next = structuredClone(timelineStateRef.current);
-      const start = next.tracks.video.reduce((sum, clip) => sum + clip.duration, 0);
-      next.tracks.video.push(video);
-      commitTimeline(next);
-      focusVideoItem(next.tracks.video.length - 1, start);
     }
-    notify(`${item.title} added to the timeline.`);
+    const placed = insertVideoAtTime(current, video, atTime);
+    commitTimeline(placed.timeline);
+    focusVideoItem(placed.index, placed.start);
+    notify(`Added “${item.title}” at ${formatClock(placed.start)}. Drag clips on the video track to reorder them.`);
     return true;
   };
 
@@ -847,7 +839,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     finally { setDeletingMediaId(null); }
   };
 
-  const addClipToTimeline = async (clip: Candidate): Promise<boolean> => {
+  const addClipToTimeline = async (clip: Candidate, atTime = playhead): Promise<boolean> => {
     if (!clip.id) { notify('This AI clip has no saved clip ID yet.'); return false; }
     const sourceMedia = media.find((item) => item.id === clip.media_id);
     if (!sourceMedia) { notify('The source video for this clip is no longer in your library.'); return false; }
@@ -866,23 +858,105 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       outline_style: clip.outline_style,
       crop_path: clip.crop_path || [],
     };
+    let current = timelineStateRef.current;
     if (!projectStateRef.current.id) {
       try {
-        const created = await api.createProject({ name: clip.title.slice(0, 60), clip_id: clip.id });
-        const next = created.project.timeline || emptyTimeline();
-        if (next.tracks.video.length) next.tracks.video[0] = { ...next.tracks.video[0], ...video };
-        else next.tracks.video.push(video);
+        const created = await api.createProject({ name: clip.title.slice(0, 60) });
+        current = created.project.timeline || emptyTimeline();
         projectStateRef.current = { id: created.project.id, name: created.project.name };
         setProjectId(created.project.id);
         setProjectName(created.project.name);
-        commitTimeline(next);
-        focusVideoItem(0, 0);
       } catch (error) { notify(String(error)); return false; }
-    } else {
-      replaceTimelineClip(video);
     }
-    notify(`“${clip.title}” selected for preview and replaced the timeline clip.`);
+    const placed = insertVideoAtTime(current, video, atTime);
+    commitTimeline(placed.timeline);
+    focusVideoItem(placed.index, placed.start);
+    notify(`Added “${clip.title}” at ${formatClock(placed.start)} without replacing the other clips.`);
     return true;
+  };
+
+  const startAssetDrag = (event: ReactDragEvent<HTMLButtonElement>, payload: Extract<TimelineDragPayload, { kind: 'media' | 'clip' }>) => {
+    timelineDragRef.current = payload;
+    event.dataTransfer.effectAllowed = 'copy';
+    event.dataTransfer.setData('text/plain', `${payload.kind}:${payload.id}`);
+  };
+
+  const startTimelineItemDrag = (event: ReactDragEvent<HTMLButtonElement>, track: TrackKey, index: number) => {
+    timelineDragRef.current = { kind: 'timeline', track, index };
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', `timeline:${track}:${index}`);
+  };
+
+  const endTimelineDrag = () => {
+    timelineDragRef.current = null;
+    setDropMarker(null);
+  };
+
+  const canDropTimelineItem = (payload: TimelineDragPayload, track: TrackKey) => {
+    if (payload.kind === 'media' || payload.kind === 'clip') return track === 'video';
+    return payload.track === track;
+  };
+
+  const timelineTimeFromDrop = (event: ReactDragEvent<HTMLDivElement>) => {
+    const node = timelineRef.current;
+    if (!node) return 0;
+    const raw = (event.clientX - node.getBoundingClientRect().left + node.scrollLeft) / zoom;
+    const duration = timelineStateRef.current.tracks.video.reduce((sum, item) => sum + Math.max(0, item.duration || 0), 0);
+    return clamp(raw, 0, duration);
+  };
+
+  const handleTimelineDragOver = (track: TrackKey, event: ReactDragEvent<HTMLDivElement>) => {
+    const payload = timelineDragRef.current;
+    if (!payload || !canDropTimelineItem(payload, track)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = payload.kind === 'timeline' ? 'move' : 'copy';
+    const time = timelineTimeFromDrop(event);
+    const markerTime = payload.kind === 'timeline' && payload.track === 'video'
+      ? insertionBoundaryAtTime(timelineStateRef.current.tracks.video, time).time
+      : time;
+    setDropMarker({ track, time: markerTime });
+  };
+
+  const handleTimelineDrop = async (track: TrackKey, event: ReactDragEvent<HTMLDivElement>) => {
+    const payload = timelineDragRef.current;
+    if (!payload || !canDropTimelineItem(payload, track)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const time = timelineTimeFromDrop(event);
+    try {
+      if (payload.kind === 'media') {
+        const item = media.find((entry) => entry.id === payload.id);
+        if (item) await addMediaToTimeline(item, time);
+        else notify('That media item is no longer in the library.');
+      } else if (payload.kind === 'clip') {
+        const clip = clips.find((entry) => entry.id === payload.id);
+        if (clip) await addClipToTimeline(clip, time);
+        else notify('That AI clip is no longer available.');
+      } else if (payload.track === 'video') {
+        const placement = moveVideoToTime(timelineStateRef.current, payload.index, time);
+        if (placement.changed) {
+          commitTimeline(placement.timeline);
+          focusVideoItem(placement.index, placement.start);
+          notify(`Video clip moved to ${formatClock(placement.start)}.`);
+        }
+      } else {
+        const current = timelineStateRef.current;
+        const currentItem = (current.tracks[payload.track] as unknown as AnyItem[])[payload.index];
+        if (!currentItem || currentItem.start === undefined || currentItem.end === undefined) return;
+        const duration = Math.max(0.05, currentItem.end - currentItem.start);
+        const timelineDuration = current.tracks.video.reduce((sum, item) => sum + Math.max(0, item.duration || 0), 0);
+        const start = clamp(time, 0, Math.max(0, timelineDuration - duration));
+        const next = structuredClone(current);
+        const moved = (next.tracks[payload.track] as unknown as AnyItem[])[payload.index];
+        moved.start = start;
+        moved.end = start + duration;
+        commitTimeline(next);
+        setSelected({ track: payload.track, index: payload.index });
+        setPlayhead(start);
+        notify(`${payload.track.slice(0, 1).toUpperCase()}${payload.track.slice(1)} item moved to ${formatClock(start)}.`);
+      }
+    } catch (error) { notify(String(error)); }
+    finally { endTimelineDrag(); }
   };
 
   useEffect(() => {
@@ -1070,9 +1144,16 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                 <div className="asset-list">
                   {media.map((item) => (
                     <div key={item.id} className="asset-row-group">
-                      <button className="asset-row" onClick={() => void addMediaToTimeline(item)} aria-label={`Add ${item.title} to the timeline`}>
+                      <button
+                        className="asset-row" draggable
+                        onDragStart={(event) => startAssetDrag(event, { kind: 'media', id: item.id })}
+                        onDragEnd={endTimelineDrag}
+                        onClick={() => void addMediaToTimeline(item)}
+                        aria-label={`Add ${item.title} at the playhead or drag it to the video track`}
+                        title="Click to add at the playhead, or drag onto the video track to choose a position"
+                      >
                         {item.thumbnail ? <img src={mediaUrl(item.thumbnail)} alt="" /> : <Film size={20} />}
-                        <span><strong>{item.title}</strong><small>{formatClock(item.duration)} · Add to timeline</small></span>
+                        <span><strong>{item.title}</strong><small>{formatClock(item.duration)} · Add at playhead or drag to place</small></span>
                       </button>
                       <button
                         className="icon-btn asset-caption-action"
@@ -1096,16 +1177,24 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
             )}
             {tab === 'clips' && (
               <div className="asset-list">
-                <p className="hint">Click a clip to preview it. It replaces the video clip currently on the timeline.</p>
+                <p className="hint">Click to add an AI clip at the playhead, or drag it onto the video track to choose a position. Existing clips stay in place.</p>
                 {clips.length === 0 && <p className="hint">No AI clips yet. Run AI Clipper first; you can keep editing here while it works.</p>}
                 {clips.map((clip, index) => {
                   const sourceMedia = media.find((item) => item.id === clip.media_id);
                   const isSelected = selected?.track === 'video' && timeline.tracks.video[selected.index]?.clip_id === clip.id;
                   return (
                     <div key={clip.id || `${clip.media_id}-${index}`} className="asset-row-group">
-                      <button className={`asset-row ${isSelected ? 'is-selected' : ''}`} aria-pressed={isSelected} disabled={!sourceMedia || !clip.id} onClick={() => void addClipToTimeline(clip)}>
+                      <button
+                        className={`asset-row ${isSelected ? 'is-selected' : ''}`} aria-pressed={isSelected}
+                        draggable={!sourceMedia ? undefined : true}
+                        onDragStart={(event) => { if (clip.id) startAssetDrag(event, { kind: 'clip', id: clip.id }); }}
+                        onDragEnd={endTimelineDrag}
+                        disabled={!sourceMedia || !clip.id}
+                        onClick={() => void addClipToTimeline(clip)}
+                        title="Click to add at the playhead, or drag onto the video track to choose a position"
+                      >
                         {sourceMedia?.thumbnail ? <img src={mediaUrl(sourceMedia.thumbnail)} alt="" /> : <Clapperboard size={20} />}
-                        <span><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small><small>{clip.output ? 'Rendered MP4 · click to preview and replace' : 'Click to preview and replace timeline clip'}</small></span>
+                        <span><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small><small>{clip.output ? 'Rendered MP4 · add at playhead or drag to place' : 'Add at playhead or drag to place'}</small></span>
                       </button>
                       <button className="icon-btn asset-caption-action" title="Caption this AI clip offline" aria-label={`Generate offline captions for ${clip.title}`} disabled={!sourceMedia || !clip.id || busy} onClick={() => { setTab('captions'); setInspectorTab('caption'); if (sourceMedia) void autoCaptionsForClip(clip, sourceMedia); }}><Captions size={14} /></button>
                     </div>
@@ -1128,9 +1217,15 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                   {media.map((item) => {
                     const linkedClips = timeline.tracks.video.filter((video) => video.media_id === item.id || video.path === item.path).length;
                     return <div key={item.id} className="asset-row-group caption-source-row">
-                      <button className="asset-row" onClick={() => void addMediaToTimeline(item)} title="Add this source to the timeline">
+                      <button
+                        className="asset-row" draggable
+                        onDragStart={(event) => startAssetDrag(event, { kind: 'media', id: item.id })}
+                        onDragEnd={endTimelineDrag}
+                        onClick={() => void addMediaToTimeline(item)}
+                        title="Click to add at the playhead, or drag onto the video track to choose a position"
+                      >
                         {item.thumbnail ? <img src={mediaUrl(item.thumbnail)} alt="" /> : <Film size={19} />}
-                        <span><strong>{item.title}</strong><small>{linkedClips ? `${linkedClips} timeline clip${linkedClips === 1 ? '' : 's'} · local Whisper` : 'Not on timeline · adds before captioning'}</small></span>
+                        <span><strong>{item.title}</strong><small>{linkedClips ? `${linkedClips} timeline clip${linkedClips === 1 ? '' : 's'} · local Whisper` : 'Not on timeline · click to add or drag to place'}</small></span>
                       </button>
                       <button className="icon-btn asset-caption-action" title="Generate or refresh offline captions" aria-label={`Generate offline captions for ${item.title}`} disabled={busy} onClick={() => void autoCaptionsForMedia(item)}><Captions size={14} /></button>
                     </div>;
@@ -1467,7 +1562,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       />
       <div className="timeline-panel">
         <div className="timeline-toolbar">
-          <div><strong>Timeline</strong> <Pill tone="muted">{formatClock(total)}</Pill></div>
+          <div className="timeline-title"><strong>Timeline</strong> <Pill tone="muted">{formatClock(total)}</Pill><small>Move the playhead, click an asset to insert, or drag clips and overlays to position them.</small></div>
           <div className="timeline-actions">
             <div className="timeline-tools">
               <button className="icon-btn" title="Auto captions with offline Whisper" aria-label="Auto captions" disabled={busy} onClick={() => void autoCaptions()}><Captions size={15} /></button>
@@ -1503,7 +1598,11 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
               </div>
               {(['video', 'captions', 'stickers', 'audio'] as TrackKey[]).map((track) => (
                 <div className="track" key={track}>
-                  <div className="track-lane">
+                  <div
+                    className="track-lane"
+                    onDragOver={(event) => handleTimelineDragOver(track, event)}
+                    onDrop={(event) => void handleTimelineDrop(track, event)}
+                  >
                     {(timeline.tracks[track] as unknown as AnyItem[]).map((item, index) => {
                       const start = track === 'video'
                         ? timeline.tracks.video.slice(0, index).reduce((sum, part) => sum + part.duration, 0)
@@ -1514,17 +1613,22 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                           key={`${track}-${index}`}
                           className={`clip-block block-${track} ${selected?.track === track && selected.index === index ? 'selected' : ''}`}
                           style={{ left: start * zoom, width: Math.max(18, duration * zoom) }}
+                          draggable
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onDragStart={(event) => startTimelineItemDrag(event, track, index)}
+                          onDragEnd={endTimelineDrag}
                           onClick={() => {
                             setSelected({ track, index });
                             setPlayhead(start + 0.05);
                             setInspectorTab(track === 'captions' ? 'caption' : 'edit');
                           }}
-                          title={item.label || item.text || item.path}
+                          title={`${item.label || item.text || item.path || 'Timeline item'} · drag to reposition`}
                         >
                           {item.text || item.label || (item.path || 'clip').split(/[\\/]/).pop()}
                         </button>
                       );
                     })}
+                    {dropMarker?.track === track && <div className="timeline-drop-marker" style={{ left: dropMarker.time * zoom }} aria-hidden="true" />}
                   </div>
                 </div>
               ))}

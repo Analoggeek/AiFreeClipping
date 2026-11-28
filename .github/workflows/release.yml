@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 5.2.6)'
+        description: 'Release version (e.g. 5.2.7)'
         required: true
-        default: '5.2.6'
+        default: '5.2.7'
       only_platform:
         description: 'Build only one platform (leave all for the full matrix)'
         required: false
@@ -21,6 +21,11 @@ on:
         description: 'Comma-separated run IDs to publish (skips builds, e.g. 123,456)'
         required: false
         default: ''
+      build_only:
+        description: 'Build and verify installers without publishing a GitHub Release (safe default)'
+        required: false
+        type: boolean
+        default: true
   push:
     tags:
       - 'v*'
@@ -316,7 +321,7 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs: build
-    if: ${{ (inputs.only_platform == '' || inputs.only_platform == 'all') && inputs.publish_from_runs == '' }}
+    if: ${{ (inputs.only_platform == '' || inputs.only_platform == 'all') && inputs.publish_from_runs == '' && inputs.build_only != true }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

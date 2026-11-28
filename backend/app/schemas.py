@@ -24,6 +24,11 @@ class DeleteClipsRequest(BaseModel):
     clip_ids: list[str] = Field(default_factory=list)
 
 
+class ClearDownloadsRequest(BaseModel):
+    folder: str
+    confirmed: bool = False
+
+
 class ComfyCheckpointRequest(BaseModel):
     path: str
 

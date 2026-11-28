@@ -10,6 +10,7 @@ import json
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import tarfile
 import time
@@ -26,7 +27,7 @@ from .net import configure_ca_bundle, urlopen as https_open
 configure_ca_bundle()
 
 OLLAMA_INSTALLER = "https://ollama.com/download"
-OLLAMA_VERSION = "v0.40.18"
+OLLAMA_VERSION = "v0.40.19"
 HF = "https://huggingface.co"
 YOLOX_ONNX = "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx"
 PIPER_VOICE = (
@@ -179,11 +180,16 @@ def _ollama_alive() -> bool:
 
 
 def _ollama_binary() -> Path | None:
-    for candidate in (
-        CACHE / "ollama" / ("ollama.exe" if os.name == "nt" else "ollama"),
+    executable = "ollama.exe" if os.name == "nt" else "ollama"
+    configured = db.get_setting("ollama_binary", "")
+    candidates = [
+        Path(configured).expanduser() if configured else None,
+        _models_root() / "ollama" / executable,
+        CACHE / "ollama" / executable,
         Path(shutil.which("ollama") or "") if shutil.which("ollama") else None,
-    ):
-        if candidate and candidate.exists():
+    ]
+    for candidate in candidates:
+        if candidate and candidate.is_file():
             return candidate
     return None
 
@@ -193,10 +199,18 @@ def _safe_extract(archive: tarfile.TarFile | zipfile.ZipFile, root: Path, member
     for member in members:
         name = getattr(member, "filename", getattr(member, "name", ""))
         destination = (root / name).resolve()
-        if not str(destination).startswith(str(root)):
+        try:
+            destination.relative_to(root)
+        except ValueError:
             continue
         if getattr(member, "is_dir", lambda: False)():
             destination.mkdir(parents=True, exist_ok=True)
+            continue
+        if isinstance(archive, zipfile.ZipFile):
+            mode = (member.external_attr >> 16) & 0o170000
+            if mode == stat.S_IFLNK:
+                continue
+        elif not member.isfile():
             continue
         destination.parent.mkdir(parents=True, exist_ok=True)
         if isinstance(archive, zipfile.ZipFile):
@@ -209,47 +223,86 @@ def _safe_extract(archive: tarfile.TarFile | zipfile.ZipFile, root: Path, member
                     shutil.copyfileobj(source, target)
 
 
+def _ollama_archive(system: str | None = None, machine: str | None = None) -> tuple[str, str]:
+    """Select an official archive published for the running OS and architecture."""
+    system = (system or platform.system()).lower()
+    machine = (machine or platform.machine()).lower()
+    base = f"https://github.com/ollama/ollama/releases/download/{OLLAMA_VERSION}"
+    if system == "darwin":
+        return f"{base}/ollama-darwin.tgz", "ollama.tgz"
+    if machine in {"arm64", "aarch64"}:
+        arch = "arm64"
+    elif machine in {"x86_64", "amd64", "x64"}:
+        arch = "amd64"
+    else:
+        raise RuntimeError(f"Automatic Ollama runtime installation is not supported on {machine}.")
+    if system == "windows":
+        return f"{base}/ollama-windows-{arch}.zip", "ollama.zip"
+    if system == "linux":
+        return f"{base}/ollama-linux-{arch}.tar.zst", "ollama.tar.zst"
+    raise RuntimeError(f"Automatic Ollama runtime installation is not supported on {system}.")
+
+
+def _extract_zstd_tar(downloaded: Path, root: Path) -> None:
+    """Stream-extract Ollama's Linux tar.zst without writing a second multi-GB tar."""
+    try:
+        import zstandard  # type: ignore
+    except ImportError:
+        zstd = shutil.which("zstd")
+        if not zstd:
+            raise RuntimeError(
+                "Cannot unpack the Ollama Linux runtime: zstandard support is missing. "
+                "Install the app's runtime update or add the zstd command to PATH, then retry."
+            )
+        command = [zstd, "-d", "-c", str(downloaded)]
+        process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+        if process.stdout is None:
+            process.terminate()
+            process.wait()
+            raise RuntimeError("Cannot read the decompressed Ollama archive stream.")
+        try:
+            with process.stdout:
+                with tarfile.open(fileobj=process.stdout, mode="r|") as archive:
+                    _safe_extract(archive, root, archive)
+            if process.wait() != 0:
+                raise RuntimeError("The zstd command could not decompress the Ollama runtime archive.")
+        except Exception:
+            if process.poll() is None:
+                process.terminate()
+            process.wait()
+            raise
+        return
+
+    with downloaded.open("rb") as compressed:
+        with zstandard.ZstdDecompressor().stream_reader(compressed) as decompressed:
+            with tarfile.open(fileobj=decompressed, mode="r|") as archive:
+                _safe_extract(archive, root, archive)
+
+
 def _ensure_ollama(progress: Callable[[float, str], None]) -> None:
     """Download and start the local Ollama runtime with no user action required."""
     if _ollama_alive():
         return
     binary = _ollama_binary()
     if not binary:
-        system = platform.system().lower()
-        machine = platform.machine().lower()
         root = _models_root() / "ollama"
         root.mkdir(parents=True, exist_ok=True)
-        base = f"https://github.com/ollama/ollama/releases/download/{OLLAMA_VERSION}"
-        if system == "darwin":
-            url, archive_name = f"{base}/ollama-darwin.tgz", "ollama.tgz"
-        elif system == "windows":
-            arch = "arm64" if machine in {"arm64", "aarch64"} else "amd64"
-            url, archive_name = f"{base}/ollama-windows-{arch}.zip", "ollama.zip"
-        else:
-            arch = "arm64" if machine in {"arm64", "aarch64"} else "amd64"
-            url = f"{base}/ollama-linux-{arch}.tar.zst"
-            archive_name = "ollama.tar.zst"
-            if not shutil.which("zstd"):
-                # Older builds ship a plain gzip archive; no extra tool required.
-                url = f"https://github.com/ollama/ollama/releases/download/v0.5.7/ollama-linux-{arch}.tgz"
-                archive_name = "ollama.tgz"
+        url, archive_name = _ollama_archive()
         downloaded = root / archive_name
         progress(8, "Downloading the local Ollama runtime…")
         _download(url, downloaded, lambda pct, msg: progress(8 + pct * 0.5, msg), "Ollama runtime")
         progress(62, "Installing the local Ollama runtime…")
-        if archive_name.endswith(".zip"):
-            with zipfile.ZipFile(downloaded) as archive:
-                _safe_extract(archive, root, archive.infolist())
-        elif archive_name.endswith(".tar.zst"):
-            plain = downloaded.with_suffix(".tar")
-            subprocess.run(["zstd", "-dc", str(downloaded), "-o", str(plain)], check=True)
-            with tarfile.open(plain) as archive:
-                _safe_extract(archive, root, archive.getmembers())
-            plain.unlink(missing_ok=True)
-        else:
-            with tarfile.open(downloaded, "r:gz") as archive:
-                _safe_extract(archive, root, archive.getmembers())
-        downloaded.unlink(missing_ok=True)
+        try:
+            if archive_name.endswith(".zip"):
+                with zipfile.ZipFile(downloaded) as archive:
+                    _safe_extract(archive, root, archive.infolist())
+            elif archive_name.endswith(".tar.zst"):
+                _extract_zstd_tar(downloaded, root)
+            else:
+                with tarfile.open(downloaded, "r:gz") as archive:
+                    _safe_extract(archive, root, archive.getmembers())
+        finally:
+            downloaded.unlink(missing_ok=True)
         candidates = sorted(root.rglob("ollama.exe" if os.name == "nt" else "ollama"))
         binary = next((item for item in candidates if item.is_file()), None)
         if binary is None:
@@ -404,7 +457,11 @@ async def status() -> list[dict[str, Any]]:
     for model in CATALOG:
         installed = model["id"] in persisted
         if model["provider"] == "Ollama":
-            installed = installed or any(model["id"].split(":")[0] in name for name in installed_llm)
+            selected = str(model["id"])
+            installed = installed or any(
+                name == selected or name.startswith(f"{selected}:")
+                for name in installed_llm
+            )
         elif model["provider"] == "faster-whisper":
             short = model["id"].replace("whisper-", "models--Systran--faster-whisper-")
             folder = _whisper_dir(model["id"])

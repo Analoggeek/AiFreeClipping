@@ -25,7 +25,7 @@ from .db import db, dumps, now, uid
 from .jobs import jobs
 from .schemas import (
     ApplyEffectsRequest, AssetDownloadRequest, AssetSearchRequest, AutoEditRequest, ClipProposalRequest,
-    ComfyCheckpointRequest, DeleteClipsRequest, DownloadRequest, ExportAllRequest, ExportRequest,
+    ClearDownloadsRequest, ComfyCheckpointRequest, DeleteClipsRequest, DownloadRequest, ExportAllRequest, ExportRequest,
     FolderPatch, ImageRequest, ImportRequest, ModelInstallRequest, ProjectCreate, ProjectUpdate,
     RegionSelection, RenderRequest, SettingsPatch,
     TranscribeRequest, VisionRequest, YouTubeUploadRequest,
@@ -603,12 +603,16 @@ def _file_is_referenced(
     path: str | Path,
     *,
     exclude_media_id: str | None = None,
+    exclude_media_ids: set[str] | None = None,
     exclude_clip_id: str | None = None,
 ) -> bool:
     """Keep a shared source/export file while any other record or project uses it."""
     target = Path(path).expanduser()
+    excluded_media_ids = set(exclude_media_ids or ())
+    if exclude_media_id:
+        excluded_media_ids.add(exclude_media_id)
     for row in db.query("SELECT id,path FROM media WHERE path IS NOT NULL"):
-        if row.get("id") != exclude_media_id and row.get("path") and _same_file(target, row["path"]):
+        if row.get("id") not in excluded_media_ids and row.get("path") and _same_file(target, row["path"]):
             return True
     # Rendered clip records survive library-media removal; keep their source
     # available so the clip can still be reopened or re-rendered later.
@@ -1350,10 +1354,19 @@ def folder_map() -> dict[str, str]:
         "downloads": str(DOWNLOADS), "exports": str(EXPORTS), "assets": str(ASSETS),
         "cache": str(CACHE), "clips": str(CLIPS), "models": str(CACHE),
     }
-    for key in ("downloads", "exports", "models", "clips"):
-        custom = db.get_setting(f"{key}_folder", "")
+    setting_names = {
+        "downloads": "download_folder", "exports": "exports_folder",
+        "models": "models_folder", "clips": "clips_folder",
+    }
+    for key, setting in setting_names.items():
+        custom = db.get_setting(setting, "")
         if custom:
             resolved[key] = custom
+            if key == "downloads":
+                try:
+                    resolved[key] = str(Path(custom).expanduser().resolve(strict=False))
+                except (OSError, RuntimeError):
+                    pass
     return resolved
 
 
@@ -1377,6 +1390,111 @@ def set_folder(payload: FolderPatch):
     target.mkdir(parents=True, exist_ok=True)
     db.set_setting(key, str(target))
     return ok(folders=folder_map())
+
+
+@app.delete("/api/downloads/storage")
+def clear_download_storage(payload: ClearDownloadsRequest):
+    if not payload.confirmed:
+        return JSONResponse({"detail": "Explicit confirmation is required before clearing downloaded files."}, status_code=400)
+
+    effective_folder = folder_map()["downloads"]
+    try:
+        root = Path(effective_folder).expanduser().resolve(strict=False)
+        requested_folder = Path(payload.folder).expanduser().resolve(strict=False)
+    except (OSError, RuntimeError, ValueError):
+        return JSONResponse(
+            {"detail": "The downloads folder could not be resolved safely. Nothing was deleted."},
+            status_code=409,
+        )
+    if requested_folder != root:
+        return JSONResponse(
+            {"detail": "The downloads folder changed since confirmation. Review the current folder and try again."},
+            status_code=409,
+        )
+    if not root.is_dir():
+        return ok(
+            folder=effective_folder, folder_exists=False, media_removed=0,
+            media_kept_shared=0, media_kept_error=0, files_deleted=0,
+            files_kept_shared=0, files_missing=0, file_errors=[],
+        )
+
+    candidates: list[tuple[dict[str, Any], Path]] = []
+    for row in db.query(
+        "SELECT id,path FROM media WHERE source_url IS NOT NULL AND source_url!='' AND path IS NOT NULL"
+    ):
+        source = Path(row.get("path") or "").expanduser()
+        try:
+            resolved = source.resolve(strict=False)
+            resolved.relative_to(root)
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if resolved != root:
+            candidates.append((row, resolved))
+
+    candidate_ids = {row["id"] for row, _path in candidates}
+    unique_paths = {path for _row, path in candidates}
+    files_deleted = 0
+    files_kept_shared = 0
+    files_missing = 0
+    file_errors: list[str] = []
+    file_status: dict[Path, str] = {}
+    for source in sorted(unique_paths, key=str):
+        try:
+            source.stat()
+        except FileNotFoundError:
+            files_missing += 1
+            file_status[source] = "missing"
+            continue
+        except OSError as exc:
+            file_errors.append(f"{source}: {exc}")
+            file_status[source] = "error"
+            continue
+        if not source.is_file():
+            file_errors.append(f"{source}: not a regular file")
+            file_status[source] = "error"
+            continue
+        try:
+            if _file_is_referenced(source, exclude_media_ids=candidate_ids):
+                files_kept_shared += 1
+                file_status[source] = "shared"
+            else:
+                source.unlink()
+                files_deleted += 1
+                file_status[source] = "deleted"
+        except FileNotFoundError:
+            files_missing += 1
+            file_status[source] = "missing"
+        except OSError as exc:
+            file_errors.append(f"{source}: {exc}")
+            file_status[source] = "error"
+
+    media_removed = 0
+    media_kept_shared = 0
+    media_kept_error = 0
+    for row, source in candidates:
+        status = file_status.get(source, "error")
+        if status == "shared":
+            media_kept_shared += 1
+            continue
+        if status == "error":
+            media_kept_error += 1
+            continue
+        media_id = row["id"]
+        db.execute("DELETE FROM analyses WHERE media_id=?", (media_id,))
+        db.execute("DELETE FROM clips WHERE media_id=? AND (output IS NULL OR output='')", (media_id,))
+        try:
+            (CACHE / "thumbs" / f"{media_id}.jpg").unlink(missing_ok=True)
+        except OSError as exc:
+            file_errors.append(f"thumbnail {media_id}: {exc}")
+        db.delete("media", "id", media_id)
+        media_removed += 1
+
+    return ok(
+        folder=effective_folder, folder_exists=True, media_removed=media_removed,
+        media_kept_shared=media_kept_shared, media_kept_error=media_kept_error,
+        files_deleted=files_deleted, files_kept_shared=files_kept_shared,
+        files_missing=files_missing, file_errors=file_errors,
+    )
 
 
 def main() -> None:

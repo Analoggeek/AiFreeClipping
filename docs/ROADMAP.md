@@ -1,5 +1,13 @@
 # Roadmap
 
+## Candidate work for v5.2.7 — not released
+
+- Confirmed, reference-safe clearing of app-managed downloads from the effective folder; imported originals and still-referenced files/library entries are retained
+- Flexible timeline insertion at the playhead or a drag-selected point, clip reordering and movable overlays with linked timing preserved
+- Ollama v0.40.19 asset mapping and streaming Linux `.tar.zst` extraction, covered by mocked platform/model-install tests
+- Installer compression tuned where supported; Windows, macOS and Linux targets unchanged and macOS DMGs kept as UDRO
+- No v5.2.7 GitHub Release or release assets published
+
 ## Shipped in v5.2.6
 
 - Offline Whisper captions reuse cached transcripts, map word-level timings onto matching timeline clips, and keep each word editable
