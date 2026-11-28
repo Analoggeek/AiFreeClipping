@@ -196,11 +196,17 @@ jobs:
           DMG_COUNT="$(find release -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d '[:space:]')"
           ZIP_COUNT="$(find release -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d '[:space:]')"
           if [ "$DMG_COUNT" != "1" ] || [ "$ZIP_COUNT" != "1" ]; then
-            echo "Expected exactly one architecture-specific DMG and ZIP; found ${DMG_COUNT} DMG(s) and ${ZIP_COUNT} ZIP(s)" >&2
+            OUTPUT_LIST="$(printf '%s\n' "$ARTIFACT_LIST" | tr '\n' ',')"
+            echo "Expected exactly one architecture-specific DMG and ZIP; found ${DMG_COUNT} DMG(s) and ${ZIP_COUNT} ZIP(s): ${OUTPUT_LIST}" >&2
+            echo "::error title=Unexpected macOS artifact count::${DMG_COUNT} DMG(s), ${ZIP_COUNT} ZIP(s): ${OUTPUT_LIST}"
             exit 1
           fi
-          test -s "$DMG"
-          test -s "$ZIP"
+          if [ ! -s "$DMG" ] || [ ! -s "$ZIP" ]; then
+            OUTPUT_LIST="$(printf '%s\n' "$ARTIFACT_LIST" | tr '\n' ',')"
+            echo "Expected files missing: $DMG and/or $ZIP; found: ${OUTPUT_LIST}" >&2
+            echo "::error title=Expected architecture-specific macOS artifact missing::${DMG} and/or ${ZIP}; found: ${OUTPUT_LIST}"
+            exit 1
+          fi
           echo "Verifying image: $DMG"
           IMAGE_INFO="$(hdiutil imageinfo "$DMG")"
           printf '%s\n' "$IMAGE_INFO"
