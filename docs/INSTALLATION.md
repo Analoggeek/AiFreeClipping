@@ -1,15 +1,15 @@
 # Installation & offline setup
 
-## v6.0.0 installers
+## v6.0.1 installers
 
-The published [AI Clipper Pro v6.0.0 release](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v6.0.0) includes direct downloads for every supported target:
+The published [AI Clipper Pro v6.0.1 release](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v6.0.1) includes direct downloads for every supported target:
 
-- **Windows x64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-x64.exe)
-- **Windows ARM64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-arm64.exe)
-- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.zip)
-- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.zip)
-- **Linux x64:** [AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-x86_64.AppImage) · [Debian/Ubuntu DEB](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-amd64.deb)
-- [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/manifest.json)
+- **Windows x64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Windows-x64.exe)
+- **Windows ARM64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-arm64.zip)
+- **Linux x64:** [AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Linux-x86_64.AppImage) · [Debian/Ubuntu DEB](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Linux-amd64.deb)
+- [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/manifest.json)
 
 Installers are built by `scripts/release-all.sh` and `.github/workflows/release.yml`. Each includes the React UI, Electron shell, PyInstaller-bundled Python engine, FFmpeg, platform icons and app assets. The Windows ARM64 installer uses the x64 Python engine under Windows' x64 compatibility layer because the currently supported Python dependency set lacks a complete `win_arm64` wheel set. macOS DMGs are read-only and each DMG/ZIP is checked for a runnable, architecture-matched app bundle.
 

@@ -44,18 +44,18 @@ Most clipping tools upload your footage to someone else's cloud, charge per clip
 
 ## Quick start
 
-### 1. Install v6.0.0 (recommended)
+### 1. Install v6.0.1 (recommended)
 
-The v6.0.0 installers include the app, Python engine, FFmpeg and platform icons. Download the build for your machine:
+The v6.0.1 installers include the app, Python engine, FFmpeg and platform icons. Download the build for your machine:
 
-- **Windows x64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-x64.exe)
-- **Windows ARM64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Windows-arm64.exe)
-- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-x64.zip)
-- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-macOS-arm64.zip)
-- **Linux x64 AppImage:** [AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-x86_64.AppImage)
-- **Linux Debian/Ubuntu:** [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/AI-Clipper-Pro-6.0.0-Linux-amd64.deb)
+- **Windows x64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Windows-x64.exe)
+- **Windows ARM64:** [Installer (.exe)](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-arm64.zip)
+- **Linux x64 AppImage:** [AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [DEB package](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Linux-amd64.deb)
 
-[View the v6.0.0 release and all assets](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v6.0.0) · [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.0/manifest.json)
+[View the v6.0.1 release and all assets](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v6.0.1) · [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/manifest.json)
 
 The engine, FFmpeg and icons are bundled; model weights install from the app's **Local Models** page. If a macOS DMG will not mount, verify its checksum and use the matching ZIP. On first launch, remove the download quarantine with `xattr -cr "/Applications/AI Clipper Pro.app"` if macOS blocks it. [Latest release](https://github.com/Analoggeek/AiFreeClipping/releases/latest).
 
@@ -130,7 +130,7 @@ Auto Edit and batch exports budget worker and FFmpeg filter/codec threads togeth
 ## Build installers
 
 ```bash
-bash scripts/release-all.sh 6.0.0 --all
+bash scripts/release-all.sh 6.0.1 --all
 ```
 
 By default, the script builds and verifies the full eight-installer matrix (Windows x64/ARM64, macOS Intel/Apple Silicon DMG + ZIP, Linux x64 AppImage/DEB) in GitHub Actions without publishing. The all-target dispatch requires a clean working tree with the current branch pushed to `origin`, so CI builds the exact source revision. Add `--publish` only when the full matrix is ready; the workflow then creates the GitHub Release with checksums. See [docs/RELEASE_NOTES.md](docs/RELEASE_NOTES.md).

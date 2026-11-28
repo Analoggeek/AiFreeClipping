@@ -1,6 +1,6 @@
 # Roadmap
 
-## Candidate work for v6.0.1 — release in progress
+## Shipped in v6.0.1 — more responsive, reliable rendering
 
 - Bound Auto Edit and batch-export concurrency to a shared CPU budget, including FFmpeg codec and filter-graph threads
 - Reduce blur-fill cost by blurring a downscaled background while retaining a full-resolution foreground
