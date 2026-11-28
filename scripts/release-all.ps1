@@ -48,12 +48,29 @@ if ($All) {
 
 if ($All) {
   if (-not $CurrentBranch) { throw 'Cannot dispatch a release from a detached HEAD' }
+  $HeadSha = (git rev-parse HEAD).Trim()
+  $PreviousRunJson = gh run list --workflow release.yml --branch $CurrentBranch --limit 1 --json databaseId,headSha,event
+  $PreviousRuns = @()
+  if ($PreviousRunJson) { $PreviousRuns = @($PreviousRunJson | ConvertFrom-Json) }
+  $PreviousRun = $PreviousRuns | Select-Object -First 1
+  $PreviousRunId = if ($PreviousRun) { [string]$PreviousRun.databaseId } else { '' }
   $BuildOnly = 'true'
   if ($Publish) { $BuildOnly = 'false' }
   Invoke-Checked "gh workflow run release.yml --ref $CurrentBranch -f version=$Version -f build_only=$BuildOnly"
-  Start-Sleep -Seconds 8
-  $runId = (gh run list --workflow release.yml --branch $CurrentBranch --limit 1 --json databaseId --jq '.[0].databaseId')
-  if (-not $runId) { throw 'Could not find the dispatched GitHub Actions run' }
+  Write-Host 'Waiting for the new workflow run to appear…'
+  $runId = ''
+  for ($attempt = 0; $attempt -lt 30; $attempt++) {
+    $RunJson = gh run list --workflow release.yml --branch $CurrentBranch --limit 1 --json databaseId,headSha,event
+    $Runs = @()
+    if ($RunJson) { $Runs = @($RunJson | ConvertFrom-Json) }
+    $Candidate = $Runs | Select-Object -First 1
+    if ($Candidate -and [string]$Candidate.databaseId -ne $PreviousRunId -and $Candidate.headSha -eq $HeadSha -and $Candidate.event -eq 'workflow_dispatch') {
+      $runId = [string]$Candidate.databaseId
+      break
+    }
+    Start-Sleep -Seconds 2
+  }
+  if (-not $runId) { throw "Could not find a new workflow_dispatch run for $HeadSha" }
   Invoke-Checked "gh run watch $runId --exit-status"
   if (Test-Path release) { Remove-Item -Recurse -Force release }
   New-Item -ItemType Directory -Force release | Out-Null

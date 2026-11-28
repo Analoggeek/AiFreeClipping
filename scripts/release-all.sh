@@ -82,11 +82,23 @@ if [ "$MODE" = "ci" ]; then
   [ -n "$CURRENT_BRANCH" ] || { echo "Cannot dispatch a release from a detached HEAD" >&2; exit 1; }
   BUILD_ONLY=true
   if [ "$PUBLISH" -eq 1 ]; then BUILD_ONLY=false; fi
+  HEAD_SHA="$(git rev-parse HEAD)"
+  PREVIOUS_RUN_ID="$(gh run list --workflow release.yml --branch "$CURRENT_BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')"
   gh workflow run release.yml --ref "$CURRENT_BRANCH" -f version="$VERSION" -f build_only="$BUILD_ONLY"
-  echo "Waiting for the workflow to appear…"
-  sleep 8
-  RUN_ID="$(gh run list --workflow release.yml --branch "$CURRENT_BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')"
-  [ -n "$RUN_ID" ] || { echo "Could not find the dispatched run" >&2; exit 1; }
+  echo "Waiting for the new workflow run to appear…"
+  RUN_ID=""
+  for attempt in {1..30}; do
+    RUN_INFO="$(gh run list --workflow release.yml --branch "$CURRENT_BRANCH" --limit 1 --json databaseId,headSha,event --jq '.[0] | [.databaseId, .headSha, .event] | @tsv')"
+    IFS=$'\t' read -r CANDIDATE_ID CANDIDATE_SHA CANDIDATE_EVENT <<< "$RUN_INFO"
+    if [ -n "$CANDIDATE_ID" ] && [ "$CANDIDATE_ID" != "null" ] \
+      && [ "$CANDIDATE_ID" != "$PREVIOUS_RUN_ID" ] \
+      && [ "$CANDIDATE_SHA" = "$HEAD_SHA" ] && [ "$CANDIDATE_EVENT" = "workflow_dispatch" ]; then
+      RUN_ID="$CANDIDATE_ID"
+      break
+    fi
+    sleep 2
+  done
+  [ -n "$RUN_ID" ] || { echo "Could not find a new workflow_dispatch run for $HEAD_SHA" >&2; exit 1; }
   echo "Run ID: $RUN_ID — watch with: gh run view $RUN_ID"
   gh run watch "$RUN_ID" --exit-status
   rm -rf release
