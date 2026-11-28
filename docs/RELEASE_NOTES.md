@@ -1,5 +1,27 @@
 # Release notes
 
+## v6.0.1 — more responsive, reliable rendering
+
+### Download the installers
+
+The published [AI Clipper Pro v6.0.1 release](https://github.com/Analoggeek/AiFreeClipping/releases/tag/v6.0.1) includes direct downloads for every supported target:
+
+- **Windows x64:** [AI-Clipper-Pro-6.0.1-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-6.0.1-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-6.0.1-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-6.0.1-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/AI-Clipper-Pro-6.0.1-Linux-amd64.deb)
+- [SHA256 checksums](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/SHA256SUMS.txt) · [Manifest](https://github.com/Analoggeek/AiFreeClipping/releases/download/v6.0.1/manifest.json)
+
+### Changes
+
+- Bound Auto Edit and batch-export concurrency to a shared per-render CPU budget, including FFmpeg's codec, simple-filter and complex-filter thread pools, to reduce oversubscription on large batches.
+- Downscale blur-fill backgrounds before blurring, then upscale them behind the full-quality foreground.
+- Add completed Auto Edit clips to the editable timeline as they finish, continue after an individual FFmpeg render failure with a warning, and let users stop a batch while keeping completed work.
+- Confirm before Auto Edit batches larger than 12 clips and explain that 720p can reduce export time.
+- Add regression coverage for render budgets, blur-fill filter quality, and incremental results when an individual render fails.
+
 ## v6.0.0 — streamlined local editing and cross-platform installers
 
 ### Download the installers

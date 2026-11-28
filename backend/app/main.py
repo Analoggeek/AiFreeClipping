@@ -63,6 +63,24 @@ def ok(**kwargs) -> dict[str, Any]:
     return {"ok": True, **kwargs}
 
 
+def _render_budget(total: int, hardware: dict[str, Any]) -> tuple[int, int]:
+    """Bound concurrent FFmpeg work and leave a core available for the UI/API."""
+    try:
+        cpu_count = max(1, int(hardware.get("cpu_count") or os.cpu_count() or 1))
+    except (TypeError, ValueError):
+        cpu_count = max(1, os.cpu_count() or 1)
+    try:
+        requested_workers = max(1, min(8, int(hardware.get("workers") or min(4, cpu_count))))
+    except (TypeError, ValueError):
+        requested_workers = min(4, cpu_count)
+
+    usable_cores = max(1, cpu_count - 1)
+    max_workers = max(1, usable_cores // 2)
+    workers = max(1, min(max(1, int(total)), requested_workers, max_workers))
+    render_threads = max(1, min(8, usable_cores // workers))
+    return workers, render_threads
+
+
 def media_row(media_id: str) -> dict[str, Any]:
     row = db.loads(db.one("SELECT * FROM media WHERE id=?", (media_id,)), "metadata")
     if not row:
@@ -734,11 +752,11 @@ async def auto_edit(payload: AutoEditRequest):
 
         total = len(clip_ids)
         hardware = hardware_info()
-        workers = max(1, min(4, int(hardware.get("workers") or 1), total))
-        render_threads = max(1, min(8, int(hardware.get("cpu_count") or os.cpu_count() or 1) // workers))
+        workers, render_threads = _render_budget(total, hardware)
         semaphore = asyncio.Semaphore(workers)
         clip_progress = [0.0] * total
         results: list[dict[str, Any] | None] = [None] * total
+        completed_indices: list[int] = []
         warnings_by_clip: list[list[str]] = [[] for _ in clip_ids]
         watermark_path = configured_watermark_path()
         styles = {
@@ -754,7 +772,30 @@ async def auto_edit(payload: AutoEditRequest):
             overall = round(sum(clip_progress) / total, 1)
             jobs.update(job_id, progress=max(1, overall), message=message)
 
+        def job_result_snapshot(*, partial: bool = True) -> dict[str, Any]:
+            completed = [results[index] for index in completed_indices if results[index]]
+            return {
+                "outputs": [item["output"] for item in completed],
+                "edits": [item["edit"] for item in completed],
+                "count": len(completed), "completed": len(completed), "total": total,
+                "partial": partial,
+                "warnings": [message for group in warnings_by_clip for message in group],
+                "hardware": hardware,
+            }
+
         async def process_clip(index: int, clip_id: str) -> None:
+            try:
+                await process_clip_job(index, clip_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                warnings_by_clip[index].append(
+                    f"Clip {clip_id}: Auto Edit failed: {str(exc).strip()[:300]}"
+                )
+                update_progress(index, 100, f"Auto Edit failed for clip {index + 1}/{total}; continuing…")
+                jobs.update(job_id, result=job_result_snapshot())
+
+        async def process_clip_job(index: int, clip_id: str) -> None:
             async with semaphore:
                 update_progress(index, 2, f"Preparing clip {index + 1}/{total}…")
                 row = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
@@ -839,16 +880,26 @@ async def auto_edit(payload: AutoEditRequest):
                     "region_layout": region_layout,
                     "split_ratio": split_ratio, "outline_style": outline_style,
                     "crop_path": metadata.get("crop_path") or [],
-                    "render_workers": render_threads,
+                    "render_threads": render_threads,
                 }
                 output = render.export_path(f"{title or 'clip'}_auto_edited_{clip_id}")
                 update_progress(index, 5, f"Rendering clip {index + 1}/{total}…")
-                await render.render_clip(
-                    str(media_path), clip_start, clip_end, output, options,
-                    on_progress=lambda pct, msg, i=index: update_progress(
-                        i, 5 + min(95, max(0, float(pct or 0))), f"Clip {i + 1}/{total}: {msg}",
-                    ),
-                )
+                try:
+                    await render.render_clip(
+                        str(media_path), clip_start, clip_end, output, options,
+                        on_progress=lambda pct, msg, i=index: update_progress(
+                            i, 5 + min(95, max(0, float(pct or 0))), f"Clip {i + 1}/{total}: {msg}",
+                        ),
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    warnings_by_clip[index].append(
+                        f"{title}: render failed: {str(exc).strip()[:300]}"
+                    )
+                    update_progress(index, 100, f"Render failed for clip {index + 1}/{total}; continuing…")
+                    jobs.update(job_id, result=job_result_snapshot())
+                    return
 
                 auto_audio: list[dict[str, Any]] = []
                 if music:
@@ -873,7 +924,10 @@ async def auto_edit(payload: AutoEditRequest):
                         "label": "Auto Edit sticker",
                     })
                 saved_effects = _clean_effects(effects)
-                saved_effects.update({key: value for key, value in options.items() if key != "crop_path"})
+                saved_effects.update({
+                    key: value for key, value in options.items()
+                    if key not in {"crop_path", "render_threads", "render_workers"}
+                })
                 metadata = _clean_clip_metadata(metadata)
                 metadata["effects"] = saved_effects
                 metadata["hardware"] = hardware_info()
@@ -892,18 +946,19 @@ async def auto_edit(payload: AutoEditRequest):
                         "split_ratio": split_ratio, "outline_style": outline_style,
                         "crop_path": metadata.get("crop_path") or [],
                         "audio": auto_audio, "stickers": auto_stickers,
-                        "effects": {key: value for key, value in options.items() if key != "crop_path"},
+                        "effects": {key: value for key, value in options.items() if key not in {"crop_path", "render_threads"}},
                     },
                 }
-                update_progress(index, 100, f"Finished clip {index + 1}/{total}.")
+                completed_indices.append(index)
+                update_progress(index, 100, f"Finished clip {index + 1}/{total}; timeline updated.")
+                jobs.update(job_id, result=job_result_snapshot())
 
-        jobs.update(job_id, progress=1, message=f"Auto Edit: rendering {total} clips with up to {workers} worker(s)…")
+        jobs.update(
+            job_id, progress=1,
+            message=f"Auto Edit: {total} clips, up to {workers} render worker(s) × {render_threads} FFmpeg thread(s); completed clips are added as they finish…",
+        )
         await asyncio.gather(*(process_clip(index, clip_id) for index, clip_id in enumerate(clip_ids)))
-        completed = [item for item in results if item]
-        outputs = [item["output"] for item in completed]
-        edits = [item["edit"] for item in completed]
-        warnings = [message for group in warnings_by_clip for message in group]
-        return {"outputs": outputs, "edits": edits, "count": len(outputs), "warnings": warnings, "hardware": hardware}
+        return job_result_snapshot(partial=False)
 
     return ok(job_id=jobs.run("auto-edit", work, payload.model_dump()))
 
@@ -913,9 +968,13 @@ async def export_batch(payload: ExportAllRequest):
         req = ExportAllRequest(**(p or {}))
         total = max(len(req.clip_ids), 1)
         progress = [0.0] * total
-        workers = hardware_info()["workers"]
+        hardware = hardware_info()
+        workers, render_threads = _render_budget(total, hardware)
         semaphore = asyncio.Semaphore(workers)
-        jobs.update(job_id, progress=1, message=f"Exporting {total} clip(s) with {workers} parallel worker(s)")
+        jobs.update(
+            job_id, progress=1,
+            message=f"Exporting {total} clip(s) with up to {workers} render worker(s) × {render_threads} FFmpeg thread(s)",
+        )
 
         async def one(index: int, clip_id: str) -> dict[str, str] | None:
             async with semaphore:
@@ -982,6 +1041,7 @@ async def export_batch(payload: ExportAllRequest):
                     "split_ratio": split_ratio,
                     "outline_style": outline_style,
                     "crop_path": metadata.get("crop_path") or [],
+                    "render_threads": render_threads,
                 }
                 await render.render_clip(
                     media["path"], float(clip["start"]), float(clip["end"]), output, options,

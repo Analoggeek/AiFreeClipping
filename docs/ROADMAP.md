@@ -1,12 +1,18 @@
 # Roadmap
 
-## Candidate work for v6.0.0 — not released
+## Candidate work for v6.0.1 — release in progress
+
+- Bound Auto Edit and batch-export concurrency to a shared CPU budget, including FFmpeg codec and filter-graph threads
+- Reduce blur-fill cost by blurring a downscaled background while retaining a full-resolution foreground
+- Stream finished Auto Edit clips into the editable timeline, continue after per-clip render failures, and support stopping a batch without discarding completed work
+- Add large-batch confirmation, faster-resolution guidance and performance regressions
+
+## Shipped in v6.0.0
 
 - Retire caption/subtitle editing, subtitle download, social-copy fields and text-overlay rendering while retaining Whisper internally for transcript-aware clip scoring
 - Remove YouTube OAuth and channel uploads; preserve YouTube as a source-download site through yt-dlp
 - Preserve remaining video/sticker/audio timeline editing, composition controls, Auto Edit and MP4 export, including safe cleanup of legacy project metadata
-- Validate and prepare all eight release artifacts across Windows x64/ARM64, macOS Intel/Apple Silicon DMG/ZIP and Linux x64 AppImage/DEB
-- No v6.0.0 tag, GitHub Release or installer assets published yet
+- Publish and verify all eight release artifacts across Windows x64/ARM64, macOS Intel/Apple Silicon DMG/ZIP and Linux x64 AppImage/DEB
 
 ## Carried forward from the superseded v5.2.7 candidate — not released as v5.2.7
 

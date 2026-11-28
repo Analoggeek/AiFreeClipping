@@ -168,7 +168,7 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
           <label className="toggle"><input type="checkbox" checked={autoEdit.stickers} onChange={(event) => setAutoEdit((current) => ({ ...current, stickers: event.target.checked }))} /><span><ImagePlus size={16} /></span>Use saved stickers</label>
           <label className="toggle"><input type="checkbox" checked={autoEdit.blur_background} onChange={(event) => setAutoEdit((current) => ({ ...current, blur_background: event.target.checked }))} /><span><HardDrive size={16} /></span>Blur-fill unused frame</label>
         </div>
-        <p className="hint">Click Save settings to keep these choices. Auto Edit will build editable video, sticker, and audio tracks in the timeline and render each finished clip.</p>
+        <p className="hint">Click Save settings to keep these choices. Auto Edit adds each finished clip to the timeline as soon as it renders. Large source-quality batches can take longer; choose 720p for faster exports.</p>
       </Panel>
 
       <Panel

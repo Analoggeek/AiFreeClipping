@@ -108,10 +108,21 @@ def _video_codec_args() -> list[str]:
     return args
 
 
-def _thread_args() -> list[str]:
-    """Use all available cores for software filters without oversubscribing."""
-    workers = max(1, min(8, int(os.getenv("RENDER_WORKERS") or (os.cpu_count() or 4))))
-    return ["-threads", str(workers), "-filter_threads", str(workers)]
+def _render_thread_count(options: dict[str, Any] | None = None) -> int:
+    """Resolve the per-render thread cap shared by all FFmpeg processing stages."""
+    requested = (options or {}).get("render_threads")
+    if requested is None:
+        requested = os.getenv("RENDER_THREADS") or os.getenv("RENDER_WORKERS") or (os.cpu_count() or 4)
+    try:
+        return max(1, min(8, int(requested)))
+    except (TypeError, ValueError):
+        return max(1, min(8, os.cpu_count() or 4))
+
+
+def _thread_args(options: dict[str, Any] | None = None) -> list[str]:
+    """Set codec and simple-filter threads to the shared per-render budget."""
+    threads = _render_thread_count(options)
+    return ["-threads", str(threads), "-filter_threads", str(threads)]
 
 
 def _normalise_contrast(value: Any) -> float:
@@ -594,8 +605,13 @@ def build_clip_args(
         trim = ",".join(trim_parts)
         if options.get("blur_background", True) and options.get("aspect", "9:16") != "source":
             video_parts.append(f"[0:v]{trim},split=2[bg][fg]")
+            blur_width = max(2, (width // 4) - (width // 4) % 2)
+            blur_height = max(2, (height // 4) - (height // 4) % 2)
+            blur_sigma = max(1, round(24 * min(blur_width / width, blur_height / height)))
             video_parts.append(
-                f"[bg]scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},gblur=sigma=24[bgb]"
+                f"[bg]scale={blur_width}:{blur_height}:force_original_aspect_ratio=increase,"
+                f"crop={blur_width}:{blur_height},gblur=sigma={blur_sigma},"
+                f"scale={width}:{height}:flags=bilinear[bgb]"
             )
             video_parts.append(
                 f"[fg]scale={width}:{height}:force_original_aspect_ratio=decrease:flags=lanczos[fgs]"
@@ -671,8 +687,9 @@ def build_clip_args(
         f"{mix_inputs}amix=inputs={1 + len(audio_inputs)}:duration=first:normalize=0,apad,atrim=0:{duration / speed:.3f}[aout]"
     )
     args += [
+        "-filter_complex_threads", str(_render_thread_count(options)),
         "-filter_complex", ";".join(video_parts + audio_parts),
-        "-map", "[vout]", "-map", "[aout]", *_thread_args(), *_video_codec_args(),
+        "-map", "[vout]", "-map", "[aout]", *_thread_args(options), *_video_codec_args(),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
         "-t", f"{duration / speed:.3f}", "-progress", "pipe:1", "-nostats", output,
     ]
@@ -895,6 +912,7 @@ async def render_timeline(
     )
     filters.append(f"[{current}]scale=in_range=auto:out_range=tv,setsar=1,format=yuv420p[vout]")
     args += [
+        "-filter_complex_threads", str(_render_thread_count()),
         "-filter_complex", ";".join(filters), "-map", "[vout]", "-map", "[aout]",
         *_thread_args(), *_video_codec_args(),
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",

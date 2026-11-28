@@ -93,12 +93,13 @@ Open the URL printed in the terminal. The local token is read from `~/.AiFreeCli
 The sidebar shows live CPU, RAM, disk, GPU and worker count. Rendering automatically prefers NVIDIA NVENC or Apple VideoToolbox, then falls back to libx264.
 
 ```bash
-export RENDER_WORKERS=8     # parallel batch exports (default: min(4, CPU cores))
+export RENDER_WORKERS=4     # requested parallel batch count (bounded by the per-job CPU budget)
+export RENDER_THREADS=4     # FFmpeg thread cap for standalone renders; batch jobs set a shared cap automatically
 export AIFREECLIP_ENCODER=libx264   # override auto encoder
 export FORCE_SOFTWARE_ENCODER=1     # force CPU rendering
 ```
 
-Each rendered clip records the exact hardware used, and **Apply look to all** applies the current color, audio and export settings while keeping each clip's own composition.
+Auto Edit and batch exports budget worker and FFmpeg filter/codec threads together, leaving CPU capacity for the app and system. Each rendered clip records the exact hardware used, and **Apply look to all** applies the current color, audio and export settings while keeping each clip's own composition.
 
 ## Project layout
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # AI Clipper Pro — one command to build every offline installer.
 #   bash scripts/release-all.sh                      # build installers for THIS machine
-#   bash scripts/release-all.sh 6.0.0 --all           # build the complete cross-platform matrix (no release)
-#   bash scripts/release-all.sh 6.0.0 --all --publish # build and publish all supported installers
+#   bash scripts/release-all.sh 6.0.1 --all           # build the complete cross-platform matrix (no release)
+#   bash scripts/release-all.sh 6.0.1 --all --publish # build and publish all supported installers
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

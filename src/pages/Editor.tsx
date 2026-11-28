@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import {
   Clapperboard, Download, Film, ImagePlus, Layers3, LoaderCircle,
   Mic2, Pause, Play, Plus, RotateCcw, Save, SkipBack, SkipForward, Split, Trash2,
-  Upload, WandSparkles,
+  Upload, WandSparkles, X,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
 import { JobTracker, Pill, formatClock } from '../components/common';
@@ -272,28 +272,81 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
 
   useEffect(() => {
     if (!autoJob) return;
-    return pollJob(autoJob, (job) => {
-      if (job.status === 'done') {
-        void refreshClips();
-        const outputs = Array.isArray(job.result?.outputs) ? job.result.outputs.length : 0;
-        const edits = Array.isArray(job.result?.edits) ? job.result.edits as AutoEditTimelineEdit[] : [];
-        const warnings = Array.isArray(job.result?.warnings) ? job.result.warnings as string[] : [];
-        const warningSummary = warnings.length
-          ? ` ${warnings.length} warning(s): ${warnings[0]}${warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}`
-          : '';
-        if (edits.length) {
-          void applyAutoEditEdits(edits).then(() => {
-            notify(`Auto Edit applied to ${edits.length} clip(s): editable video, stickers and audio are now on the timeline; ${outputs} MP4(s) rendered.${warningSummary}`);
-          }).catch((error) => notify(`MP4s rendered, but the editable timeline could not be saved: ${String(error)}${warningSummary}`))
-            .finally(() => setAutoJob(null));
-        } else {
-          setAutoJob(null);
-          notify(`Auto Edit finished with no clips to add to the timeline.${warningSummary}`);
-        }
+    const queuedIds = new Set<string>();
+    let pendingEdits: AutoEditTimelineEdit[] = [];
+    let applyQueue: Promise<void> = Promise.resolve();
+    let flushTimer: number | null = null;
+    let timelineError: string | null = null;
+
+    const flushPending = (): Promise<void> => {
+      if (flushTimer !== null) {
+        window.clearTimeout(flushTimer);
+        flushTimer = null;
       }
-      if (job.status === 'error') { setAutoJob(null); notify(job.error || job.message); }
-      if (job.status === 'cancelled') { setAutoJob(null); notify('Automatic editing cancelled.'); }
+      if (!pendingEdits.length) return applyQueue;
+      const batch = pendingEdits;
+      pendingEdits = [];
+      applyQueue = applyQueue.then(() => applyAutoEditEdits(batch)).catch((error) => {
+        timelineError = String(error);
+        notify(`Rendered clips could not be added to the timeline: ${timelineError}`);
+      });
+      return applyQueue;
+    };
+
+    const queueCompletedEdits = (value: unknown) => {
+      if (!Array.isArray(value)) return;
+      for (const edit of value as AutoEditTimelineEdit[]) {
+        if (!edit?.clip_id || queuedIds.has(edit.clip_id)) continue;
+        queuedIds.add(edit.clip_id);
+        pendingEdits.push(edit);
+      }
+      if (pendingEdits.length >= 3) {
+        void flushPending();
+      } else if (pendingEdits.length && flushTimer === null) {
+        flushTimer = window.setTimeout(() => { void flushPending(); }, 1200);
+      }
+    };
+
+    const stopPolling = pollJob(autoJob, (job) => {
+      const result = job.result || {};
+      queueCompletedEdits(result.edits);
+      if (job.status === 'done') {
+        void flushPending().then(() => {
+          void refreshClips();
+          const outputs = Number(result.count) || queuedIds.size;
+          const warnings = Array.isArray(result.warnings) ? result.warnings as string[] : [];
+          const warningSummary = warnings.length
+            ? ` ${warnings.length} warning(s): ${warnings[0]}${warnings.length > 1 ? ` (+${warnings.length - 1} more)` : ''}`
+            : '';
+          if (timelineError) {
+            notify(`${outputs} MP4(s) rendered, but the editable timeline could not be saved: ${timelineError}${warningSummary}`);
+          } else if (outputs) {
+            notify(`Auto Edit rendered ${outputs} MP4(s); completed clips were added to the editable timeline as they finished.${warningSummary}`);
+          } else {
+            notify(`Auto Edit finished with no clips to add to the timeline.${warningSummary}`);
+          }
+          setAutoJob(null);
+        });
+      }
+      if (job.status === 'error') {
+        void flushPending().then(() => {
+          void refreshClips();
+          notify(`Auto Edit stopped: ${job.error || job.message}. ${queuedIds.size} completed clip(s) were kept.${timelineError ? ` Timeline save issue: ${timelineError}` : ''}`);
+          setAutoJob(null);
+        });
+      }
+      if (job.status === 'cancelled') {
+        void flushPending().then(() => {
+          void refreshClips();
+          notify(`Auto Edit cancelled. ${queuedIds.size} completed clip(s) were kept.${timelineError ? ` Timeline save issue: ${timelineError}` : ''}`);
+          setAutoJob(null);
+        });
+      }
     });
+    return () => {
+      stopPolling();
+      if (flushTimer !== null) window.clearTimeout(flushTimer);
+    };
   }, [autoJob, notify, refreshClips]);
 
   async function applyAutoEditEdits(edits: AutoEditTimelineEdit[]) {
@@ -323,11 +376,22 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
   const runAutoEdit = async () => {
     const ids = clips.map((clip) => clip.id || '').filter(Boolean);
     if (!ids.length) { notify('Generate clips with AI Clipper first.'); return; }
+    if (ids.length > 12 && !window.confirm(
+      `Auto Edit will render ${ids.length} clips. This can take a while; each completed MP4 will appear on the timeline, and you can stop the batch at any time. Continue?`,
+    )) return;
     try {
       const result = await api.autoEdit(ids, autoEditOptions);
       setAutoJob(result.job_id);
-      notify(`Applying Auto Edit to ${ids.length} clip(s); finished videos will be added as editable timeline tracks.`);
+      notify(`Rendering ${ids.length} clip(s). Finished clips will be added to the timeline as they complete; use Stop Auto Edit to stop the batch.`);
     } catch (error) { notify(String(error)); }
+  };
+
+  const cancelAutoEdit = async () => {
+    if (!autoJob) return;
+    try {
+      await api.cancelJob(autoJob);
+      notify('Stopping Auto Edit. Completed renders will be kept.');
+    } catch (error) { notify(`Could not stop Auto Edit: ${String(error)}`); }
   };
 
   const mutate = (fn: (draft: Timeline) => void) => {
@@ -833,8 +897,13 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       <header className="editor-toolbar">
         <div className="editor-toolbar-actions">
           <button className="ghost-btn layout-reset-button" title="Reset panel sizes, Shorts player and timeline zoom to defaults" onClick={resetEditorLayout}><RotateCcw size={14} /> Reset layout</button>
-          <button className="primary" disabled={!clips.length || !autoEditSettingsLoaded || Boolean(autoJob)} title={!autoEditSettingsLoaded ? 'Loading Auto Edit settings' : clips.length ? 'Apply edits to all saved AI clips and add them to the timeline' : 'Run AI Clipper first'} onClick={() => void runAutoEdit()}>
-            {autoJob ? <LoaderCircle size={15} className="spin" /> : <WandSparkles size={15} />} Auto Edit
+          <button
+            className={autoJob ? 'ghost-btn' : 'primary'}
+            disabled={!autoJob && (!clips.length || !autoEditSettingsLoaded)}
+            title={autoJob ? 'Stop this batch; completed renders will be kept' : !autoEditSettingsLoaded ? 'Loading Auto Edit settings' : clips.length ? 'Render saved AI clips and add each completed clip to the timeline' : 'Run AI Clipper first'}
+            onClick={() => autoJob ? void cancelAutoEdit() : void runAutoEdit()}
+          >
+            {autoJob ? <X size={15} /> : <WandSparkles size={15} />} {autoJob ? 'Stop Auto Edit' : 'Auto Edit'}
           </button>
           <button className="ghost-btn" disabled={!projectId || !timeline.tracks.video.length || Boolean(exportJob) || Boolean(autoJob)} onClick={() => void exportVideo()}>
             {exportJob ? <LoaderCircle size={15} className="spin" /> : <Download size={15} />} Export MP4
