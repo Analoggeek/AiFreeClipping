@@ -1,5 +1,11 @@
 # Roadmap
 
+## Shipped in v5.2.5
+
+- Rebuild all Windows, macOS, and Linux installers together, validate each platform's native package format, and verify every published artifact against its SHA-256 manifest
+- Build exactly one Windows/macOS architecture per matrix job to keep the bundled local engine matched to the installer target
+- Confirm the Electron Framework binary and executable load reference survive both DMG and ZIP installation paths on Intel and Apple Silicon; preserve UDRO images and direct ZIP alternatives
+
 ## Shipped in v5.2.4
 
 - macOS installers use read-only uncompressed UDRO disk images with format, mount, and app-copy verification; matching SHA-256 checksums are published

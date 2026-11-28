@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 5.2.4)'
+        description: 'Release version (e.g. 5.2.5)'
         required: true
-        default: '5.2.4'
+        default: '5.2.5'
       only_platform:
         description: 'Build only one platform (leave all for the full matrix)'
         required: false
@@ -99,15 +99,121 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
 
+      - name: Verify Windows installer PE signature
+        if: matrix.platform == 'win'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          EXE="release/AI-Clipper-Pro-${VERSION}-Windows-${{ matrix.arch }}.exe"
+          EXE_LIST="$(find release -maxdepth 1 -type f -name '*.exe' -print | sort)"
+          EXE_COUNT="$(find release -maxdepth 1 -type f -name '*.exe' | wc -l | tr -d '[:space:]')"
+          if [ "$EXE_COUNT" != "1" ]; then
+            echo "::error title=Unexpected Windows installer count::Expected one ${{ matrix.arch }} installer, found ${EXE_COUNT}: ${EXE_LIST}"
+            exit 1
+          fi
+          test -s "$EXE"
+          python - "$EXE" "${{ matrix.arch }}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          arch = sys.argv[2]
+          with path.open("rb") as stream:
+              dos_header = stream.read(64)
+              if dos_header[:2] != b"MZ":
+                  raise SystemExit(f"{path.name} is not a Windows PE executable")
+              pe_offset = int.from_bytes(dos_header[0x3C:0x40], "little")
+              stream.seek(pe_offset)
+              pe_header = stream.read(6)
+          if pe_header[:4] != b"PE\0\0":
+              raise SystemExit(f"{path.name} has no valid PE signature")
+          print(f"Verified Windows PE installer ({arch} payload target): {path.name}")
+          PY
+
+      - name: Verify Linux installer formats
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          APPIMAGE="release/AI-Clipper-Pro-${VERSION}-Linux-x86_64.AppImage"
+          DEB="release/AI-Clipper-Pro-${VERSION}-Linux-amd64.deb"
+          test -s "$APPIMAGE"
+          test -s "$DEB"
+          python - "$APPIMAGE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          with path.open("rb") as stream:
+              magic = stream.read(4)
+          if magic != b"\x7fELF":
+              raise SystemExit(f"{path.name} is not an ELF AppImage")
+          print(f"Verified AppImage ELF header: {path.name}")
+          PY
+          dpkg-deb --info "$DEB" >/dev/null
+          test "$(dpkg-deb -f "$DEB" Architecture)" = "amd64"
+          echo "Verified Debian package: $DEB"
+
       - name: Verify macOS DMG and ZIP
         if: matrix.platform == 'mac'
         shell: bash
         run: |
           set -euo pipefail
-          DMG="$(find release -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-          test -n "$DMG"
+          MOUNT=""
+          COPY=""
+          ZIP_COPY=""
+          STAGE="starting macOS artifact verification"
+          cleanup() {
+            if [ -n "$MOUNT" ]; then
+              hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true
+            fi
+            for temp_dir in "$MOUNT" "$COPY" "$ZIP_COPY"; do
+              if [ -n "$temp_dir" ]; then rm -rf "$temp_dir"; fi
+            done
+          }
+          report_failure() {
+            local status="$?"
+            if [ "$status" -ne 0 ]; then
+              echo "::error title=macOS artifact verification failed::$STAGE (exit $status)"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                printf '## macOS artifact verification failed\n\nStage: `%s` (exit %s)\n' "$STAGE" "$status" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
+            cleanup
+            return "$status"
+          }
+          trap report_failure EXIT
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          EXPECTED_ARCH="${{ matrix.arch }}"
+          STAGE="locating the ${EXPECTED_ARCH} macOS DMG and ZIP"
+          ARTIFACT_LIST="$(find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' \) -print | sed 's#^release/##' | sort)"
+          echo "macOS package outputs for ${EXPECTED_ARCH}:"
+          printf '%s\n' "$ARTIFACT_LIST"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            printf '## macOS build outputs (%s)\n\n```text\n%s\n```\n' "$EXPECTED_ARCH" "$ARTIFACT_LIST" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          DMG="release/AI-Clipper-Pro-${VERSION}-macOS-${EXPECTED_ARCH}.dmg"
+          ZIP="release/AI-Clipper-Pro-${VERSION}-macOS-${EXPECTED_ARCH}.zip"
+          DMG_COUNT="$(find release -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d '[:space:]')"
+          ZIP_COUNT="$(find release -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d '[:space:]')"
+          if [ "$DMG_COUNT" != "1" ] || [ "$ZIP_COUNT" != "1" ]; then
+            OUTPUT_LIST="$(printf '%s\n' "$ARTIFACT_LIST" | tr '\n' ',')"
+            echo "Expected exactly one architecture-specific DMG and ZIP; found ${DMG_COUNT} DMG(s) and ${ZIP_COUNT} ZIP(s): ${OUTPUT_LIST}" >&2
+            echo "::error title=Unexpected macOS artifact count::${DMG_COUNT} DMG(s), ${ZIP_COUNT} ZIP(s): ${OUTPUT_LIST}"
+            exit 1
+          fi
+          if [ ! -s "$DMG" ] || [ ! -s "$ZIP" ]; then
+            OUTPUT_LIST="$(printf '%s\n' "$ARTIFACT_LIST" | tr '\n' ',')"
+            echo "Expected files missing: $DMG and/or $ZIP; found: ${OUTPUT_LIST}" >&2
+            echo "::error title=Expected architecture-specific macOS artifact missing::${DMG} and/or ${ZIP}; found: ${OUTPUT_LIST}"
+            exit 1
+          fi
           echo "Verifying image: $DMG"
-          test -s "$DMG"
           IMAGE_INFO="$(hdiutil imageinfo "$DMG")"
           printf '%s\n' "$IMAGE_INFO"
           if ! printf '%s\n' "$IMAGE_INFO" | grep -q 'UDRO'; then
@@ -117,26 +223,88 @@ jobs:
           hdiutil verify "$DMG"
           MOUNT="$(mktemp -d /tmp/aifreeclip-dmg.XXXXXX)"
           COPY="$(mktemp -d /tmp/aifreeclip-copy.XXXXXX)"
-          cleanup() { hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true; rm -rf "$MOUNT" "$COPY"; }
-          trap cleanup EXIT
+          ZIP_COPY="$(mktemp -d /tmp/aifreeclip-zip.XXXXXX)"
+          if [ "$EXPECTED_ARCH" = "x64" ]; then EXPECTED_ARCH="x86_64"; fi
+          verify_electron_framework() {
+            local app="$1"
+            local framework="$app/Contents/Frameworks/Electron Framework.framework/Electron Framework"
+            local executable
+            local framework_arches
+            local executable_arches
+            local linked_libraries
+            STAGE="checking Electron Framework exists in $(basename "$app")"
+            if [ ! -s "$framework" ]; then
+              echo "Electron Framework is missing from $(basename "$app")" >&2
+              exit 1
+            fi
+            executable="$(find "$app/Contents/MacOS" -maxdepth 1 -type f -perm -u+x -print -quit)"
+            if [ -z "$executable" ]; then
+              STAGE="checking the app executable in $(basename "$app")"
+              echo "App bundle has no executable: $(basename "$app")" >&2
+              exit 1
+            fi
+            framework_arches="$(lipo -archs "$framework" 2>&1)" || {
+              STAGE="reading Electron Framework architectures in $(basename "$app")"
+              echo "Could not inspect Electron Framework architectures: $framework_arches" >&2
+              exit 1
+            }
+            STAGE="checking $EXPECTED_ARCH in Electron Framework for $(basename "$app") (found: $framework_arches)"
+            case " $framework_arches " in
+              *" $EXPECTED_ARCH "*) ;;
+              *) echo "Electron Framework lacks $EXPECTED_ARCH architecture (found: $framework_arches)" >&2; exit 1 ;;
+            esac
+            executable_arches="$(lipo -archs "$executable" 2>&1)" || {
+              STAGE="reading app executable architectures in $(basename "$app")"
+              echo "Could not inspect app executable architectures: $executable_arches" >&2
+              exit 1
+            }
+            STAGE="checking $EXPECTED_ARCH in app executable for $(basename "$app") (found: $executable_arches)"
+            case " $executable_arches " in
+              *" $EXPECTED_ARCH "*) ;;
+              *) echo "App executable lacks $EXPECTED_ARCH architecture (found: $executable_arches)" >&2; exit 1 ;;
+            esac
+            STAGE="checking the app executable's Electron Framework load command in $(basename "$app")"
+            linked_libraries="$(otool -L "$executable")"
+            if ! printf '%s\n' "$linked_libraries" | grep -E '@rpath/Electron Framework\.framework(/Versions/[^[:space:]/]+)?/Electron Framework([[:space:]]|$)' >/dev/null; then
+              echo "App executable does not declare the expected Electron Framework load dependency" >&2
+              printf '%s\n' "$linked_libraries" >&2
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                printf 'Dependency listing for `%s` did not contain the Electron Framework load reference:\n\n```text\n%s\n```\n' "$(basename "$executable")" "$linked_libraries" >> "$GITHUB_STEP_SUMMARY"
+              fi
+              exit 1
+            fi
+          }
+          STAGE="mounting the DMG and locating the app bundle"
           hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT"
           APP="$(find "$MOUNT" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$APP"
+          STAGE="checking the DMG app's Electron Framework, load reference, and architecture"
+          verify_electron_framework "$APP"
           # A failing ditto here is the exact failure that produces Finder error -36.
+          STAGE="copying the DMG app bundle to local storage"
           ditto "$APP" "$COPY/$(basename "$APP")"
-          test -n "$(find "$COPY" -path '*/Contents/MacOS/*' -type f -perm -u+x -print -quit)"
-          if find "$COPY" -name '._*' -o -name '.DS_Store' | grep -q .; then
+          COPY_APP="$COPY/$(basename "$APP")"
+          STAGE="checking the copied DMG app's Electron Framework, load reference, and architecture"
+          verify_electron_framework "$COPY_APP"
+          test -n "$(find "$COPY_APP/Contents/MacOS" -type f -perm -u+x -print -quit)"
+          if find "$COPY_APP" -name '._*' -o -name '.DS_Store' | grep -q .; then
             echo "Unexpected AppleDouble metadata inside verified copy" >&2
             exit 1
           fi
-          ZIP="$(find release -maxdepth 1 -type f -name '*.zip' -print -quit)"
-          test -s "$ZIP"
+          STAGE="checking ZIP integrity and app executable path"
           unzip -tq "$ZIP"
           if ! unzip -Z1 "$ZIP" | grep -E 'app/Contents/MacOS/[^/]+$' >/dev/null; then
             echo "ZIP archive is missing its executable app bundle" >&2
             exit 1
           fi
-          echo "macOS artifacts verified: UDRO DMG mounts, .app copies cleanly, ZIP bundle is intact."
+          STAGE="extracting the ZIP app bundle"
+          ditto -x -k "$ZIP" "$ZIP_COPY"
+          ZIP_APP="$(find "$ZIP_COPY" -maxdepth 2 -type d -name '*.app' -print -quit)"
+          test -n "$ZIP_APP"
+          STAGE="checking the ZIP app's Electron Framework, load reference, and architecture"
+          verify_electron_framework "$ZIP_APP"
+          test -n "$(find "$ZIP_APP/Contents/MacOS" -type f -perm -u+x -print -quit)"
+          echo "macOS artifacts verified: UDRO DMG and ZIP contain a runnable app bundle with the correct Electron Framework."
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -179,7 +347,7 @@ jobs:
             (gh release upload "v$VERSION" release/installers/* --clobber && \
              gh release edit "v$VERSION" --notes-file docs/RELEASE_NOTES.md --title "AI Clipper Pro v$VERSION")
 
-      - name: Verify published macOS disk image checksums
+      - name: Verify published installer checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -187,21 +355,23 @@ jobs:
           set -euo pipefail
           VERSION="${{ inputs.version || github.ref_name }}"
           VERSION="${VERSION#v}"
-          VERIFY_DIR="release/verify-published-macos"
+          VERIFY_DIR="release/verify-published-installers"
           mkdir -p "$VERIFY_DIR"
-          gh release download "v$VERSION" --pattern '*-macOS-*.dmg' --dir "$VERIFY_DIR"
-          count="$(find "$VERIFY_DIR" -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d '[:space:]')"
-          test "$count" = "2"
-          for dmg in "$VERIFY_DIR"/*.dmg; do
-            name="$(basename "$dmg")"
+          gh release download "v$VERSION" --pattern 'AI-Clipper-Pro-*' --dir "$VERIFY_DIR"
+          expected_count="$(awk 'END { print NR }' release/installers/SHA256SUMS.txt)"
+          actual_count="$(find "$VERIFY_DIR" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')"
+          test "$expected_count" -gt 0
+          test "$actual_count" = "$expected_count"
+          for asset in "$VERIFY_DIR"/*; do
+            name="$(basename "$asset")"
             expected="$(awk -v name="$name" '$2 == name || $2 == "./" name { print $1; exit }' release/installers/SHA256SUMS.txt)"
-            actual="$(sha256sum "$dmg" | awk '{ print $1 }')"
+            actual="$(sha256sum "$asset" | awk '{ print $1 }')"
             test -n "$expected"
             if [ "$expected" != "$actual" ]; then
-              echo "Published DMG checksum mismatch: $name" >&2
+              echo "Published installer checksum mismatch: $name" >&2
               exit 1
             fi
-            echo "Published DMG checksum verified: $name"
+            echo "Published installer checksum verified: $name"
           done
 
   publish_existing:
