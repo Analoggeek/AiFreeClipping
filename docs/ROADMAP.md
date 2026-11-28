@@ -1,6 +1,6 @@
 # Roadmap
 
-## In progress for v6.0.2 — accurate, verified MP4 exports
+## Shipped in v6.0.2 — accurate, verified MP4 exports
 
 - Refresh Electron and the packaging toolchain to patched versions, sandbox the desktop windows, and require Node 22.12+ for development builds
 - Seek to nonzero source offsets for shorter decode work while preserving absolute timestamps for reframing/keyframes
