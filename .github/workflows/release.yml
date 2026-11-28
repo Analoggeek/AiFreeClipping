@@ -157,25 +157,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          STAGE="locating the macOS DMG and ZIP"
-          DMG="$(find release -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-          ZIP="$(find release -maxdepth 1 -type f -name '*.zip' -print -quit)"
-          test -s "$DMG"
-          test -s "$ZIP"
-          echo "Verifying image: $DMG"
-          IMAGE_INFO="$(hdiutil imageinfo "$DMG")"
-          printf '%s\n' "$IMAGE_INFO"
-          if ! printf '%s\n' "$IMAGE_INFO" | grep -q 'UDRO'; then
-            echo "Expected read-only uncompressed UDRO image" >&2
-            exit 1
-          fi
-          hdiutil verify "$DMG"
-          MOUNT="$(mktemp -d /tmp/aifreeclip-dmg.XXXXXX)"
-          COPY="$(mktemp -d /tmp/aifreeclip-copy.XXXXXX)"
-          ZIP_COPY="$(mktemp -d /tmp/aifreeclip-zip.XXXXXX)"
+          MOUNT=""
+          COPY=""
+          ZIP_COPY=""
+          STAGE="starting macOS artifact verification"
           cleanup() {
-            hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true
-            rm -rf "$MOUNT" "$COPY" "$ZIP_COPY"
+            if [ -n "$MOUNT" ]; then
+              hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true
+            fi
+            for temp_dir in "$MOUNT" "$COPY" "$ZIP_COPY"; do
+              if [ -n "$temp_dir" ]; then rm -rf "$temp_dir"; fi
+            done
           }
           report_failure() {
             local status="$?"
@@ -189,7 +181,37 @@ jobs:
             return "$status"
           }
           trap report_failure EXIT
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
           EXPECTED_ARCH="${{ matrix.arch }}"
+          STAGE="locating the ${EXPECTED_ARCH} macOS DMG and ZIP"
+          ARTIFACT_LIST="$(find release -maxdepth 1 -type f \( -name '*.dmg' -o -name '*.zip' \) -print | sed 's#^release/##' | sort)"
+          echo "macOS package outputs for ${EXPECTED_ARCH}:"
+          printf '%s\n' "$ARTIFACT_LIST"
+          if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+            printf '## macOS build outputs (%s)\n\n```text\n%s\n```\n' "$EXPECTED_ARCH" "$ARTIFACT_LIST" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          DMG="release/AI-Clipper-Pro-${VERSION}-macOS-${EXPECTED_ARCH}.dmg"
+          ZIP="release/AI-Clipper-Pro-${VERSION}-macOS-${EXPECTED_ARCH}.zip"
+          DMG_COUNT="$(find release -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d '[:space:]')"
+          ZIP_COUNT="$(find release -maxdepth 1 -type f -name '*.zip' | wc -l | tr -d '[:space:]')"
+          if [ "$DMG_COUNT" != "1" ] || [ "$ZIP_COUNT" != "1" ]; then
+            echo "Expected exactly one architecture-specific DMG and ZIP; found ${DMG_COUNT} DMG(s) and ${ZIP_COUNT} ZIP(s)" >&2
+            exit 1
+          fi
+          test -s "$DMG"
+          test -s "$ZIP"
+          echo "Verifying image: $DMG"
+          IMAGE_INFO="$(hdiutil imageinfo "$DMG")"
+          printf '%s\n' "$IMAGE_INFO"
+          if ! printf '%s\n' "$IMAGE_INFO" | grep -q 'UDRO'; then
+            echo "Expected read-only uncompressed UDRO image" >&2
+            exit 1
+          fi
+          hdiutil verify "$DMG"
+          MOUNT="$(mktemp -d /tmp/aifreeclip-dmg.XXXXXX)"
+          COPY="$(mktemp -d /tmp/aifreeclip-copy.XXXXXX)"
+          ZIP_COPY="$(mktemp -d /tmp/aifreeclip-zip.XXXXXX)"
           if [ "$EXPECTED_ARCH" = "x64" ]; then EXPECTED_ARCH="x86_64"; fi
           verify_electron_framework() {
             local app="$1"
