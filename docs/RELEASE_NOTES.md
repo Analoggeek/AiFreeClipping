@@ -1,5 +1,24 @@
 # Release notes
 
+## v5.2.5 — verified installers for every platform
+
+### Download the installers
+
+- **Windows x64:** [AI-Clipper-Pro-5.2.5-Windows-x64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-Windows-x64.exe)
+- **Windows ARM64:** [AI-Clipper-Pro-5.2.5-Windows-arm64.exe](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-Windows-arm64.exe)
+- **macOS Intel:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-macOS-x64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-macOS-x64.zip)
+- **macOS Apple Silicon:** [DMG](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-macOS-arm64.dmg) · [ZIP fallback](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-macOS-arm64.zip)
+- **Linux AppImage:** [AI-Clipper-Pro-5.2.5-Linux-x86_64.AppImage](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-Linux-x86_64.AppImage)
+- **Linux Debian/Ubuntu:** [AI-Clipper-Pro-5.2.5-Linux-amd64.deb](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/AI-Clipper-Pro-5.2.5-Linux-amd64.deb)
+- **Checksums:** [SHA256SUMS.txt](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/SHA256SUMS.txt) · **Manifest:** [manifest.json](https://github.com/Analoggeek/AiFreeClipping/releases/download/v5.2.5/manifest.json)
+
+### Changes
+
+- Rebuild every supported Windows, macOS, and Linux installer from the same v5.2.5 source.
+- Verify Windows PE headers and Linux AppImage/DEB structure; for both macOS architectures, mount/copy the DMG and extract the ZIP, then confirm the app's Electron Framework binary is present and matches the target CPU.
+- Download every published installer and compare it against its SHA-256 manifest before the release workflow succeeds.
+- Keep both macOS architecture ZIPs as first-class alternatives if a local DMG download is damaged or will not mount. For v5.2.4 installations reporting a missing Electron Framework, remove the old app and replace it with the matching v5.2.5 ZIP.
+
 ## v5.2.4 — macOS disk-image reliability hotfix
 
 ### Download the installers

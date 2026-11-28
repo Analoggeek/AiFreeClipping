@@ -1,4 +1,5 @@
 const { execFileSync } = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 // macOS Finder can abort a copy from a DMG with "Error code -36" when the
@@ -22,4 +23,13 @@ module.exports = async function afterPack(context) {
   run('find', [appPath, '-name', '._*', '-type', 'f', '-delete']);
   run('find', [appPath, '-name', '.DS_Store', '-type', 'f', '-delete']);
   run('dot_clean', [appPath]);
+
+  const framework = path.join(
+    appPath, 'Contents', 'Frameworks', 'Electron Framework.framework', 'Electron Framework',
+  );
+  const stat = fs.existsSync(framework) ? fs.statSync(framework) : null;
+  if (!stat?.isFile() || stat.size === 0) {
+    throw new Error(`[after-pack-mac] Required Electron Framework is missing from ${appPath}`);
+  }
+  console.log(`[after-pack-mac] Electron Framework verified (${stat.size} bytes)`);
 };

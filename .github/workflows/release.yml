@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version (e.g. 5.2.4)'
+        description: 'Release version (e.g. 5.2.5)'
         required: true
-        default: '5.2.4'
+        default: '5.2.5'
       only_platform:
         description: 'Build only one platform (leave all for the full matrix)'
         required: false
@@ -99,15 +99,69 @@ jobs:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
         run: npx electron-builder --${{ matrix.platform }} --${{ matrix.arch }} --publish never
 
+      - name: Verify Windows installer PE signature
+        if: matrix.platform == 'win'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          EXE="release/AI-Clipper-Pro-${VERSION}-Windows-${{ matrix.arch }}.exe"
+          test -s "$EXE"
+          python - "$EXE" "${{ matrix.arch }}" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          arch = sys.argv[2]
+          with path.open("rb") as stream:
+              dos_header = stream.read(64)
+              if dos_header[:2] != b"MZ":
+                  raise SystemExit(f"{path.name} is not a Windows PE executable")
+              pe_offset = int.from_bytes(dos_header[0x3C:0x40], "little")
+              stream.seek(pe_offset)
+              pe_header = stream.read(6)
+          if pe_header[:4] != b"PE\0\0":
+              raise SystemExit(f"{path.name} has no valid PE signature")
+          print(f"Verified Windows PE installer ({arch} payload target): {path.name}")
+          PY
+
+      - name: Verify Linux installer formats
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ inputs.version || github.ref_name }}"
+          VERSION="${VERSION#v}"
+          APPIMAGE="release/AI-Clipper-Pro-${VERSION}-Linux-x86_64.AppImage"
+          DEB="release/AI-Clipper-Pro-${VERSION}-Linux-amd64.deb"
+          test -s "$APPIMAGE"
+          test -s "$DEB"
+          python - "$APPIMAGE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          with path.open("rb") as stream:
+              magic = stream.read(4)
+          if magic != b"\x7fELF":
+              raise SystemExit(f"{path.name} is not an ELF AppImage")
+          print(f"Verified AppImage ELF header: {path.name}")
+          PY
+          dpkg-deb --info "$DEB" >/dev/null
+          test "$(dpkg-deb -f "$DEB" Architecture)" = "amd64"
+          echo "Verified Debian package: $DEB"
+
       - name: Verify macOS DMG and ZIP
         if: matrix.platform == 'mac'
         shell: bash
         run: |
           set -euo pipefail
           DMG="$(find release -maxdepth 1 -type f -name '*.dmg' -print -quit)"
-          test -n "$DMG"
-          echo "Verifying image: $DMG"
+          ZIP="$(find release -maxdepth 1 -type f -name '*.zip' -print -quit)"
           test -s "$DMG"
+          test -s "$ZIP"
+          echo "Verifying image: $DMG"
           IMAGE_INFO="$(hdiutil imageinfo "$DMG")"
           printf '%s\n' "$IMAGE_INFO"
           if ! printf '%s\n' "$IMAGE_INFO" | grep -q 'UDRO'; then
@@ -117,26 +171,47 @@ jobs:
           hdiutil verify "$DMG"
           MOUNT="$(mktemp -d /tmp/aifreeclip-dmg.XXXXXX)"
           COPY="$(mktemp -d /tmp/aifreeclip-copy.XXXXXX)"
-          cleanup() { hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true; rm -rf "$MOUNT" "$COPY"; }
+          ZIP_COPY="$(mktemp -d /tmp/aifreeclip-zip.XXXXXX)"
+          cleanup() {
+            hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true
+            rm -rf "$MOUNT" "$COPY" "$ZIP_COPY"
+          }
           trap cleanup EXIT
+          EXPECTED_ARCH="${{ matrix.arch }}"
+          if [ "$EXPECTED_ARCH" = "x64" ]; then EXPECTED_ARCH="x86_64"; fi
+          verify_electron_framework() {
+            local app="$1"
+            local framework="$app/Contents/Frameworks/Electron Framework.framework/Electron Framework"
+            if [ ! -s "$framework" ]; then
+              echo "Electron Framework is missing from $(basename "$app")" >&2
+              exit 1
+            fi
+            lipo -verify_arch "$EXPECTED_ARCH" "$framework"
+          }
           hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT"
           APP="$(find "$MOUNT" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$APP"
+          verify_electron_framework "$APP"
           # A failing ditto here is the exact failure that produces Finder error -36.
           ditto "$APP" "$COPY/$(basename "$APP")"
-          test -n "$(find "$COPY" -path '*/Contents/MacOS/*' -type f -perm -u+x -print -quit)"
-          if find "$COPY" -name '._*' -o -name '.DS_Store' | grep -q .; then
+          COPY_APP="$COPY/$(basename "$APP")"
+          verify_electron_framework "$COPY_APP"
+          test -n "$(find "$COPY_APP/Contents/MacOS" -type f -perm -u+x -print -quit)"
+          if find "$COPY_APP" -name '._*' -o -name '.DS_Store' | grep -q .; then
             echo "Unexpected AppleDouble metadata inside verified copy" >&2
             exit 1
           fi
-          ZIP="$(find release -maxdepth 1 -type f -name '*.zip' -print -quit)"
-          test -s "$ZIP"
           unzip -tq "$ZIP"
           if ! unzip -Z1 "$ZIP" | grep -E 'app/Contents/MacOS/[^/]+$' >/dev/null; then
             echo "ZIP archive is missing its executable app bundle" >&2
             exit 1
           fi
-          echo "macOS artifacts verified: UDRO DMG mounts, .app copies cleanly, ZIP bundle is intact."
+          ditto -x -k "$ZIP" "$ZIP_COPY"
+          ZIP_APP="$(find "$ZIP_COPY" -maxdepth 2 -type d -name '*.app' -print -quit)"
+          test -n "$ZIP_APP"
+          verify_electron_framework "$ZIP_APP"
+          test -n "$(find "$ZIP_APP/Contents/MacOS" -type f -perm -u+x -print -quit)"
+          echo "macOS artifacts verified: UDRO DMG and ZIP contain a runnable app bundle with the correct Electron Framework."
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -179,7 +254,7 @@ jobs:
             (gh release upload "v$VERSION" release/installers/* --clobber && \
              gh release edit "v$VERSION" --notes-file docs/RELEASE_NOTES.md --title "AI Clipper Pro v$VERSION")
 
-      - name: Verify published macOS disk image checksums
+      - name: Verify published installer checksums
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -187,21 +262,23 @@ jobs:
           set -euo pipefail
           VERSION="${{ inputs.version || github.ref_name }}"
           VERSION="${VERSION#v}"
-          VERIFY_DIR="release/verify-published-macos"
+          VERIFY_DIR="release/verify-published-installers"
           mkdir -p "$VERIFY_DIR"
-          gh release download "v$VERSION" --pattern '*-macOS-*.dmg' --dir "$VERIFY_DIR"
-          count="$(find "$VERIFY_DIR" -maxdepth 1 -type f -name '*.dmg' | wc -l | tr -d '[:space:]')"
-          test "$count" = "2"
-          for dmg in "$VERIFY_DIR"/*.dmg; do
-            name="$(basename "$dmg")"
+          gh release download "v$VERSION" --pattern 'AI-Clipper-Pro-*' --dir "$VERIFY_DIR"
+          expected_count="$(awk 'END { print NR }' release/installers/SHA256SUMS.txt)"
+          actual_count="$(find "$VERIFY_DIR" -maxdepth 1 -type f | wc -l | tr -d '[:space:]')"
+          test "$expected_count" -gt 0
+          test "$actual_count" = "$expected_count"
+          for asset in "$VERIFY_DIR"/*; do
+            name="$(basename "$asset")"
             expected="$(awk -v name="$name" '$2 == name || $2 == "./" name { print $1; exit }' release/installers/SHA256SUMS.txt)"
-            actual="$(sha256sum "$dmg" | awk '{ print $1 }')"
+            actual="$(sha256sum "$asset" | awk '{ print $1 }')"
             test -n "$expected"
             if [ "$expected" != "$actual" ]; then
-              echo "Published DMG checksum mismatch: $name" >&2
+              echo "Published installer checksum mismatch: $name" >&2
               exit 1
             fi
-            echo "Published DMG checksum verified: $name"
+            echo "Published installer checksum verified: $name"
           done
 
   publish_existing:
