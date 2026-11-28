@@ -13,12 +13,6 @@ HOOK_WORDS = [
     "win", "goal", "fail", "love", "wow", "omg", "bro", "dekho", "dude", "kya",
     "जबर्दस्त", "देखो", "वाह", "शानदार", "क्या", "गजब", "बेस्ट",
 ]
-HASHTAGS = {
-    "shorts": ["#Shorts", "#Viral", "#AIClipperPro"],
-    "reels": ["#Reels", "#Viral", "#AIClipperPro"],
-    "tiktok": ["#FYP", "#Viral", "#AIClipperPro"],
-    "landscape": ["#Viral", "#AIClipperPro"],
-}
 
 
 class Suggestion(BaseModel):
@@ -26,7 +20,6 @@ class Suggestion(BaseModel):
     score: int = Field(ge=0, le=100)
     title: str
     reason: str
-    caption: str = Field(default="", max_length=360)
 
 
 class RerankResult(BaseModel):
@@ -40,10 +33,7 @@ class Candidate(BaseModel):
     score: float
     reasons: list[str] = Field(default_factory=list)
     title: str
-    hook: str = ""
-    hashtags: list[str] = Field(default_factory=list)
     transcript: str = ""
-    caption: str = ""
     region: dict[str, float] | None = None
     regions: list[dict[str, float]] = Field(default_factory=list)
     region_layout: str | None = None
@@ -160,35 +150,13 @@ def window_score(
     return min(100.0, round(score, 2)), reasons
 
 
-def make_title(text: str, platform: str, fallback: str = "You won't believe this") -> tuple[str, str]:
-    words = [w.strip() for w in re.split(r"[.!?]", text) if len(w.strip()) > 12]
-    hook = (words[0] if words else text.strip()).strip()[:110]
-    title = hook or fallback
-    if len(title) < 12:
-        title = f"{title} — you need to see this"
-    title = title[:97]
-    if platform in HASHTAGS and "#Shorts" not in title:
-        suffix = " #Shorts" if platform == "shorts" else ""
-        title = (title[: 100 - len(suffix)] + suffix).strip()
-    return title, hook
-
-
-def make_caption(text: str, fallback: str = "") -> str:
-    """Build concise, editable social copy from the transcript without inventing details."""
+def make_title(text: str, fallback: str = "Video moment") -> str:
+    """Return a concise factual label, without platform-specific or promotional copy."""
     cleaned = re.sub(r"\s+", " ", str(text or "")).strip()
-    cleaned = re.sub(r"\s+([,.;!?।])", r"\1", cleaned)
-    if not cleaned:
-        cleaned = re.sub(r"\s+#\w+.*$", "", str(fallback or "")).strip()
-    if not cleaned:
-        return "A standout moment from the video."
-    sentences = re.split(r"(?<=[.!?।])\s+", cleaned)
-    caption = " ".join(sentences[:2]).strip()
-    if len(caption) > 240:
-        shortened = caption[:237].rsplit(" ", 1)[0].rstrip(" ,;:-")
-        caption = (shortened or caption[:237].rstrip()) + "…"
-    elif caption and caption[-1] not in ".!?।":
-        caption += "."
-    return caption
+    sentence = re.split(r"(?<=[.!?।])\s+", cleaned, maxsplit=1)[0] if cleaned else ""
+    title = sentence or str(fallback or "").strip() or "Video moment"
+    return title[:100].rstrip()
+
 
 
 def _composition_ratio(layout: str | None, value: float | None) -> float:
@@ -218,144 +186,117 @@ def propose(
     split_ratios: dict[str, float] | None = None,
     outline_styles: dict[str, str] | None = None,
 ) -> list[Candidate]:
-    """Greedy non-overlapping window search over fused audio/visual features."""
-    candidates: list[Candidate] = []
+    """Rank high-signal, non-overlapping moments independently for each source."""
+    target_count = max(1, min(50, int(count)))
+    minimum = max(1.0, float(min_duration))
+    maximum = max(minimum, float(max_duration))
     step = 0.5
+    selected: list[Candidate] = []
+
     for media in media_rows:
-        media_id = media["id"]
-        duration = float(media.get("duration") or 0)
-        if duration < min_duration:
+        media_id = str(media["id"])
+        duration = max(0.0, float(media.get("duration") or 0))
+        if duration < minimum:
             continue
-        speech, keywords, visual = build_features(
-            transcripts.get(media_id), visions.get(media_id), duration, step
-        )
+        transcript = transcripts.get(media_id) or {}
+        vision_data = visions.get(media_id) or {}
+        speech, keywords, visual = build_features(transcript, vision_data, duration, step)
         focus_boxes = (regions or {}).get(media_id) or []
         layout_name = (layouts or {}).get(media_id)
         split_ratio = _composition_ratio(layout_name, (split_ratios or {}).get(media_id))
         requested_outline = (outline_styles or {}).get(media_id, "clean")
         outline_style = requested_outline if requested_outline in {"none", "clean", "neon", "double"} else "clean"
         if focus_boxes:
-            # Region-focused visual activity is already fused into `visual`; mark
-            # the bias so the reason list and the editor keep the same context.
             visual = [min(1.0, value * 1.12) for value in visual]
-        seen: list[tuple[float, float]] = []
-        lengths = sorted(
-            {min_duration, (min_duration + max_duration) / 3, (min_duration + max_duration) / 2,
-             (min_duration + max_duration) * 2 / 3, max_duration, 30.0}
-        )
-        lengths = [length for length in lengths if min_duration <= length <= max_duration and length <= duration]
-        fallback_scores: list[tuple[float, int, int, list[str], str]] = []
+        has_signals = any(speech) or any(keywords) or any(visual)
+
+        lengths = sorted({
+            minimum,
+            minimum + (maximum - minimum) / 3,
+            minimum + (maximum - minimum) / 2,
+            minimum + (maximum - minimum) * 2 / 3,
+            maximum,
+            30.0,
+        })
+        pool: list[Candidate] = []
+        transcript_segments = transcript.get("segments", []) if isinstance(transcript, dict) else []
         for length in lengths:
-            width = max(1, int(length / step))
-            scored = []
-            has_signals = any(speech) or any(keywords) or any(visual)
-            for start in range(0, max(1, len(speech) - width + 1)):
-                end = start + width
-                score, reasons = window_score(speech, keywords, visual, start, end)
-                fallback_scores.append((score, start, end, reasons, media_id))
+            if length < minimum or length > maximum or length > duration:
+                continue
+            width = max(1, round(length / step))
+            if width > len(speech):
+                continue
+            for start_idx in range(0, len(speech) - width + 1):
+                end_idx = start_idx + width
+                score, reasons = window_score(speech, keywords, visual, start_idx, end_idx)
                 if has_signals and score < 18:
                     continue
-                if any(not (start * step >= stop + 2 or end * step <= begin - 2) for begin, stop in seen):
-                    continue
-                scored.append((score, start, end, reasons))
-            scored.sort(reverse=True)
-            for score, start, end, reasons in scored[: max(count * 2, 4)]:
-                begin, stop = start * step, min(duration, end * step)
-                if any(not (begin >= b + 2 or stop <= a - 2) for a, b in seen):
-                    continue
-                seen.append((begin, stop))
+                begin = start_idx * step
+                stop = min(duration, end_idx * step)
                 transcript_text = " ".join(
-                    seg.get("text", "")
-                    for seg in transcripts.get(media_id, {}).get("segments", [])
-                    if seg.get("start", 0) <= stop and seg.get("end", 0) >= begin
+                    str(segment.get("text") or "")
+                    for segment in transcript_segments if isinstance(segment, dict)
+                    and float(segment.get("start", 0) or 0) <= stop
+                    and float(segment.get("end", 0) or 0) >= begin
                 ).strip()
-                title, hook = make_title(transcript_text, platform, media.get("title", ""))
-                reasons = list(reasons) or ["steady engagement"]
+                title = make_title(transcript_text, str(media.get("title") or ""))
+                display_reasons = list(reasons) or ["steady engagement"]
                 if focus_boxes:
-                    reasons.append("focused on your player/gameplay regions")
+                    display_reasons.append("focused on your player/gameplay regions")
                 crop_path = (
-                    _crop_path_window(visions.get(media_id), begin, stop)
+                    _crop_path_window(vision_data, begin, stop)
                     if platform != "landscape" and not focus_boxes else []
                 )
-                display_reasons = reasons + (["portrait framing follows a tracked subject"] if crop_path else [])
-                candidates.append(
-                    Candidate(
-                        media_id=media_id,
-                        start=round(begin, 2),
-                        end=round(stop, 2),
-                        score=round(score * (1 + min(len(reasons), 3) * 0.02), 2),
-                        reasons=display_reasons,
-                        title=title,
-                        hook=hook[:140],
-                        hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
-                        transcript=transcript_text[:600],
-                        caption=make_caption(transcript_text, title),
-                        region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
-                        regions=focus_boxes,
-                        region_layout=layout_name,
-                        split_ratio=split_ratio,
-                        outline_style=outline_style,
-                        crop_path=crop_path,
-                    )
-                )
-                if len(candidates) >= count * 4:
-                    break
-            if len(candidates) >= count * 4:
-                break
-    if len(candidates) < count:
-        claimed = [(item.start, item.end) for item in candidates]
-        for score, start, end, reasons, media_id in sorted(fallback_scores, key=lambda item: item[0], reverse=True):
-            media = next((item for item in media_rows if item["id"] == media_id), {"id": media_id, "title": ""})
-            duration = float(media.get("duration") or 0)
-            begin, stop = start * step, min(duration, end * step)
-            if any(begin < b and stop > a for a, b in claimed):
+                if crop_path:
+                    display_reasons.append("portrait framing follows a tracked subject")
+                score_bonus = min(sum(1 for reason in display_reasons if reason not in {
+                    "focused on your player/gameplay regions", "portrait framing follows a tracked subject",
+                }), 3) * 0.02
+                pool.append(Candidate(
+                    media_id=media_id,
+                    start=round(begin, 2),
+                    end=round(stop, 2),
+                    score=round(score * (1 + score_bonus), 2),
+                    reasons=display_reasons,
+                    title=title,
+                    transcript=transcript_text[:600],
+                    region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
+                    regions=focus_boxes,
+                    region_layout=layout_name,
+                    split_ratio=split_ratio,
+                    outline_style=outline_style,
+                    crop_path=crop_path,
+                ))
+
+        # Choose a mix of durations and scores, while keeping every proposed cut
+        # at least two seconds clear of another cut from the same source. Clips
+        # from different source files may naturally share the same time range.
+        pool.sort(key=lambda item: (-item.score, item.start, item.end))
+        source_picks: list[Candidate] = []
+        for candidate in pool:
+            if any(
+                candidate.start < picked.end + 2 and candidate.end > picked.start - 2
+                for picked in source_picks
+            ):
                 continue
-            claimed.append((begin, stop))
-            transcript_text = " ".join(
-                seg.get("text", "")
-                for seg in transcripts.get(media_id, {}).get("segments", [])
-                if seg.get("start", 0) <= stop and seg.get("end", 0) >= begin
-            ).strip()
-            title, hook = make_title(transcript_text, platform, media.get("title", ""))
-            chosen_reasons = list(reasons) or ["steady engagement"]
-            focus_boxes = (regions or {}).get(media_id) or []
-            layout_name = (layouts or {}).get(media_id)
-            split_ratio = _composition_ratio(layout_name, (split_ratios or {}).get(media_id))
-            requested_outline = (outline_styles or {}).get(media_id, "clean")
-            outline_style = requested_outline if requested_outline in {"none", "clean", "neon", "double"} else "clean"
-            if focus_boxes:
-                chosen_reasons.append("focused on your player/gameplay regions")
-            crop_path = (
-                _crop_path_window(visions.get(media_id), begin, stop)
-                if platform != "landscape" and not focus_boxes else []
-            )
-            if crop_path:
-                chosen_reasons.append("portrait framing follows a tracked subject")
-            candidates.append(Candidate(
-                media_id=media_id, start=round(begin, 2), end=round(stop, 2),
-                score=round(score, 2), reasons=chosen_reasons, title=title,
-                hook=hook[:140], hashtags=HASHTAGS.get(platform, HASHTAGS["shorts"]),
-                transcript=transcript_text[:600], caption=make_caption(transcript_text, title),
-                region=(focus_regions or {}).get(media_id) or (focus_boxes[0] if focus_boxes else None),
-                regions=focus_boxes, region_layout=layout_name, split_ratio=split_ratio,
-                outline_style=outline_style, crop_path=crop_path,
-            ))
-            if len(candidates) >= count:
+            source_picks.append(candidate)
+            if len(source_picks) >= target_count:
                 break
-    candidates.sort(key=lambda item: item.score, reverse=True)
-    return candidates[: max(count, 1)]
+        selected.extend(source_picks)
+
+    selected.sort(key=lambda item: (-item.score, item.media_id, item.start))
+    return selected[:target_count]
 
 
 async def refine_with_llm(
     candidates: list[Candidate],
     llm: Callable,
     model: str | None = None,
-    platform: str = "shorts",
 ) -> list[Candidate]:
-    """Use one compact structured call to improve ranking, titles and share copy.
+    """Use one compact structured call to improve moment ranking and factual titles.
 
     Candidate timing and crop metadata remain source-of-truth; the model only
-    returns an index, an adjusted score, and editable text.
+    returns an index, an adjusted score, and concise title/reason text.
     """
     if not candidates:
         return candidates
@@ -366,11 +307,11 @@ async def refine_with_llm(
         for index, candidate in enumerate(limited)
     )
     prompt = (
-        f"Review these {platform} video moments and rank them by engagement potential. "
+        "Review these video moments and rank them by engagement potential. "
         "Return one suggestion per input using its zero-based index. Keep every clip's timing unchanged. "
-        "Write a clear, accurate title under 100 characters and a natural social caption under 240 characters. "
-        "Use only facts supported by the transcript, avoid generic clickbait, do not add hashtags, "
-        "and preserve the transcript's language. Keep the explanation short.\n"
+        "Write a concise, plain factual title under 100 characters, using only facts supported by the transcript. "
+        "Do not use platform names, hashtags, promotional hooks, calls to action, or generic clickbait. "
+        "Preserve the transcript's language and keep explanations short.\n"
         f"Moments:\n{summary}"
     )
     result = await llm(
@@ -389,8 +330,6 @@ async def refine_with_llm(
             candidate.score = (candidate.score + float(suggestion.score)) / 2
             if suggestion.title.strip():
                 candidate.title = suggestion.title.strip()[:100]
-            if suggestion.caption.strip():
-                candidate.caption = suggestion.caption.strip()[:240]
             if suggestion.reason.strip():
                 candidate.reasons = [suggestion.reason.strip()[:120]] + candidate.reasons[:1]
     candidates.sort(key=lambda item: item.score, reverse=True)

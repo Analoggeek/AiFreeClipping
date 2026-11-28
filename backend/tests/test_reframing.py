@@ -210,7 +210,7 @@ def test_ffmpeg_output_follows_a_cut_aware_crop_path(tmp_path):
         "aspect": "9:16", "resolution": "source", "source_width": 640,
         "source_height": 360,
         "crop_path": [[0.0, 0.30], [1.0, 0.30], [1.0001, 0.70], [2.0, 0.70]],
-        "blur_background": True, "caption_style": {"preset": "none"}, "sfx": [],
+        "blur_background": True, "sfx": [],
     }
     encoded = subprocess.run(
         render.build_clip_args(str(source), 0, 2, str(output), options, has_audio=False),

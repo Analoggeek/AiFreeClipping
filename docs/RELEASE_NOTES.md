@@ -1,17 +1,20 @@
 # Release notes
 
-## Unreleased — v5.2.7 candidate
+## Unreleased — v6.0.0 candidate
 
-> Unreleased candidate: no v5.2.7 GitHub Release or release assets are published. Manual CI dispatch defaults to build-and-verify only.
+> Release preparation only: no v6.0.0 tag, GitHub Release or installer assets have been published. The latest published installer set remains available from the GitHub Releases page.
 
 ### Candidate changes
 
-- Clear app-managed downloads from the effective downloads folder in Settings after showing the folder and asking for explicit confirmation. Imported originals and unrelated files stay untouched; downloads and their library entries remain when a project, rendered clip or another library item still references them.
-- Add videos and AI clips at the playhead or drag them to a specific timeline position. Inserting within a clip splits it; dragging existing video clips reorders them while linked captions and Auto Edit overlays follow. Captions, stickers and audio items can also be repositioned.
-- Update the bundled Ollama runtime pin to v0.40.19, use the official platform/architecture assets, and stream-extract Linux `.tar.zst` archives without writing a second multi-gigabyte tar file.
-- Enable maximum compression where the existing installer targets support it and XZ compression for Debian packages. Preserve the native installer targets and the macOS read-only, uncompressed UDRO DMG format.
+- Remove caption/subtitle editing, subtitle downloads, social-copy fields, and text-overlay rendering. Whisper remains an internal transcript signal for clip scoring and review context; it does not create exported subtitles.
+- Remove YouTube OAuth, channel authorization and upload support. YouTube remains available as a yt-dlp source-download site.
+- Keep the video, sticker and audio timeline tracks, source cropping/composition, Auto Edit, local asset workflows and MP4 exports. Old project caption tracks and text-render metadata are cleaned when projects are loaded or saved.
+- Keep clip titles as metadata and editable labels; they are not rendered as text overlays.
+- Carry forward the confirmed, reference-safe downloads cleanup and flexible timeline placement from the superseded v5.2.7 candidate.
+- Carry forward Ollama v0.40.19 asset mapping/streaming extraction and supported installer compression work from the same unreleased candidate.
+- Prepare the complete cross-platform release matrix: Windows x64/ARM64, macOS Intel and Apple Silicon DMG/ZIP, and Linux x64 AppImage/DEB. Manual builds default to build-and-verify without publishing; `--publish` is required for a dispatch-based release.
 
-## v5.2.6 — offline captions and a flexible Editor
+## v5.2.6 — offline captions and a flexible Editor (historical; caption features retired in v6.0.0)
 
 ### Download the installers
 

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowRight, Captions, Clapperboard, Download, Film, FolderDown,
-  ImagePlus, Layers3, ListVideo, Mic2, ScanEye, Sparkles, UploadCloud,
+  ArrowRight, Clapperboard, Download, Film, FolderDown,
+  ImagePlus, Layers3, ListVideo, Mic2, ScanEye, Sparkles,
 } from 'lucide-react';
 import { api } from '../api';
 import { Panel, Pill } from '../components/common';
@@ -12,12 +12,11 @@ const PIPELINE = [
   { icon: Download, title: 'Download', detail: 'Any video or full playlist, max available quality', page: 'downloads' as PageId },
   { icon: ScanEye, title: 'Understand', detail: 'Whisper words + YOLOX/ByteTrack activity, scored locally', page: 'clipper' as PageId },
   { icon: Clapperboard, title: 'Clip', detail: 'Multiple viral moments from one or many videos', page: 'clipper' as PageId },
-  { icon: Layers3, title: 'Edit', detail: 'Timeline, captions, stickers, SFX, stock & AI art', page: 'editor' as PageId },
-  { icon: UploadCloud, title: 'Publish', detail: 'One-click high-quality export and YouTube upload', page: 'publish' as PageId },
+  { icon: Layers3, title: 'Edit', detail: 'Timeline, stickers, SFX, stock & AI art', page: 'editor' as PageId },
+  { icon: Download, title: 'Export', detail: 'One-click high-quality MP4 export and download', page: 'export' as PageId },
 ];
 
 const FEATURES = [
-  { icon: Captions, title: 'Word-timed captions', text: 'Whisper caption tracks with hype, karaoke, minimal and premium presets.' },
   { icon: Mic2, title: 'Sound design', text: 'Procedural whooshes, risers, pops and impacts — royalty-free and offline.' },
   { icon: ImagePlus, title: 'Nano Banana / SDXL', text: 'Generate stickers on the spot with a cloud key or fully local ComfyUI.' },
   { icon: Film, title: 'Region lock', text: 'Mark only the player or gameplay area so the AI scores what matters.' },
@@ -44,7 +43,7 @@ export default function Overview({ onNavigate, openClipper }: { onNavigate: (pag
         <div>
           <Pill tone="violet"><Sparkles size={13} /> 100% LOCAL AI STUDIO</Pill>
           <h1>Turn any video into<br /><span>viral-ready clips.</span></h1>
-          <p>Paste a link, let your local AI find the engaging moments, polish them in a full editor, and publish — all on your own hardware.</p>
+          <p>Paste a link, let your local AI find the engaging moments, polish them in a full editor, and export them — all on your own hardware.</p>
           <div className="hero-actions">
             <button className="primary" onClick={() => onNavigate('downloads')}>Start with a link <ArrowRight size={17} /></button>
             <button className="ghost-btn" onClick={() => openClipper([])}>Open AI Clipper</button>
@@ -70,7 +69,7 @@ export default function Overview({ onNavigate, openClipper }: { onNavigate: (pag
         })}
       </div>
 
-      <Panel title="Your creation pipeline" subtitle="Every stage is connected — one workflow from source link to published Short">
+      <Panel title="Your creation pipeline" subtitle="Every stage is connected — one workflow from source link to finished MP4">
         <div className="pipeline">
           {PIPELINE.map((step, index) => {
             const Icon = step.icon;

@@ -3,7 +3,6 @@ import type { Timeline, VideoItem } from '../types';
 type TimedItem = {
   start: number;
   end: number;
-  auto_caption_video_id?: string;
   auto_edit_clip_id?: string;
 };
 
@@ -117,14 +116,6 @@ export function insertVideoAtTime(current: Timeline, item: VideoItem, requestedT
     first.duration = firstDuration;
     first.sourceDuration = sourceOffset;
     videos.splice(videoIndex + 1, 0, second);
-    const originalVideoId = first.id || first.clip_id;
-    if (originalVideoId) {
-      next.tracks.captions.forEach((caption) => {
-        if (caption.auto_caption_video_id === originalVideoId && caption.start >= position - EPSILON) {
-          caption.auto_caption_video_id = second.id;
-        }
-      });
-    }
     index = videoIndex + 1;
     start = cursor + firstDuration;
     resolvedPosition = true;
@@ -136,19 +127,12 @@ export function insertVideoAtTime(current: Timeline, item: VideoItem, requestedT
     start = cursor;
   }
   videos.splice(index, 0, item);
-  shiftTimedTrack(next.tracks.captions, start, durationOf(item));
   shiftTimedTrack(next.tracks.stickers, start, durationOf(item));
   shiftTimedTrack(next.tracks.audio, start, durationOf(item));
   return { timeline: next, index, start, changed: true };
 }
 
 function linkedVideoIndex(item: TimedItem, videos: VideoItem[], starts: number[]): number {
-  if (item.auto_caption_video_id) {
-    const exact = videos.findIndex((video) => video.id === item.auto_caption_video_id);
-    if (exact >= 0) return exact;
-    const legacy = videos.findIndex((video) => !video.id && video.clip_id === item.auto_caption_video_id);
-    if (legacy >= 0) return legacy;
-  }
   if (item.auto_edit_clip_id) {
     const candidates = videos
       .map((video, index) => ({ video, index }))
@@ -182,7 +166,7 @@ export function removeVideoAtIndex(current: Timeline, removedIndex: number): Vid
 
   const next = structuredClone(current);
   next.tracks.video.splice(removedIndex, 1);
-  const timedTracks: TimedItem[][] = [next.tracks.captions, next.tracks.stickers, next.tracks.audio];
+  const timedTracks: TimedItem[][] = [next.tracks.stickers, next.tracks.audio];
   for (const track of timedTracks) {
     for (const item of track) {
       const oldIndex = linkedVideoIndex(item, videos, oldStarts);
@@ -201,7 +185,7 @@ export function removeVideoAtIndex(current: Timeline, removedIndex: number): Vid
   return { timeline: next, index, start, changed: true };
 }
 
-/** Reorder a video by dropping it near a cut; linked captions/Auto Edit overlays follow their clip. */
+/** Reorder a video by dropping it near a cut; linked Auto Edit overlays follow their clip. */
 export function moveVideoToTime(current: Timeline, fromIndex: number, requestedTime: number): VideoPlacement {
   const videos = current.tracks.video;
   if (fromIndex < 0 || fromIndex >= videos.length) {
@@ -229,7 +213,7 @@ export function moveVideoToTime(current: Timeline, fromIndex: number, requestedT
 
   const next = structuredClone(current);
   next.tracks.video = order.map((oldIndex) => next.tracks.video[oldIndex]);
-  const timedTracks: TimedItem[][] = [next.tracks.captions, next.tracks.stickers, next.tracks.audio];
+  const timedTracks: TimedItem[][] = [next.tracks.stickers, next.tracks.audio];
   for (const track of timedTracks) {
     for (const item of track) {
       const oldIndex = linkedVideoIndex(item, videos, oldStarts);

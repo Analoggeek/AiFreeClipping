@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   Clapperboard, CloudDownload, Download, FolderOpen, LayoutDashboard, Library,
-  ListVideo, LoaderCircle, Moon, MonitorPlay, Package, PlugZap, Settings, Sparkles, Sun, UploadCloud, WifiOff,
+  ListVideo, LoaderCircle, Moon, MonitorPlay, Package, PlugZap, Settings, Sparkles, Sun, WifiOff,
 } from 'lucide-react';
 import logo from '../brand/logo-mark-3d.svg';
 import { api, apiBase } from './api';
@@ -15,10 +15,10 @@ const Editor = lazy(() => import('./pages/Editor'));
 const ModelsPage = lazy(() => import('./pages/ModelsPage'));
 const Overview = lazy(() => import('./pages/Overview'));
 const Playlists = lazy(() => import('./pages/Playlists'));
-const Publish = lazy(() => import('./pages/Publish'));
+const ExportPage = lazy(() => import('./pages/Export'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 
-export type PageId = 'overview' | 'downloads' | 'playlists' | 'clipper' | 'editor' | 'publish' | 'models' | 'settings';
+export type PageId = 'overview' | 'downloads' | 'playlists' | 'clipper' | 'editor' | 'export' | 'models' | 'settings';
 
 const NAV: Array<{ id: PageId; label: string; icon: typeof LayoutDashboard; group: string }> = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard, group: 'Workspace' },
@@ -26,7 +26,7 @@ const NAV: Array<{ id: PageId; label: string; icon: typeof LayoutDashboard; grou
   { id: 'playlists', label: 'Playlists', icon: ListVideo, group: 'Workspace' },
   { id: 'clipper', label: 'AI Clipper', icon: Clapperboard, group: 'Create' },
   { id: 'editor', label: 'Video Editor', icon: MonitorPlay, group: 'Create' },
-  { id: 'publish', label: 'Publish', icon: UploadCloud, group: 'Create' },
+  { id: 'export', label: 'Export', icon: Download, group: 'Create' },
   { id: 'models', label: 'Local Models', icon: Package, group: 'System' },
   { id: 'settings', label: 'Settings', icon: Settings, group: 'System' },
 ];
@@ -36,7 +36,7 @@ export default function App() {
   const [toast, setToast] = useState('');
   const [online, setOnline] = useState(false);
   const [theme, setTheme] = useState<'dark' | 'light'>(() => localStorage.getItem('aifreeclip.theme') === 'light' ? 'light' : 'dark');
-  const [version, setVersion] = useState('5.2.7');
+  const [version, setVersion] = useState('6.0.0');
   const [mediaSelection, setMediaSelection] = useState<string[]>([]);
   const [clipSelection, setClipSelection] = useState<string[]>([]);
   const [folder, setFolder] = useState('');
@@ -84,11 +84,11 @@ export default function App() {
     if (clipId) setClipSelection([clipId]);
     setPage('editor');
   };
-  const openPublish = (ids: string[]) => {
+  const openExport = (ids: string[]) => {
     setClipSelection(ids);
-    setPage('publish');
+    setPage('export');
   };
-  const common = { notify, openClipper, openEditor, openPublish };
+  const common = { notify, openClipper, openEditor, openExport };
   const activeJobs = jobs.filter((job) => job.status === 'running' || job.status === 'queued').length;
 
   let content: React.ReactNode;
@@ -97,7 +97,7 @@ export default function App() {
     case 'playlists': content = <Playlists {...common} />; break;
     case 'clipper': content = <Clipper {...common} mediaSelection={mediaSelection} setMediaSelection={setMediaSelection} />; break;
     case 'editor': content = <Editor {...common} clipSelection={clipSelection} setMediaSelection={setMediaSelection} />; break;
-    case 'publish': content = <Publish {...common} clipSelection={clipSelection} setClipSelection={setClipSelection} />; break;
+    case 'export': content = <ExportPage {...common} clipSelection={clipSelection} setClipSelection={setClipSelection} />; break;
     case 'models': content = <ModelsPage notify={notify} />; break;
     case 'settings': content = <SettingsPage notify={notify} />; break;
     default: content = <Overview onNavigate={setPage} openClipper={openClipper} />;
@@ -119,7 +119,7 @@ export default function App() {
                 return (
                   <button key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={() => setPage(item.id)}>
                     <Icon size={18} /><span>{item.label}</span>
-                    {item.id === 'publish' && activeJobs > 0 && <em>{activeJobs}</em>}
+                    {item.id === 'export' && activeJobs > 0 && <em>{activeJobs}</em>}
                   </button>
                 );
               })}
@@ -172,5 +172,5 @@ export type PageProps = {
   notify: (message: string) => void;
   openClipper: (ids: string[]) => void;
   openEditor: (clipId?: string) => void;
-  openPublish: (ids: string[]) => void;
+  openExport: (ids: string[]) => void;
 };

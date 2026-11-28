@@ -42,7 +42,7 @@ SDXL_CHECKPOINT = (
 CATALOG: list[dict[str, Any]] = [
     {
         "id": "gemma2:7b", "kind": "LLM", "name": "Gemma 2 7B", "provider": "Ollama",
-        "size": "5.4 GB", "use": "Hook titles, hashtags, clip reranking", "recommended": True,
+        "size": "5.4 GB", "use": "Clip titles and local reranking", "recommended": True,
         "downloadUrl": "https://ollama.com/library/gemma2", "docsUrl": "https://docs.ollama.com",
         "providerUrl": OLLAMA_INSTALLER, "autoInstall": True,
     },
@@ -60,7 +60,7 @@ CATALOG: list[dict[str, Any]] = [
     },
     {
         "id": "whisper-small", "kind": "ASR", "name": "Whisper Small", "provider": "faster-whisper",
-        "size": "0.5 GB", "use": "Word-timed captions (balanced)", "recommended": True,
+        "size": "0.5 GB", "use": "Transcript-aware clip scoring (balanced)", "recommended": True,
         "downloadUrl": f"{HF}/Systran/faster-whisper-small", "docsUrl": f"{HF}/Systran/faster-whisper-small",
         "autoInstall": True,
     },
@@ -111,12 +111,6 @@ CATALOG: list[dict[str, Any]] = [
         "docsUrl": "https://ai.google.dev/gemini-api/docs/image-generation", "autoInstall": False,
     },
     {
-        "id": "youtube-api", "kind": "Cloud", "name": "YouTube Data API", "provider": "Google Cloud",
-        "size": "API", "use": "Direct OAuth upload from the Publish page", "needsApi": True,
-        "apiUrl": "https://console.cloud.google.com/apis/credentials",
-        "docsUrl": "https://developers.google.com/youtube/v3/guides/uploading_a_video", "autoInstall": False,
-    },
-    {
         "id": "pexels-api", "kind": "Cloud", "name": "Pexels API", "provider": "Pexels",
         "size": "API", "use": "Copyright-friendly stock footage search in the editor", "needsApi": True,
         "apiUrl": "https://www.pexels.com/api/", "docsUrl": "https://www.pexels.com/api/documentation/",
@@ -132,13 +126,11 @@ CATALOG: list[dict[str, Any]] = [
 
 API_ENV = {
     "nano-banana": "GEMINI_API_KEY",
-    "youtube-api": "YOUTUBE_CLIENT_SECRET",
     "pexels-api": "PEXELS_API_KEY",
     "pixabay-api": "PIXABAY_API_KEY",
 }
 API_SETTINGS = {
     "nano-banana": "gemini_api_key",
-    "youtube-api": "youtube_client_secret",
     "pexels-api": "pexels_api_key",
     "pixabay-api": "pixabay_api_key",
 }

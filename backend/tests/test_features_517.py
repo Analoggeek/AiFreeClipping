@@ -55,7 +55,6 @@ def test_composition_filter_graph_covers_stacks_and_picture_in_picture():
         "/tmp/source.mp4", 1, 4, "/tmp/stacked.mp4", {
             "aspect": "9:16", "resolution": "720p", "regions": regions,
             "region_layout": "top-game-bottom-player", "sfx": [],
-            "caption_style": {"preset": "none"},
         },
     )
     graph = stacked[stacked.index("-filter_complex") + 1]
@@ -71,7 +70,6 @@ def test_composition_filter_graph_covers_stacks_and_picture_in_picture():
             "/tmp/source.mp4", 1, 4, "/tmp/layout.mp4", {
                 "aspect": "9:16", "resolution": "720p", "regions": regions,
                 "region_layout": layout, "sfx": [],
-                "caption_style": {"preset": "none"},
             },
         )
         assert operator in args[args.index("-filter_complex") + 1]
@@ -83,7 +81,6 @@ def test_composition_filter_graph_covers_stacks_and_picture_in_picture():
                 {"x": 0.05, "y": 0.05, "w": 0.35, "h": 0.35},
             ],
             "region_layout": "square-player-full-game", "sfx": [],
-            "caption_style": {"preset": "none"},
         },
     )
     pip_graph = pip[pip.index("-filter_complex") + 1]
@@ -108,27 +105,6 @@ def test_scoring_preserves_the_explicitly_selected_focus_and_layout():
     assert candidate.region_layout == "top-player-bottom-game"
 
 
-def test_title_card_is_kept_when_speech_captions_are_disabled(tmp_path):
-    args = render.build_clip_args(
-        "/tmp/source.mp4", 2, 8, "/tmp/title.mp4", {
-            "aspect": "9:16", "resolution": "720p", "title": "The final moment",
-            "captions": [{"text": "speech should be hidden", "start": 2.2, "end": 2.8}],
-            "caption_style": {"preset": "none"}, "sfx": [],
-        },
-    )
-    graph = args[args.index("-filter_complex") + 1]
-    assert "subtitles=" in graph
-    ass_path = render.write_ass(
-        [{"text": "The final moment", "start": 0, "end": 2, "kind": "title"}],
-        {"preset": "none"},
-    )
-    ass = Path(ass_path).read_text(encoding="utf-8")
-    assert "Style: Title," in ass
-    assert "Dialogue: 0,00:00:00.0,00:00:02.0,Title,," in ass
-    assert "The final moment" in ass
-    assert "\\an8" in ass
-
-
 def test_multi_region_render_is_a_playable_h264_mp4(tmp_path):
     source = tmp_path / "source.mp4"
     output = tmp_path / "stacked.mp4"
@@ -150,7 +126,6 @@ def test_multi_region_render_is_a_playable_h264_mp4(tmp_path):
                 {"x": 0, "y": 0.58, "w": 1, "h": 0.42},
             ],
             "region_layout": "top-game-bottom-player", "sfx": [],
-            "caption_style": {"preset": "none"},
         },
     ))
     info = probe(output)
@@ -166,7 +141,6 @@ def test_multi_region_render_is_a_playable_h264_mp4(tmp_path):
                 {"x": 0.05, "y": 0.05, "w": 0.35, "h": 0.35},
             ],
             "region_layout": "square-player-full-game", "sfx": [],
-            "caption_style": {"preset": "none"},
         },
     ))
     pip_info = probe(pip_output)
@@ -174,7 +148,7 @@ def test_multi_region_render_is_a_playable_h264_mp4(tmp_path):
     assert (pip_info["width"], pip_info["height"]) == (720, 1280)
 
 
-def test_timeline_export_uses_source_quality_and_renders_title_cards(tmp_path):
+def test_timeline_export_uses_source_quality_without_text_overlays(tmp_path):
     source = tmp_path / "timeline-source.mp4"
     output = tmp_path / "timeline.mp4"
     command = [
@@ -189,7 +163,7 @@ def test_timeline_export_uses_source_quality_and_renders_title_cards(tmp_path):
     subprocess.run(command, check=True, capture_output=True)
 
     asyncio.run(render.render_timeline({
-        "aspect": "9:16", "resolution": "source", "caption_style": {"preset": "none"},
+        "aspect": "9:16", "resolution": "source",
         "tracks": {
             "video": [{
                 "clip_id": "synthetic-clip", "path": str(source), "sourceStart": 0,
@@ -200,9 +174,7 @@ def test_timeline_export_uses_source_quality_and_renders_title_cards(tmp_path):
                 ],
                 "region_layout": "top-game-bottom-player",
             }],
-            "captions": [{
-                "text": "A test title card", "start": 0, "end": 1, "kind": "title",
-            }], "stickers": [], "audio": [],
+            "stickers": [], "audio": [],
         },
     }, str(output)))
 
@@ -244,7 +216,6 @@ def test_batch_export_respects_per_clip_settings_and_requested_quality(tmp_path,
         response = client.post("/api/exports/batch", headers=HEADERS, json={
             "clip_ids": [clip_id], "aspect": "16:9", "resolution": "720p",
             "effects_by_clip": {clip_id: {
-                "caption_style": {"preset": "premium", "position": "top"},
                 "captions": [{"word": "brilliant", "start": 1.1, "end": 1.8}],
                 "regions": custom_regions, "region_layout": "top-game-bottom-player",
                 "split_ratio": 0.7, "outline_style": "neon", "title": "Edited title",
@@ -256,16 +227,15 @@ def test_batch_export_respects_per_clip_settings_and_requested_quality(tmp_path,
         assert job["status"] == "done", job
         assert captured["aspect"] == "16:9"
         assert captured["resolution"] == "720p"
-        assert captured["caption_style"] == {"preset": "premium", "position": "top"}
-        assert captured["captions"] == [{"word": "brilliant", "start": 1.1, "end": 1.8}]
         assert captured["regions"] == custom_regions
         assert captured["region_layout"] == "top-game-bottom-player"
         assert captured["split_ratio"] == 0.7
         assert captured["outline_style"] == "neon"
-        assert captured["title"] == "Edited title"
+        assert "caption_style" not in captured and "captions" not in captured and "title" not in captured
         saved_clip = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
         assert saved_clip["metadata"]["effects"]["resolution"] == "720p"
         assert saved_clip["metadata"]["effects"]["watermark"] is True
+        assert not ({"caption_style", "captions", "title"} & saved_clip["metadata"]["effects"].keys())
     finally:
         if job_id:
             db.delete("jobs", "id", job_id)
@@ -279,7 +249,7 @@ def test_project_export_passes_selected_format_and_quality_to_timeline_renderer(
     source.write_bytes(b"synthetic source")
     timeline = {
         "tracks": {"video": [{"path": str(source), "sourceStart": 0, "duration": 1}],
-                   "captions": [], "stickers": [], "audio": []},
+                   "stickers": [], "audio": []},
         "aspect": "9:16", "resolution": "source",
     }
     db.insert("projects", {
@@ -409,14 +379,12 @@ def test_tts_uses_the_persisted_voice_and_custom_model_folder(tmp_path, monkeypa
         db.set_setting("tts_voice", old_voice)
 
 
-def test_auto_edit_transcription_fallback_and_batch_keep_caption_tracks_and_title_fallbacks(tmp_path, monkeypatch):
+
+def test_auto_edit_keeps_transcript_internal_and_emits_only_editable_media_tracks(tmp_path, monkeypatch):
     source = tmp_path / "source.mp4"
-    music = tmp_path / "music.wav"
     source.write_bytes(b"synthetic source")
-    music.write_bytes(b"synthetic music")
-    media_id, clip_id = uid("m517_"), uid("c517_")
-    region_a = {"x": 0, "y": 0, "w": 1, "h": 0.62}
-    region_b = {"x": 0, "y": 0.62, "w": 1, "h": 0.38}
+    media_id, clip_id = uid("m517_v6_"), uid("c517_v6_")
+    region = {"x": 0, "y": 0, "w": 1, "h": 1}
     db.insert("media", {
         "id": media_id, "title": "Source", "path": str(source), "source_url": None,
         "duration": 10, "width": 640, "height": 360, "thumbnail": None,
@@ -427,69 +395,61 @@ def test_auto_edit_transcription_fallback_and_batch_keep_caption_tracks_and_titl
         "start": 2.0, "end": 8.0, "score": 88, "title": "Creator's winning moment",
         "reason": "high engagement", "status": "proposed", "output": None,
         "metadata": dumps({
+            "caption": "Legacy social copy",
             "transcript": "The creator lands an incredible final move.",
-            "region": region_a, "regions": [region_a, region_b],
-            "region_layout": "top-game-bottom-player",
-            "crop_path": [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]],
-            "effects": {"music": str(music), "music_volume": 0.16},
+            "region": region, "regions": [region],
+            "effects": {
+                "caption_style": {"preset": "premium"},
+                "captions": [{"text": "legacy overlay", "start": 0, "end": 2}],
+                "title": "legacy title overlay",
+                "music": "/missing/music.wav",
+            },
         }),
         "created_at": now(),
     })
-    previous_watermark = db.get_setting("watermark_path", "")
     jobs_to_delete: list[str] = []
-    auto_options: dict = {}
-    batch_options: dict = {}
+    captured: dict[str, dict] = {}
 
-    async def fail_transcription(*_args, **_kwargs):
-        raise RuntimeError("Whisper weights are not installed")
+    async def forbidden_transcription(*_args, **_kwargs):
+        raise AssertionError("Auto Edit must not transcribe for captions")
 
     async def fake_render(_media, _start, _end, output, options, on_progress=None):
-        if "auto_edited" in output:
-            auto_options.update(options)
-        else:
-            batch_options.update(options)
+        captured["auto" if "auto_edited" in output else "batch"] = dict(options)
         return output
 
-    monkeypatch.setattr(main_module, "transcribe", fail_transcription)
+    monkeypatch.setattr(main_module, "transcribe", forbidden_transcription)
     monkeypatch.setattr(main_module, "configured_watermark_path", lambda: None)
-    monkeypatch.setattr(main_module, "hardware_info", lambda: {"workers": 1, "encoder": "test"})
+    monkeypatch.setattr(main_module, "hardware_info", lambda: {"workers": 1, "cpu_count": 1, "encoder": "test"})
     monkeypatch.setattr(render, "render_clip", fake_render)
     monkeypatch.setattr(render, "export_path", lambda name: str(tmp_path / f"{name}.mp4"))
-    db.set_setting("watermark_path", "")
     try:
         response = client.post("/api/auto-edit", headers=HEADERS, json={
             "clip_ids": [clip_id], "style": "premium", "aspect": "9:16", "resolution": "source",
+            "music": "", "sound_effects": False, "stickers": False,
+            "captions": True, "caption_style": {"preset": "hype"},
         })
         assert response.status_code == 200
-        auto_job_id = response.json()["job_id"]
-        jobs_to_delete.append(auto_job_id)
-        auto_job = _wait_for_job(auto_job_id)
-        assert auto_job["status"] == "done", auto_job
-        assert auto_job["result"]["count"] == 1
-        assert any("captions unavailable" in warning for warning in auto_job["result"]["warnings"])
-        recipe = auto_job["result"]["edits"][0]
-        assert recipe["source_start"] == 2.0 and recipe["source_duration"] == 6.0
-        assert recipe["duration"] == 6.0 and recipe["region_layout"] == "top-game-bottom-player"
-        assert recipe["regions"] == [region_a, region_b]
-        assert recipe["crop_path"] == [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]]
-        assert recipe["captions"][0]["text"] == "The creator lands an incredible final move."
-        assert [track["kind"] for track in recipe["audio"]] == ["music", "sfx", "sfx"]
-        assert auto_options["resolution"] == "source"
-        assert auto_options["title"] is None  # Speech captions replace the generated clip-name overlay.
-        assert auto_options["region_layout"] == "top-game-bottom-player"
-        assert auto_options["crop_path"] == [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]]
-        assert auto_options["regions"] == [region_a, region_b]
-        assert auto_options["captions"][0]["text"] == "The creator lands an incredible final move."
-        assert auto_options["music"] == str(music)
-        assert auto_options["watermark"] is False
-        assert auto_options["watermark_path"] is None
-        assert auto_options["sfx"][0]["name"] == "whoosh"
+        job_id = response.json()["job_id"]
+        jobs_to_delete.append(job_id)
+        job = _wait_for_job(job_id)
+        assert job["status"] == "done", job
+        assert job["result"]["count"] == 1 and job["result"]["warnings"] == []
+        edit = job["result"]["edits"][0]
+        assert edit["source_start"] == 2 and edit["source_duration"] == 6
+        assert edit["region"] == region
+        assert edit["audio"] == [] and edit["stickers"] == []
+        assert "captions" not in edit and "caption_style" not in edit
+        assert "captions" not in edit["effects"] and "caption_style" not in edit["effects"]
+        assert "title" not in edit["effects"]
+        assert "captions" not in captured["auto"] and "caption_style" not in captured["auto"]
+        assert "title" not in captured["auto"] and captured["auto"]["sfx"] == []
 
-        stored_clip = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
-        assert stored_clip["output"] == auto_job["result"]["outputs"][0]["output"]
-        assert stored_clip["metadata"]["effects"]["captions"] == auto_options["captions"]
-        assert stored_clip["metadata"]["effects"]["title"] is None
-        assert stored_clip["metadata"]["effects"]["region_layout"] == "top-game-bottom-player"
+        stored = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
+        effects = stored["metadata"]["effects"]
+        assert not ({"caption_style", "captions", "title"} & effects.keys())
+        assert "caption" not in stored["metadata"]
+        assert stored["metadata"]["auto_edited"] is True
+        assert stored["metadata"]["hardware"]["encoder"] == "test"
 
         batch_response = client.post("/api/exports/batch", headers=HEADERS, json={"clip_ids": [clip_id]})
         assert batch_response.status_code == 200
@@ -497,60 +457,10 @@ def test_auto_edit_transcription_fallback_and_batch_keep_caption_tracks_and_titl
         jobs_to_delete.append(batch_job_id)
         batch_job = _wait_for_job(batch_job_id)
         assert batch_job["status"] == "done", batch_job
-        assert batch_options["captions"] == auto_options["captions"]
-        assert batch_options["region"] == region_a
-        assert batch_options["regions"] == [region_a, region_b]
-        assert batch_options["region_layout"] == "top-game-bottom-player"
-        assert batch_options["crop_path"] == [[2.0, 0.4], [4.0, 0.6], [8.0, 0.5]]
-        assert batch_options["title"] is None
-        assert batch_options["music"] == str(music)
-        assert batch_options["watermark_path"] is None
-
-        auto_options.clear()
-        no_music_response = client.post("/api/auto-edit", headers=HEADERS, json={
-            "clip_ids": [clip_id], "music": "", "captions": False, "sound_effects": False,
-        })
-        assert no_music_response.status_code == 200
-        no_music_job_id = no_music_response.json()["job_id"]
-        jobs_to_delete.append(no_music_job_id)
-        no_music_job = _wait_for_job(no_music_job_id)
-        assert no_music_job["status"] == "done", no_music_job
-        assert auto_options["music"] is None and auto_options["captions"] == [] and auto_options["sfx"] == []
-        assert auto_options["title"] == "Creator's winning moment"
-        fallback_title = no_music_job["result"]["edits"][0]["captions"]
-        assert fallback_title == [{
-            "text": "Creator's winning moment", "start": 2.0, "end": 3.4, "kind": "title",
-        }]
-        assert no_music_job["result"]["edits"][0]["audio"] == []
-
-        auto_options.clear()
-        reuse_response = client.post("/api/auto-edit", headers=HEADERS, json={
-            "clip_ids": [clip_id], "style": "hype", "captions": True,
-            "reuse_settings": {
-                "caption_style": {
-                    "preset": "minimal", "font_family": "Georgia", "font_size": 44,
-                    "primary_color": "#fefefe", "outline_color": "#112233",
-                    "position": "top", "bold": False,
-                },
-            },
-        })
-        assert reuse_response.status_code == 200
-        reuse_job_id = reuse_response.json()["job_id"]
-        jobs_to_delete.append(reuse_job_id)
-        reuse_job = _wait_for_job(reuse_job_id)
-        assert reuse_job["status"] == "done", reuse_job
-        reused_recipe = reuse_job["result"]["edits"][0]
-        assert reused_recipe["aspect"] == "9:16" and reused_recipe["resolution"] == "source"
-        assert auto_options["aspect"] == "9:16" and auto_options["resolution"] == "source"
-        assert auto_options["caption_style"]["preset"] == "minimal"
-        assert auto_options["caption_style"]["font_family"] == "Georgia"
-        assert auto_options["caption_style"]["font_size"] == 44
-        assert auto_options["caption_style"]["position"] == "top"
-        assert auto_options["speed"] == pytest.approx(1.04)
-        assert auto_options["sfx"]  # Auto Edit still contributes non-caption edits.
+        assert "captions" not in captured["batch"] and "caption_style" not in captured["batch"]
+        assert "title" not in captured["batch"]
     finally:
         for job_id in jobs_to_delete:
             db.delete("jobs", "id", job_id)
         db.delete("clips", "id", clip_id)
         db.delete("media", "id", media_id)
-        db.set_setting("watermark_path", previous_watermark)

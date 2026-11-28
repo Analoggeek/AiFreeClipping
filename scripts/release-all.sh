@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # AI Clipper Pro — one command to build every offline installer.
-#   bash scripts/release-all.sh                 # build installers for THIS machine
-#   bash scripts/release-all.sh 1.0.1 --all     # cross-platform GitHub Actions build + release
-#   bash scripts/release-all.sh 1.0.1 --publish # local build for this host + GitHub Release
+#   bash scripts/release-all.sh                      # build installers for THIS machine
+#   bash scripts/release-all.sh 6.0.0 --all           # build the complete cross-platform matrix (no release)
+#   bash scripts/release-all.sh 6.0.0 --all --publish # build and publish all supported installers
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -21,8 +21,8 @@ for arg in "$@"; do
     --publish) PUBLISH=1 ;;
     -h|--help)
       echo "Usage: bash scripts/release-all.sh [version] [--all] [--publish] [--skip-backend]"
-      echo "  --all      dispatch the GitHub Actions matrix (Windows x64/arm64, macOS Intel/Apple Silicon, Linux x64)"
-      echo "  --publish  publish a local host build; --all publishes from GitHub Actions after matrix checks pass"
+      echo "  --all      dispatch the full GitHub Actions matrix (Windows x64/arm64, macOS Intel/Apple Silicon, Linux x64)"
+      echo "  --publish  publish a local host build; combine with --all to publish the full matrix after checks pass"
       exit 0 ;;
     *) ARGS+=("$arg") ;;
   esac
@@ -30,6 +30,19 @@ done
 if [ "${#ARGS[@]}" -gt 0 ]; then VERSION="${ARGS[0]}"; fi
 
 echo "== AI Clipper Pro release v${VERSION} (${MODE}) =="
+if [ "$MODE" = "ci" ]; then
+  [ -n "$CURRENT_BRANCH" ] || { echo "Cannot dispatch a release from a detached HEAD" >&2; exit 1; }
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "Commit the current changes before dispatching; GitHub Actions builds the pushed branch, not this working tree." >&2
+    exit 1
+  fi
+  LOCAL_SHA="$(git rev-parse HEAD)"
+  REMOTE_SHA="$(git ls-remote --heads origin "refs/heads/$CURRENT_BRANCH" | awk 'NR == 1 { print $1 }')"
+  if [ -z "$REMOTE_SHA" ] || [ "$LOCAL_SHA" != "$REMOTE_SHA" ]; then
+    echo "Push $CURRENT_BRANCH at $LOCAL_SHA to origin before dispatching the all-target build." >&2
+    exit 1
+  fi
+fi
 for tool in node npm python3; do
   command -v "$tool" >/dev/null || { echo "Missing required tool: $tool" >&2; exit 1; }
 done
@@ -51,18 +64,25 @@ echo "== 2/6 Icons =="
 echo "== 3/6 Web bundle =="
 npm run build
 
-echo "== 4/6 Local Python engine =="
-if [ "$SKIP_BACKEND" -eq 1 ]; then
-  "$PYTHON" scripts/package-backend.py --skip-pyinstaller
+if [ "$MODE" = "ci" ]; then
+  echo "== 4/6 Local Python engine =="
+  echo "Skipped — each native GitHub runner packages its matching engine."
 else
-  "$PYTHON" scripts/package-backend.py
+  echo "== 4/6 Local Python engine =="
+  if [ "$SKIP_BACKEND" -eq 1 ]; then
+    "$PYTHON" scripts/package-backend.py --skip-pyinstaller
+  else
+    "$PYTHON" scripts/package-backend.py
+  fi
 fi
 
 if [ "$MODE" = "ci" ]; then
   echo "== 5/6 Dispatching cross-platform GitHub Actions build =="
   command -v gh >/dev/null || { echo "gh CLI required for --all" >&2; exit 1; }
   [ -n "$CURRENT_BRANCH" ] || { echo "Cannot dispatch a release from a detached HEAD" >&2; exit 1; }
-  gh workflow run release.yml --ref "$CURRENT_BRANCH" -f version="$VERSION"
+  BUILD_ONLY=true
+  if [ "$PUBLISH" -eq 1 ]; then BUILD_ONLY=false; fi
+  gh workflow run release.yml --ref "$CURRENT_BRANCH" -f version="$VERSION" -f build_only="$BUILD_ONLY"
   echo "Waiting for the workflow to appear…"
   sleep 8
   RUN_ID="$(gh run list --workflow release.yml --branch "$CURRENT_BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')"
@@ -75,6 +95,22 @@ if [ "$MODE" = "ci" ]; then
   # gh run download creates one subfolder per matrix job; GitHub Releases need flat files.
   find release/.download -type f -exec cp -f {} release/ \;
   rm -rf release/.download
+  expected=(
+    "AI-Clipper-Pro-${VERSION}-Windows-x64.exe"
+    "AI-Clipper-Pro-${VERSION}-Windows-arm64.exe"
+    "AI-Clipper-Pro-${VERSION}-macOS-x64.dmg"
+    "AI-Clipper-Pro-${VERSION}-macOS-x64.zip"
+    "AI-Clipper-Pro-${VERSION}-macOS-arm64.dmg"
+    "AI-Clipper-Pro-${VERSION}-macOS-arm64.zip"
+    "AI-Clipper-Pro-${VERSION}-Linux-x86_64.AppImage"
+    "AI-Clipper-Pro-${VERSION}-Linux-amd64.deb"
+  )
+  for file in "${expected[@]}"; do
+    [ -s "release/$file" ] || { echo "Missing all-target artifact: $file" >&2; exit 1; }
+  done
+  actual="$(find release -maxdepth 1 -type f \
+    \( -name '*.exe' -o -name '*.dmg' -o -name '*.zip' -o -name '*.AppImage' -o -name '*.deb' \) | wc -l | tr -d '[:space:]')"
+  [ "$actual" = "${#expected[@]}" ] || { echo "Expected ${#expected[@]} installers, found $actual" >&2; exit 1; }
 else
   echo "== 5/6 Building installers for this host =="
   case "$(uname -s)" in

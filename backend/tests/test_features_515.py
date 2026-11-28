@@ -31,8 +31,7 @@ def test_legacy_box_and_multi_region_list_do_not_duplicate_the_first_focus_area(
 
 def test_region_crop_is_in_the_render_filter_and_mp4_is_portable():
     options = {
-        "aspect": "9:16", "resolution": "1080p", "captions": [],
-        "caption_style": {"preset": "none"}, "blur_background": True,
+        "aspect": "9:16", "resolution": "1080p", "blur_background": True,
         "region": {"x": 0.25, "y": 0.1, "w": 0.4, "h": 0.7},
     }
     args = render.build_clip_args("/tmp/source.mp4", 4, 12, "/tmp/crop.mp4", options, has_audio=True)
@@ -55,8 +54,7 @@ def test_legacy_neutral_contrast_values_are_corrected_for_ffmpeg_eq():
 
 def test_watermark_is_opt_in_and_only_uses_a_custom_image(tmp_path):
     base_options = {
-        "aspect": "9:16", "resolution": "720p", "captions": [],
-        "caption_style": {"preset": "none"}, "sfx": [],
+        "aspect": "9:16", "resolution": "720p", "sfx": [],
     }
     plain = " ".join(render.build_clip_args("/tmp/source.mp4", 0, 1, "/tmp/plain.mp4", base_options, has_audio=False))
     assert "[wm]" not in plain and "[branded]" not in plain
@@ -90,7 +88,7 @@ def test_actual_crop_render_is_quicktime_friendly_h264_mp4(tmp_path):
             "aspect": "9:16", "resolution": "720p",
             "region": {"x": 0.2, "y": 0.1, "w": 0.5, "h": 0.8},
             "outline_style": "neon", "blur_background": True,
-            "caption_style": {"preset": "none"}, "sfx": [],
+            "sfx": [],
         },
     ))
     info = probe(output)
@@ -123,7 +121,7 @@ def test_timeline_renderer_applies_selected_region(tmp_path, monkeypatch):
             "path": str(source), "sourceStart": 2, "duration": 8,
             "region": {"x": 0.2, "y": 0.1, "w": 0.5, "h": 0.8},
             "outline_style": "double",
-        }], "captions": [], "stickers": [], "audio": []},
+        }], "stickers": [], "audio": []},
     }, str(tmp_path / "timeline.mp4"), watermark_path=str(logo)))
     filter_graph = captured["args"][captured["args"].index("-filter_complex") + 1]
     assert "crop=iw*0.5000:ih*0.8000:iw*0.2000:ih*0.1000" in filter_graph
@@ -142,6 +140,9 @@ def test_cancelled_ffmpeg_render_removes_partial_mp4(tmp_path, monkeypatch):
         async def readline(self):
             await asyncio.Future()
 
+        async def read(self):
+            return b""
+
     class FakeProcess:
         stdout = FakeStream()
         stderr = FakeStream()
@@ -152,8 +153,8 @@ def test_cancelled_ffmpeg_render_removes_partial_mp4(tmp_path, monkeypatch):
             self.terminated = True
             self.returncode = -15
 
-        async def communicate(self):
-            return b"", b""
+        async def wait(self):
+            return self.returncode
 
         def kill(self):
             self.returncode = -9
@@ -221,8 +222,8 @@ def test_saved_clip_metadata_is_flattened_for_ui_and_preserved_in_editor_project
     second_region = {"x": 0.5, "y": 0.1, "w": 0.5, "h": 0.8}
     candidate = {
         "media_id": media_id, "start": 2, "end": 8, "score": 77,
-        "title": "Focused moment", "reasons": ["high activity"], "hook": "",
-        "hashtags": [], "transcript": "", "region": region, "regions": [region],
+        "title": "Focused moment", "reasons": ["high activity"],
+        "transcript": "", "region": region, "regions": [region],
         "crop_path": [[2.0, 0.3], [5.0, 0.5], [8.0, 0.7]],
     }
     db.insert("media", {
@@ -311,28 +312,31 @@ def test_apply_effects_does_not_nest_or_drop_candidate_regions():
         db.delete("clips", "id", clip_id)
 
 
-def test_patch_clip_persists_editable_social_caption():
-    clip_id = "testclip515caption"
+
+def test_legacy_social_copy_is_hidden_and_ignored_by_clip_patch():
+    clip_id = "testclip515legacycopy"
     db.insert("clips", {
         "id": clip_id, "project_id": None, "media_id": "missing-caption-source",
-        "start": 0, "end": 1, "score": 1, "title": "Caption", "reason": "",
+        "start": 0, "end": 1, "score": 1, "title": "Legacy clip", "reason": "",
         "status": "proposed", "output": None,
-        "metadata": dumps({"caption": "Initial copy", "transcript": "Original words."}),
+        "metadata": dumps({"caption": "Old social copy", "transcript": "Original words."}),
         "created_at": now(),
     })
     try:
         response = client.patch(
             f"/api/clips/{clip_id}", headers=HEADERS,
-            json={"caption": "  Revised social copy  "},
+            json={"caption": "New social copy", "title": "Updated title"},
         )
         assert response.status_code == 200
-        assert response.json()["clip"]["caption"] == "Revised social copy"
+        clip = response.json()["clip"]
+        assert clip["title"] == "Updated title"
+        assert "caption" not in clip and "caption" not in clip["metadata"]
+        assert clip["transcript"] == "Original words."
         stored = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")
-        assert stored["metadata"]["caption"] == "Revised social copy"
-        assert stored["metadata"]["transcript"] == "Original words."
+        assert stored["title"] == "Updated title"
+        assert "caption" not in stored["metadata"], "editing a legacy clip removes retired social copy"
     finally:
         db.delete("clips", "id", clip_id)
-
 
 def test_render_endpoint_uses_the_candidate_saved_crop_by_default(tmp_path, monkeypatch):
     source = tmp_path / "render-source.mp4"
@@ -369,7 +373,7 @@ def test_render_endpoint_uses_the_candidate_saved_crop_by_default(tmp_path, monk
     try:
         response = client.post(
             f"/api/clips/{clip_id}/render", headers=HEADERS,
-            json={"caption_style": {"preset": "none"}, "sfx": []},
+            json={"sfx": []},
         )
         assert response.status_code == 200
         job_id = response.json()["job_id"]
@@ -383,7 +387,9 @@ def test_render_endpoint_uses_the_candidate_saved_crop_by_default(tmp_path, monk
         assert captured["options"]["region"] == region
         assert captured["options"]["crop_path"] == [[1.0, 0.3], [3.0, 0.7]]
         assert captured["options"]["contrast"] == 1.0
-        assert captured["options"]["title"] is None
+        assert "title" not in captured["options"]
+        assert "captions" not in captured["options"]
+        assert "caption_style" not in captured["options"]
         assert captured["options"]["watermark_path"] is None
         saved = db.loads(db.one("SELECT * FROM clips WHERE id=?", (clip_id,)), "metadata")["metadata"]
         assert saved["region"] == region and saved["hardware"]["encoder"] == "test"
@@ -427,7 +433,7 @@ def test_render_endpoint_passes_the_saved_custom_watermark_to_new_exports(tmp_pa
     try:
         response = client.post(
             f"/api/clips/{clip_id}/render", headers=HEADERS,
-            json={"caption_style": {"preset": "none"}, "sfx": []},
+            json={"sfx": []},
         )
         assert response.status_code == 200
         job_id = response.json()["job_id"]
@@ -447,7 +453,7 @@ def test_render_endpoint_passes_the_saved_custom_watermark_to_new_exports(tmp_pa
         db.set_setting("watermark_path", previous_watermark)
 
 
-def test_publish_batch_render_uses_saved_crop_and_clip_effects(tmp_path, monkeypatch):
+def test_export_batch_render_uses_saved_crop_and_clip_effects(tmp_path, monkeypatch):
     source = tmp_path / "batch-source.mp4"
     source.write_bytes(b"source")
     media_id, clip_id = "testmedia515batch", "testclip515batch"
@@ -599,7 +605,7 @@ def test_delete_media_keeps_source_still_used_by_rendered_clip(tmp_path):
         db.delete("media", "id", media_id)
 
 
-def test_publish_bulk_delete_removes_records_and_owned_mp4(tmp_path):
+def test_export_bulk_delete_removes_records_and_owned_mp4(tmp_path):
     previous = db.get_setting("clips_folder", "")
     db.set_setting("clips_folder", str(tmp_path))
     output = tmp_path / "generated_clip.mp4"

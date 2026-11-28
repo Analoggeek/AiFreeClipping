@@ -11,7 +11,7 @@ def test_every_model_has_an_action_link():
 
 def test_cloud_models_have_direct_api_links():
     cloud = [model for model in CATALOG if model.get("needsApi")]
-    assert len(cloud) >= 4
+    assert len(cloud) >= 3
     for model in cloud:
         assert model["apiUrl"].startswith("https://")
 

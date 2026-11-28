@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, LoaderCircle, ShieldCheck, Sparkles, Trash2, Volume2, Youtube } from 'lucide-react';
+import { Cpu, ExternalLink, FolderOpen, HardDrive, ImagePlus, KeyRound, LoaderCircle, ShieldCheck, Sparkles, Trash2, Volume2 } from 'lucide-react';
 import { api } from '../api';
 import type { AutoEditOptions } from '../types';
 import { Panel } from '../components/common';
@@ -9,7 +9,6 @@ const FIELDS = [
   { key: 'gemini_api_key', label: 'Gemini API key (Nano Banana)', icon: KeyRound, placeholder: 'Optional — leave empty for fully local SDXL', secret: true },
   { key: 'pexels_api_key', label: 'Pexels API key', icon: KeyRound, placeholder: 'Free key from pexels.com/api' },
   { key: 'pixabay_api_key', label: 'Pixabay API key', icon: KeyRound, placeholder: 'Free key from pixabay.com/api/docs' },
-  { key: 'youtube_client_secret', label: 'YouTube OAuth client_secret.json path', icon: Youtube, placeholder: '~/.AiFreeClipping/client_secret.json' },
   { key: 'ollama_model', label: 'Ollama model', icon: Cpu, placeholder: 'gemma2:7b' },
   { key: 'whisper_model', label: 'Whisper model', icon: Sparkles, placeholder: 'small / medium / large-v3' },
   { key: 'comfy_checkpoint', label: 'ComfyUI SDXL checkpoint', icon: HardDrive, placeholder: 'sd_xl_base_1.0.safetensors' },
@@ -17,7 +16,7 @@ const FIELDS = [
 
 const AUTO_EDIT_DEFAULTS: AutoEditOptions = {
   style: 'hype', aspect: '9:16', resolution: 'source',
-  captions: true, sound_effects: true, stickers: true, blur_background: true,
+  sound_effects: true, stickers: true, blur_background: true,
   music: '', music_volume: 0.18,
 };
 
@@ -36,7 +35,6 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
         style: ['hype', 'minimal', 'premium'].includes(saved.auto_edit_style) ? saved.auto_edit_style as AutoEditOptions['style'] : AUTO_EDIT_DEFAULTS.style,
         aspect: ['9:16', '1:1', '16:9'].includes(saved.auto_edit_aspect) ? saved.auto_edit_aspect as AutoEditOptions['aspect'] : AUTO_EDIT_DEFAULTS.aspect,
         resolution: ['source', '720p', '1080p'].includes(saved.auto_edit_resolution) ? saved.auto_edit_resolution as AutoEditOptions['resolution'] : AUTO_EDIT_DEFAULTS.resolution,
-        captions: saved.auto_edit_captions === undefined ? true : !['0', 'false'].includes(saved.auto_edit_captions.toLowerCase()),
         sound_effects: saved.auto_edit_sound_effects === undefined ? true : !['0', 'false'].includes(saved.auto_edit_sound_effects.toLowerCase()),
         stickers: saved.auto_edit_stickers === undefined ? true : !['0', 'false'].includes(saved.auto_edit_stickers.toLowerCase()),
         blur_background: saved.auto_edit_blur_background === undefined ? true : !['0', 'false'].includes(saved.auto_edit_blur_background.toLowerCase()),
@@ -54,7 +52,6 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
         auto_edit_style: autoEdit.style,
         auto_edit_aspect: autoEdit.aspect,
         auto_edit_resolution: autoEdit.resolution,
-        auto_edit_captions: String(autoEdit.captions),
         auto_edit_sound_effects: String(autoEdit.sound_effects),
         auto_edit_stickers: String(autoEdit.stickers),
         auto_edit_blur_background: String(autoEdit.blur_background),
@@ -167,12 +164,11 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
           </label>
         </div>
         <div className="toggle-grid">
-          <label className="toggle"><input type="checkbox" checked={autoEdit.captions} onChange={(event) => setAutoEdit((current) => ({ ...current, captions: event.target.checked }))} /><span><Sparkles size={16} /></span>Generate captions</label>
           <label className="toggle"><input type="checkbox" checked={autoEdit.sound_effects} onChange={(event) => setAutoEdit((current) => ({ ...current, sound_effects: event.target.checked }))} /><span><Volume2 size={16} /></span>Add sound effects</label>
           <label className="toggle"><input type="checkbox" checked={autoEdit.stickers} onChange={(event) => setAutoEdit((current) => ({ ...current, stickers: event.target.checked }))} /><span><ImagePlus size={16} /></span>Use saved stickers</label>
           <label className="toggle"><input type="checkbox" checked={autoEdit.blur_background} onChange={(event) => setAutoEdit((current) => ({ ...current, blur_background: event.target.checked }))} /><span><HardDrive size={16} /></span>Blur-fill unused frame</label>
         </div>
-        <p className="hint">Click Save settings to keep these choices. Auto Edit will build editable video, caption, sticker, and audio tracks in the timeline as well as render each finished clip.</p>
+        <p className="hint">Click Save settings to keep these choices. Auto Edit will build editable video, sticker, and audio tracks in the timeline and render each finished clip.</p>
       </Panel>
 
       <Panel
@@ -210,7 +206,7 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
       </Panel>
 
       <Panel title="Privacy & runtime" subtitle="Managed automatically in the sidebar hardware panel">
-        <div className="notice"><ShieldCheck size={18} /><div><strong>Privacy by design</strong><p>The local API binds to 127.0.0.1 and requires a token generated on each launch. Cloud features (Nano Banana, stock search, YouTube upload) are opt-in and only run when you supply your own key. Live CPU, RAM, disk and GPU usage is shown in the sidebar.</p></div></div>
+        <div className="notice"><ShieldCheck size={18} /><div><strong>Privacy by design</strong><p>The local API binds to 127.0.0.1 and requires a token generated on each launch. Cloud features such as Nano Banana and stock search are opt-in and only run when you supply your own key. Live CPU, RAM, disk and GPU usage is shown in the sidebar.</p></div></div>
       </Panel>
 
       <Panel title="About" subtitle="Built for creators who want speed without leaving their machine">
@@ -218,7 +214,7 @@ export default function SettingsPage({ notify }: { notify: (message: string) => 
           <img src={logo} alt="AI Clipper Pro logo" />
           <div>
             <h3>AI Clipper Pro</h3>
-            <p>A local-first AI video clipping and editing studio. Download, discover viral moments, polish and publish — with Gemma, Whisper, YOLOX + ByteTrack, FFmpeg and optional Nano Banana / ComfyUI.</p>
+            <p>A local-first AI video clipping and editing studio. Download, discover engaging moments, polish and export — with Gemma, Whisper, YOLOX + ByteTrack, FFmpeg and optional Nano Banana / ComfyUI.</p>
             <a className="chip-btn" href="https://github.com/Analoggeek/AiFreeClipping" target="_blank" rel="noreferrer"><ExternalLink size={14} /> Source & documentation</a>
           </div>
         </div>

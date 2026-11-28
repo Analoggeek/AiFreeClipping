@@ -1,4 +1,4 @@
-"""ffmpeg rendering engine: viral clips, captions, stickers, SFX, music and full projects."""
+"""FFmpeg rendering engine for video clips, stickers, SFX, music and full projects."""
 from __future__ import annotations
 
 import asyncio
@@ -9,9 +9,9 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from ..config import CACHE, EXPORTS, ffmpeg_binary
+from ..config import EXPORTS, ffmpeg_binary
 from .sfx import sfx_path
-from .utils import escape_filter_path, format_time, probe, safe_name
+from .utils import probe, safe_name
 
 RESOLUTIONS = {
     ("9:16", "1080p"): (1080, 1920),
@@ -21,101 +21,6 @@ RESOLUTIONS = {
     ("16:9", "1080p"): (1920, 1080),
     ("16:9", "720p"): (1280, 720),
 }
-CAPTION_PRESETS = {
-    "hype": {"FontName": "Arial Black", "Fontsize": 70, "Bold": -1, "Outline": 5, "PrimaryColour": "&H00FFFFFF", "OutlineColour": "&H00000000", "BackColour": "&H80000000"},
-    "karaoke": {"FontName": "Arial", "Fontsize": 66, "Bold": -1, "Outline": 4, "PrimaryColour": "&H0000FFFF", "OutlineColour": "&H00000000"},
-    "minimal": {"FontName": "Arial", "Fontsize": 52, "Bold": 0, "Outline": 2, "PrimaryColour": "&H00FFFFFF", "OutlineColour": "&H00000000"},
-    "premium": {"FontName": "Georgia", "Fontsize": 60, "Bold": -1, "Outline": 3, "PrimaryColour": "&H0000F0FF", "OutlineColour": "&H00141414"},
-    "none": {},
-}
-
-
-def _ass_colour(value: Any, fallback: str = "&H00FFFFFF", opacity: float | None = None) -> str:
-    """Convert editor hex colours to ASS's alpha-blue-green-red representation."""
-    raw = str(value or "").strip()
-    if raw.startswith("&H"):
-        colour = raw.upper()
-        return colour if len(colour) == 10 else fallback
-    if raw.startswith("#"):
-        raw = raw[1:]
-    if len(raw) == 3 and all(char in "0123456789abcdefABCDEF" for char in raw):
-        raw = "".join(char * 2 for char in raw)
-    if len(raw) != 6 or any(char not in "0123456789abcdefABCDEF" for char in raw):
-        return fallback
-    red, green, blue = raw[0:2], raw[2:4], raw[4:6]
-    alpha = 0 if opacity is None else max(0, min(255, round((1 - float(opacity)) * 255)))
-    return f"&H{alpha:02X}{blue.upper()}{green.upper()}{red.upper()}"
-
-
-def _split_caption_anchor(layout: str | None, split_ratio: Any = None) -> tuple[float, float] | None:
-    """Place captions just above a stacked seam, or beside a vertical seam."""
-    try:
-        ratio = float(split_ratio)
-    except (TypeError, ValueError):
-        ratio = 0.58 if layout == "top-game-bottom-player" else 0.42 if layout == "top-player-bottom-game" else 0.62
-    ratio = max(0.25, min(0.75, ratio))
-    if layout in {"top-game-bottom-player", "top-player-bottom-game"}:
-        return 0.5, max(0.08, ratio - 0.055)
-    if layout == "side-by-side":
-        return max(0.08, ratio - 0.055), 0.5
-    return None
-
-
-def _caption_style_for_layout(style: dict[str, Any], layout: str | None, split_ratio: Any = None) -> dict[str, Any]:
-    """Resolve auto/seam placement for a single clip without overriding manual coordinates."""
-    resolved = dict(style)
-    position = str(resolved.get("position") or "bottom")
-    if position not in {"auto", "split"}:
-        return resolved
-    anchor = _split_caption_anchor(layout, split_ratio)
-    if anchor:
-        resolved["position"] = "custom"
-        resolved["x"], resolved["y"] = anchor
-    else:
-        resolved["position"] = "bottom"
-        resolved.pop("x", None)
-        resolved.pop("y", None)
-    return resolved
-
-
-def _timeline_caption_positions(
-    captions: list[dict[str, Any]], video_items: list[dict[str, Any]], style: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """Resolve each auto-placed caption against the video segment under its time."""
-    if style.get("position", "bottom") not in {"auto", "split"}:
-        return captions
-    positioned: list[dict[str, Any]] = []
-    for caption in captions:
-        item = dict(caption)
-        if item.get("x") is None and item.get("y") is None:
-            try:
-                caption_start = float(item.get("start", 0))
-            except (TypeError, ValueError):
-                caption_start = 0
-            cursor = 0.0
-            match: dict[str, Any] | None = None
-            for video in video_items:
-                duration = max(0.05, float(video.get("duration", 0) or 0))
-                if item.get("auto_edit_clip_id") and video.get("clip_id") == item.get("auto_edit_clip_id"):
-                    match = video
-                    break
-                if cursor <= caption_start < cursor + duration:
-                    match = video
-                    break
-                cursor += duration
-            if match:
-                effects = match.get("effects") if isinstance(match.get("effects"), dict) else {}
-                layout = match.get("region_layout") or effects.get("region_layout")
-                ratio = match.get("split_ratio")
-                if ratio is None:
-                    ratio = effects.get("split_ratio")
-                anchor = _split_caption_anchor(layout, ratio)
-                if anchor:
-                    item["x"], item["y"] = anchor
-        positioned.append(item)
-    return positioned
-
-
 def resolution_for(aspect: str, resolution: str, source: tuple[int, int] = (1080, 1920)) -> tuple[int, int]:
     """Choose an even output size while preserving the requested aspect ratio.
 
@@ -143,135 +48,6 @@ def resolution_for(aspect: str, resolution: str, source: tuple[int, int] = (1080
         return width, height
     return RESOLUTIONS.get((aspect, resolution), RESOLUTIONS[("9:16", "1080p")])
 
-
-def write_ass(
-    captions: list[dict[str, Any]],
-    style: dict[str, Any] | None = None,
-    offset: float = 0,
-    position: str | None = None,
-) -> str:
-    """Write styled ASS captions, including normalized editor placement."""
-    style = style or {}
-    folder = CACHE / "subtitles"
-    folder.mkdir(parents=True, exist_ok=True)
-    preset = dict(CAPTION_PRESETS.get(style.get("preset", "hype"), CAPTION_PRESETS["hype"]))
-    if "FontName" in preset:
-        preset["Fontname"] = preset.pop("FontName")
-    if style.get("font_family"):
-        font_name = "".join(char for char in str(style["font_family"]) if char.isalnum() or char in " ._-")[:64]
-        if font_name:
-            preset["Fontname"] = font_name
-    if style.get("font_size") is not None:
-        try:
-            preset["Fontsize"] = max(12, min(180, int(float(style["font_size"]))))
-        except (TypeError, ValueError):
-            pass
-    if style.get("primary_color") is not None:
-        preset["PrimaryColour"] = _ass_colour(style["primary_color"], preset.get("PrimaryColour", "&H00FFFFFF"))
-    if style.get("outline_color") is not None:
-        preset["OutlineColour"] = _ass_colour(style["outline_color"], preset.get("OutlineColour", "&H00000000"))
-    for source, target in (("outline", "Outline"), ("shadow", "Shadow")):
-        if style.get(source) is not None:
-            try:
-                preset[target] = max(0, min(20, float(style[source])))
-            except (TypeError, ValueError):
-                pass
-    if style.get("bold") is not None:
-        preset["Bold"] = -1 if style["bold"] else 0
-    if style.get("italic") is not None:
-        preset["Italic"] = -1 if style["italic"] else 0
-    if style.get("spacing") is not None:
-        try:
-            preset["Spacing"] = max(0, min(20, float(style["spacing"])))
-        except (TypeError, ValueError):
-            pass
-    try:
-        background_opacity = max(0, min(1, float(style.get("background_opacity") or 0)))
-    except (TypeError, ValueError):
-        background_opacity = 0
-    if style.get("background_color") and background_opacity > 0:
-        preset["BackColour"] = _ass_colour(
-            style["background_color"], "&H80000000", background_opacity,
-        )
-        preset["BorderStyle"] = 3
-
-    requested_position = str(position or style.get("position") or "bottom")
-    if requested_position in {"auto", "split"}:
-        requested_position = "bottom"
-    alignment = {"bottom": 2, "center": 5, "top": 8, "custom": 5}.get(requested_position, 2)
-    margin_v = 90 if alignment in {2, 8} else 20
-    preset.update({"Alignment": alignment, "MarginV": margin_v})
-    fields = [
-        "Name", "Fontname", "Fontsize", "PrimaryColour", "SecondaryColour", "OutlineColour",
-        "BackColour", "Bold", "Italic", "Underline", "StrikeOut", "ScaleX", "ScaleY",
-        "Spacing", "Angle", "BorderStyle", "Outline", "Shadow", "Alignment",
-        "MarginL", "MarginR", "MarginV", "Encoding",
-    ]
-    defaults = {
-        "Name": "Default", "Fontname": "Arial", "Fontsize": 64, "PrimaryColour": "&H00FFFFFF",
-        "SecondaryColour": "&H0000FFFF", "OutlineColour": "&H00000000", "BackColour": "&H80000000",
-        "Bold": -1, "Italic": 0, "Underline": 0, "StrikeOut": 0, "ScaleX": 100, "ScaleY": 100,
-        "Spacing": 0, "Angle": 0, "BorderStyle": 1, "Outline": 4, "Shadow": 0, "Alignment": 2,
-        "MarginL": 40, "MarginR": 40, "MarginV": 90, "Encoding": 1,
-    }
-    defaults.update(preset)
-    title_defaults = {
-        **defaults,
-        "Name": "Title", "Fontname": "Arial Black", "Fontsize": 68, "PrimaryColour": "&H00FFFFFF",
-        "BackColour": "&H880F111B", "Bold": -1, "BorderStyle": 3,
-        "OutlineColour": "&H008B5CF6", "Outline": 4, "Shadow": 2,
-        "Alignment": 8, "MarginV": 90,
-    }
-    header = [
-        "[Script Info]", "ScriptType: v4.00+", "PlayResX: 1080", "PlayResY: 1920",
-        "WrapStyle: 2", "ScaledBorderAndShadow: yes", "", "[V4+ Styles]",
-        "Format: " + ", ".join(fields),
-        "Style: " + ",".join(str(defaults.get(f, "")) for f in fields),
-        "Style: " + ",".join(str(title_defaults.get(f, "")) for f in fields),
-        "", "[Events]", "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-    ]
-    lines: list[str] = []
-    for caption in captions:
-        text = str(caption.get("text") or caption.get("word") or "").replace("\n", "\\N").strip()
-        if not text:
-            continue
-        try:
-            start = max(0, float(caption.get("start", 0)) - offset)
-            end = max(start + 0.15, float(caption.get("end", start + 0.8)) - offset)
-        except (TypeError, ValueError):
-            continue
-        is_title = caption.get("kind") == "title"
-        if style.get("uppercase"):
-            text = text.upper()
-        # Keep ASR output from being interpreted as ASS override markup.
-        text = text.replace("{", "(").replace("}", ")")
-        event_style = "Title" if is_title else "Default"
-        overrides: list[str] = []
-        x = caption.get("x", style.get("x") if requested_position == "custom" else None)
-        y = caption.get("y", style.get("y") if requested_position == "custom" else None)
-        try:
-            if x is not None or y is not None:
-                px = max(0, min(1, float(x if x is not None else 0.5))) * 1080
-                py = max(0, min(1, float(y if y is not None else 0.84))) * 1920
-                overrides.append(f"\\an5\\pos({px:.0f},{py:.0f})")
-        except (TypeError, ValueError):
-            pass
-        try:
-            scale = max(0.4, min(2.5, float(caption.get("scale", 1))))
-            if abs(scale - 1) > 0.01:
-                overrides.append(f"\\fscx{scale * 100:.0f}\\fscy{scale * 100:.0f}")
-        except (TypeError, ValueError):
-            pass
-        if is_title:
-            overrides = [r"\an8\fs68\bord4\shad2\c&H00FFFFFF&\3c&H008B5CF6&\fad(160,220)\fscx92\fscy92\t(0,180,\fscx100\fscy100)", *overrides]
-        elif style.get("preset", "hype") in {"hype", "karaoke"}:
-            overrides = [r"\fad(55,100)\fscx90\fscy90\t(0,90,\fscx100\fscy100)", *overrides]
-        if overrides:
-            text = "{" + "".join(overrides) + "}" + text
-        lines.append(f"Dialogue: 0,{format_time(start)[:-2]},{format_time(end)[:-2]},{event_style},,0,0,0,,{text}")
-    path = folder / f"subs_{abs(hash((tuple(lines[:3]), offset, requested_position, tuple(sorted(style.items()))))) % 10**12}.ass"
-    path.write_text("\n".join(header + lines) + "\n", encoding="utf-8")
-    return str(path)
 
 
 _ENCODER: str | None = None
@@ -678,35 +454,47 @@ def _compose_regions(
 
 
 async def encode(args: list[str], duration: float, on_progress=None) -> Path:
-    """Run ffmpeg and stream its progress into the job tracker."""
+    """Run FFmpeg while draining both pipes so diagnostics cannot stall rendering."""
     output = Path(args[-1])
     process = await asyncio.create_subprocess_exec(
         *args, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
     )
-    assert process.stdout is not None
+    assert process.stdout is not None and process.stderr is not None
+    stderr_task = asyncio.create_task(process.stderr.read())
     try:
         while True:
             line = await process.stdout.readline()
             if not line:
                 break
             text = line.decode("utf-8", "ignore").strip()
-            if text.startswith("out_time_ms=") and duration > 0:
+            if text.startswith("out_time_ms=") and duration > 0 and on_progress:
                 try:
                     current = int(text.split("=", 1)[1]) / 1_000_000
-                    if on_progress:
-                        on_progress(min(95, current / duration * 100), f"Rendering {current:.1f}s / {duration:.1f}s")
-                except ValueError:
+                    on_progress(min(95, current / duration * 100), f"Rendering {current:.1f}s / {duration:.1f}s")
+                except (ValueError, TypeError):
                     pass
-        stderr = (await process.stderr.read()).decode("utf-8", "ignore") if process.stderr else ""
+        stderr = (await stderr_task).decode("utf-8", "ignore")
         code = await process.wait()
     except asyncio.CancelledError:
         if process.returncode is None:
             process.terminate()
             try:
-                await asyncio.wait_for(process.communicate(), timeout=5)
+                await asyncio.wait_for(process.wait(), timeout=5)
             except asyncio.TimeoutError:
                 process.kill()
-                await process.communicate()
+                await process.wait()
+        await asyncio.gather(stderr_task, return_exceptions=True)
+        output.unlink(missing_ok=True)
+        raise
+    except Exception:
+        if process.returncode is None:
+            process.terminate()
+            try:
+                await asyncio.wait_for(process.wait(), timeout=5)
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+        await asyncio.gather(stderr_task, return_exceptions=True)
         output.unlink(missing_ok=True)
         raise
     if code != 0 or not output.exists() or output.stat().st_size == 0:
@@ -835,25 +623,6 @@ def build_clip_args(
     ]
     video_parts.append(f"[{current}]eq={':'.join(eq_values)}[graded]")
     current = "graded"
-    caption_style = options.get("caption_style") or {}
-    caption_style = _caption_style_for_layout(
-        caption_style, options.get("region_layout"), options.get("split_ratio"),
-    )
-    captions = list(options.get("captions") or [])
-    title = str(options.get("title") or "").strip()
-    if title:
-        captions.append({
-            "text": title[:100], "start": start,
-            "end": min(end, start + max(1.4, min(2.8, duration * 0.22))), "kind": "title",
-        })
-    if caption_style.get("preset", "hype") == "none":
-        captions = [caption for caption in captions if caption.get("kind") == "title"]
-    if captions:
-        ass_path = write_ass(captions, caption_style, offset=start, position=caption_style.get("position", "bottom"))
-        video_parts.append(
-            f"[{current}]subtitles=filename='{escape_filter_path(ass_path)}'[captioned]"
-        )
-        current = "captioned"
     if sticker_index:
         position = options.get("sticker_position") or {}
         scale = float(position.get("scale", 0.22))
@@ -931,7 +700,7 @@ async def render_clip(
     options: dict[str, Any],
     on_progress=None,
 ) -> str:
-    info = probe(media_path)
+    info = await asyncio.to_thread(probe, media_path)
     options = dict(options)
     options.setdefault("source_width", info.get("width", 1080))
     options.setdefault("source_height", info.get("height", 1920))
@@ -939,7 +708,7 @@ async def render_clip(
     args = build_clip_args(media_path, start, end, output, options, has_audio=bool(info.get("audio_codec")))
     await encode(args, max(0.5, end - start), on_progress)
     try:
-        _validate_mp4(output)
+        await asyncio.to_thread(_validate_mp4, output)
     except Exception:
         Path(output).unlink(missing_ok=True)
         raise
@@ -961,15 +730,16 @@ async def render_timeline(
     media_inputs: list[dict[str, Any]] = []
     indexed_video: list[tuple[dict[str, Any], int]] = []
     source_info: list[dict[str, Any]] = []
-    for item in video_items:
-        path = str(item.get("path") or "")
-        if not Path(path).exists():
-            continue
+    available_video = [
+        (item, str(item.get("path") or "")) for item in video_items
+        if Path(str(item.get("path") or "")).is_file()
+    ]
+    source_info = await asyncio.gather(*(asyncio.to_thread(probe, path) for _item, path in available_video))
+    for item, path in available_video:
         args += ["-i", path]
-        idx = sum(1 for a in args if a == "-i") - 1
+        idx = len(indexed_video)
         media_inputs.append(item)
         indexed_video.append((item, idx))
-        source_info.append(probe(path))
     if not indexed_video:
         raise RuntimeError("None of the timeline video files were found on this machine")
     best_source = max(
@@ -1085,17 +855,6 @@ async def render_timeline(
 
     total = timeline_cursor
     current = "vcat"
-    # Only explicit caption-track items belong on the video. A video clip's
-    # label is editor metadata, not subtitle text.
-    captions = list(tracks.get("captions") or [])
-    caption_style = {"preset": "hype", "position": "auto", **(timeline.get("caption_style") or {})}
-    if caption_style.get("preset", "hype") == "none":
-        captions = [caption for caption in captions if caption.get("kind") == "title"]
-    captions = _timeline_caption_positions(captions, video_items, caption_style)
-    if captions:
-        ass_path = write_ass(captions, caption_style)
-        filters.append(f"[{current}]subtitles=filename='{escape_filter_path(ass_path)}'[cap]")
-        current = "cap"
     for offset, item in enumerate(sticker_items):
         start = float(item.get("start", 0))
         end = float(item.get("end", min(total, start + 3)))
@@ -1143,7 +902,7 @@ async def render_timeline(
     ]
     await encode(args, total, on_progress)
     try:
-        _validate_mp4(output)
+        await asyncio.to_thread(_validate_mp4, output)
     except Exception:
         Path(output).unlink(missing_ok=True)
         raise

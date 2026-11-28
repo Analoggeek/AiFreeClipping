@@ -32,7 +32,7 @@ def test_speed_treated_multi_region_timeline_export_is_playable(tmp_path):
     subprocess.run(command, check=True, capture_output=True)
 
     asyncio.run(render.render_timeline({
-        "aspect": "9:16", "resolution": "720p", "caption_style": {"preset": "none"},
+        "aspect": "9:16", "resolution": "720p",
         "tracks": {
             "video": [{
                 "clip_id": "speed-edit", "path": str(source), "sourceStart": 0,
@@ -43,8 +43,7 @@ def test_speed_treated_multi_region_timeline_export_is_playable(tmp_path):
                 ],
                 "region_layout": "top-player-bottom-game",
                 "effects": {"speed": 1.25, "brightness": 0.02, "contrast": 1.05, "saturation": 1.08},
-            }],
-            "captions": [], "stickers": [], "audio": [],
+            }], "stickers": [], "audio": [],
         },
     }, str(output)))
 
@@ -73,8 +72,7 @@ def test_timeline_export_preserves_short_source_duration(tmp_path, monkeypatch):
                 "path": str(source), "sourceStart": 0, "sourceDuration": 0.05,
                 "duration": 0.2, "crop_path": [[0.0, 0.2], [0.05, 0.8]],
                 "effects": {"speed": 0.25},
-            }],
-            "captions": [], "stickers": [], "audio": [],
+            }], "stickers": [], "audio": [],
         },
     }, str(tmp_path / "short-export.mp4")))
 
@@ -83,46 +81,6 @@ def test_timeline_export_preserves_short_source_duration(tmp_path, monkeypatch):
     assert "trim=start=0.000:duration=0.050" in graph
     assert "if(lt(t,0.050000)" in graph
     assert "setpts=(PTS-STARTPTS)/0.250" in graph
-
-
-def test_timeline_export_uses_explicit_caption_tracks_not_video_labels(tmp_path, monkeypatch):
-    source = tmp_path / "caption-source.mp4"
-    source.write_bytes(b"synthetic media")
-    captured: dict = {}
-    monkeypatch.setattr(render, "probe", lambda _path: {"width": 640, "height": 360, "audio_codec": None})
-
-    def capture_write_ass(captions, *_args, **_kwargs):
-        captured["captions"] = [dict(caption) for caption in captions]
-        return str(tmp_path / "captions.ass")
-
-    async def capture_encode(args, duration, on_progress=None):
-        captured["args"] = args
-        captured["duration"] = duration
-
-    monkeypatch.setattr(render, "write_ass", capture_write_ass)
-    monkeypatch.setattr(render, "encode", capture_encode)
-    monkeypatch.setattr(render, "_validate_mp4", lambda _path: None)
-    asyncio.run(render.render_timeline({
-        "aspect": "9:16", "resolution": "720p", "caption_style": {"preset": "hype"},
-        "tracks": {
-            "video": [{
-                "clip_id": "auto-edit-clip", "path": str(source), "sourceStart": 0,
-                "duration": 2, "label": "Generated clip name must not appear",
-            }],
-            "captions": [
-                {"text": "Spoken caption stays", "start": 0.2, "end": 0.8, "kind": "caption"},
-                {"text": "Intentional title track stays", "start": 0, "end": 1, "kind": "title"},
-            ],
-            "stickers": [], "audio": [],
-        },
-    }, str(tmp_path / "caption-export.mp4")))
-
-    assert [caption["text"] for caption in captured["captions"]] == [
-        "Spoken caption stays", "Intentional title track stays",
-    ]
-    assert captured["captions"][1]["kind"] == "title"
-    graph = captured["args"][captured["args"].index("-filter_complex") + 1]
-    assert "subtitles=" in graph
 
 
 def test_timeline_export_preserves_composition_speed_effects_and_timed_tracks(tmp_path, monkeypatch):
@@ -145,7 +103,7 @@ def test_timeline_export_preserves_composition_speed_effects_and_timed_tracks(tm
     monkeypatch.setattr(render, "_validate_mp4", lambda _path: None)
 
     timeline = {
-        "aspect": "9:16", "resolution": "720p", "caption_style": {"preset": "none"},
+        "aspect": "9:16", "resolution": "720p",
         "tracks": {
             "video": [{
                 "clip_id": "edit-clip", "path": str(source), "sourceStart": 1.0,
@@ -156,8 +114,7 @@ def test_timeline_export_preserves_composition_speed_effects_and_timed_tracks(tm
                 ],
                 "region_layout": "top-player-bottom-game",
                 "effects": {"speed": 1.25, "brightness": 0.02, "contrast": 1.1, "saturation": 1.2},
-            }],
-            "captions": [], "stickers": [{
+            }], "stickers": [{
                 "path": str(sticker), "start": 0.1, "end": 0.8,
                 "x": 0.7, "y": 0.15, "scale": 0.2,
             }],

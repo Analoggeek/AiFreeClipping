@@ -445,6 +445,6 @@ def test_local_model_install_paths_are_exercised_with_mocked_downloads(tmp_path,
 
 
 def test_cloud_model_install_explains_api_key_setup():
-    for model_id in ("nano-banana", "youtube-api", "pexels-api", "pixabay-api"):
+    for model_id in ("nano-banana", "pexels-api", "pixabay-api"):
         with pytest.raises(RuntimeError, match="create your API key"):
             asyncio.run(models.install(model_id, lambda _percent, _message: None))

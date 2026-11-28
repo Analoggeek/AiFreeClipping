@@ -1,7 +1,7 @@
 {
   "name": "ai-clipper-pro",
-  "version": "5.2.7",
-  "description": "Local-first AI video clipping, editing and publishing studio — made by analoggeek",
+  "version": "6.0.0",
+  "description": "Local-first AI video clipping, editing and exporting studio — made by analoggeek",
   "author": "analoggeek",
   "license": "MIT",
   "private": true,

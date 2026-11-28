@@ -1,37 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type Dispatch, type DragEvent as ReactDragEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent, type SetStateAction } from 'react';
 import {
-  Captions, Clapperboard, Download, Film, ImagePlus, Layers3, LoaderCircle,
+  Clapperboard, Download, Film, ImagePlus, Layers3, LoaderCircle,
   Mic2, Pause, Play, Plus, RotateCcw, Save, SkipBack, SkipForward, Split, Trash2,
   Upload, WandSparkles,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
 import { JobTracker, Pill, formatClock } from '../components/common';
-import type { AutoEditOptions, AutoEditReuseSettings, AutoEditTimelineEdit, CaptionPosition, CaptionStyleSettings, Candidate, Media, Timeline, VideoItem } from '../types';
+import type { AutoEditOptions, AutoEditTimelineEdit, Candidate, Media, Timeline, VideoItem } from '../types';
 import { appendAutoEditTimeline } from '../lib/autoEdit';
-import { captionsForMedia, type TranscriptSegment } from '../lib/captions';
 import { insertionBoundaryAtTime, insertVideoAtTime, moveVideoToTime, removeVideoAtIndex } from '../lib/timelinePlacement';
-import { CAPTION_FONT_FAMILIES, CAPTION_LOOKS, CAPTION_LOOK_CATEGORIES, type CaptionLook } from '../lib/captionLooks';
 import { drawVideoComposition } from '../lib/composition';
 import type { PageProps } from '../App';
 
-type TrackKey = 'video' | 'captions' | 'stickers' | 'audio';
-type AssetTab = 'media' | 'clips' | 'captions';
-type InspectorTab = 'edit' | 'caption' | 'templates';
-type CaptionJobContext = Pick<Media, 'id' | 'path'>;
-const DEFAULT_CAPTION_STYLE: CaptionStyleSettings = {
-  preset: 'hype', position: 'auto', font_family: 'Arial Black', font_size: 70,
-  primary_color: '#ffffff', outline_color: '#000000', background_color: '#000000',
-  background_opacity: 0, bold: true, italic: false, uppercase: false, outline: 5, shadow: 0, spacing: 0,
-};
-const CAPTION_PRESET_DEFAULTS: Record<string, Partial<CaptionStyleSettings>> = {
-  hype: DEFAULT_CAPTION_STYLE,
-  karaoke: { preset: 'karaoke', font_family: 'Arial', font_size: 66, primary_color: '#ffff00', outline_color: '#000000', bold: true, outline: 4, shadow: 0 },
-  minimal: { preset: 'minimal', font_family: 'Arial', font_size: 52, primary_color: '#ffffff', outline_color: '#000000', bold: false, outline: 2, shadow: 0 },
-  premium: { preset: 'premium', font_family: 'Georgia', font_size: 60, primary_color: '#fff4cc', outline_color: '#141414', bold: true, outline: 3, shadow: 1 },
-  none: { ...DEFAULT_CAPTION_STYLE, preset: 'none' },
-};
+type TrackKey = 'video' | 'stickers' | 'audio';
+type AssetTab = 'media' | 'clips';
 type AnyItem = {
-  id?: string; clip_id?: string; path?: string; text?: string; sourceStart?: number; sourceDuration?: number; duration?: number;
+  id?: string; clip_id?: string; path?: string; sourceStart?: number; sourceDuration?: number; duration?: number;
   start?: number; end?: number; volume?: number; x?: number; y?: number; scale?: number; label?: string;
   region?: Candidate['region']; regions?: Candidate['regions']; region_layout?: string | null;
   split_ratio?: number | null; outline_style?: Candidate['outline_style'];
@@ -73,6 +57,33 @@ const DEFAULT_EDITOR_LAYOUT: EditorLayout = {
   assetHeight: 190, stageHeight: 400, inspectorHeight: 320, playerScale: 0.85,
 };
 const DEFAULT_TIMELINE_ZOOM = 24;
+
+function normalizeTimeline(value: unknown): Timeline {
+  const raw = value && typeof value === 'object'
+    ? structuredClone(value as Record<string, unknown>)
+    : {};
+  const sourceTracks = raw.tracks && typeof raw.tracks === 'object'
+    ? raw.tracks as Record<string, unknown>
+    : {};
+  delete raw.caption_style;
+  delete sourceTracks.captions;
+  const aspect = ['9:16', '1:1', '16:9'].includes(String(raw.aspect))
+    ? raw.aspect as Timeline['aspect']
+    : '9:16';
+  const resolution = ['source', '720p', '1080p'].includes(String(raw.resolution))
+    ? raw.resolution as Timeline['resolution']
+    : 'source';
+  return {
+    ...raw,
+    tracks: {
+      video: Array.isArray(sourceTracks.video) ? sourceTracks.video as VideoItem[] : [],
+      stickers: Array.isArray(sourceTracks.stickers) ? sourceTracks.stickers as Timeline['tracks']['stickers'] : [],
+      audio: Array.isArray(sourceTracks.audio) ? sourceTracks.audio as Timeline['tracks']['audio'] : [],
+    },
+    aspect,
+    resolution,
+  } as Timeline;
+}
 
 function boundedLayoutValue(value: unknown, fallback: number, min: number, max: number): number {
   const parsed = Number(value);
@@ -118,78 +129,12 @@ function resizedEditorLayout(
   return next;
 }
 
-function normalizedHexColor(value: unknown, fallback = '#ffffff'): string {
-  const color = String(value || '').trim();
-  if (/^#[0-9a-f]{6}$/i.test(color)) return color;
-  if (/^#[0-9a-f]{3}$/i.test(color)) return `#${color.slice(1).split('').map((part) => part + part).join('')}`;
-  const ass = color.match(/^&H[0-9a-f]{2}([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i);
-  return ass ? `#${ass[3]}${ass[2]}${ass[1]}` : fallback;
-}
-
-function splitCaptionAnchor(video: VideoItem | null | undefined): { x: number; y: number } | null {
-  const layout = video?.region_layout || String(video?.effects?.region_layout || '');
-  if (!['top-game-bottom-player', 'top-player-bottom-game', 'side-by-side'].includes(layout)) return null;
-  const fallback = layout === 'top-game-bottom-player' ? 0.58 : layout === 'top-player-bottom-game' ? 0.42 : 0.62;
-  const rawRatio = video?.split_ratio ?? Number(video?.effects?.split_ratio);
-  const ratio = clamp(Number.isFinite(Number(rawRatio)) ? Number(rawRatio) : fallback, 0.25, 0.75);
-  if (layout === 'side-by-side') return { x: Math.max(0.08, ratio - 0.055), y: 0.5 };
-  return { x: 0.5, y: Math.max(0.08, ratio - 0.055) };
-}
-
-function captionPosition(style: CaptionStyleSettings, video: VideoItem | null | undefined): { x: number; y: number } {
-  const position = style.position || 'bottom';
-  if (position === 'custom') return { x: clamp(style.x ?? 0.5, 0.05, 0.95), y: clamp(style.y ?? 0.5, 0.05, 0.95) };
-  if (position === 'auto' || position === 'split') {
-    const anchor = splitCaptionAnchor(video);
-    if (anchor) return anchor;
-  }
-  if (position === 'top') return { x: 0.5, y: 0.14 };
-  if (position === 'center') return { x: 0.5, y: 0.5 };
-  return { x: 0.5, y: 0.84 };
-}
-
-function captionPreviewPosition(
-  caption: { kind?: string; x?: number; y?: number }, style: CaptionStyleSettings, video: VideoItem | null | undefined,
-): { x: number; y: number } {
-  const base = captionPosition(style, video);
-  if (caption.kind === 'title' && caption.x === undefined && caption.y === undefined) {
-    if (style.position === 'custom') return base;
-    const seam = style.position === 'auto' || style.position === 'split' ? splitCaptionAnchor(video) : null;
-    return seam || { x: 0.5, y: 0.08 };
-  }
-  return { x: caption.x ?? base.x, y: caption.y ?? base.y };
-}
-
-function resolveCaptionStyle(saved?: CaptionStyleSettings): CaptionStyleSettings {
-  const preset = saved?.preset || 'hype';
-  return { ...DEFAULT_CAPTION_STYLE, ...(CAPTION_PRESET_DEFAULTS[preset] || {}), ...saved, preset };
-}
-
-function installTranscriptCaptions(
-  current: Timeline, source: CaptionJobContext, segments: TranscriptSegment[],
-): { timeline: Timeline; added: number; clips: number; firstIndex: number } {
-  const result = captionsForMedia(current, source, segments);
-  if (!result.captions.length) return { timeline: current, added: 0, clips: 0, firstIndex: -1 };
-  const next = structuredClone(current);
-  const refreshedVideoIds = new Set(result.videoIds);
-  next.tracks.captions = next.tracks.captions.filter(
-    (caption) => !caption.auto_caption_video_id || !refreshedVideoIds.has(caption.auto_caption_video_id),
-  );
-  const firstCaption = result.captions[0];
-  next.tracks.captions.push(...result.captions);
-  next.tracks.captions.sort((left, right) => left.start - right.start || left.end - right.end);
-  const firstIndex = next.tracks.captions.findIndex((caption) =>
-    caption.auto_caption_video_id === firstCaption.auto_caption_video_id && caption.start === firstCaption.start,
-  );
-  return { timeline: next, added: result.captions.length, clips: result.videoIds.length, firstIndex };
-}
-
 const emptyTimeline = (): Timeline => ({
-  tracks: { video: [], captions: [], stickers: [], audio: [] },
-  aspect: '9:16', resolution: 'source', caption_style: { ...DEFAULT_CAPTION_STYLE },
+  tracks: { video: [], stickers: [], audio: [] },
+  aspect: '9:16', resolution: 'source',
 });
 const DEFAULT_AUTO_EDIT: AutoEditOptions = {
-  style: 'hype', aspect: '9:16', resolution: 'source', captions: true,
+  style: 'hype', aspect: '9:16', resolution: 'source',
   sound_effects: true, stickers: true, blur_background: true, music: '', music_volume: 0.18,
 };
 
@@ -208,13 +153,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
   const [media, setMedia] = useState<Media[]>([]);
   const [newMedia, setNewMedia] = useState('');
   const [tab, setTab] = useState<AssetTab>('media');
-  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('edit');
-  const [lookCategory, setLookCategory] = useState('All');
-  const [lookQuery, setLookQuery] = useState('');
   const [importingMedia, setImportingMedia] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [captionJobContext, setCaptionJobContext] = useState<CaptionJobContext | null>(null);
   const [exportJob, setExportJob] = useState<string | null>(null);
   const [exportOutput, setExportOutput] = useState('');
   const [clips, setClips] = useState<Candidate[]>([]);
@@ -228,7 +167,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
   const stageAreaRef = useRef<HTMLDivElement>(null);
   const stageFrameRef = useRef<HTMLDivElement>(null);
   const layoutResizeRef = useRef<ActiveLayoutResize | null>(null);
-  const captionDragRef = useRef<{ index: number; pointerId: number } | null>(null);
   const timelineRef = useRef<HTMLDivElement>(null);
   const timelineDragRef = useRef<TimelineDragPayload | null>(null);
   const timelineStateRef = useRef(timeline);
@@ -270,7 +208,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
         style: ['hype', 'minimal', 'premium'].includes(values.auto_edit_style) ? values.auto_edit_style as AutoEditOptions['style'] : DEFAULT_AUTO_EDIT.style,
         aspect: ['9:16', '1:1', '16:9'].includes(values.auto_edit_aspect) ? values.auto_edit_aspect as AutoEditOptions['aspect'] : DEFAULT_AUTO_EDIT.aspect,
         resolution: ['source', '720p', '1080p'].includes(values.auto_edit_resolution) ? values.auto_edit_resolution as AutoEditOptions['resolution'] : DEFAULT_AUTO_EDIT.resolution,
-        captions: values.auto_edit_captions === undefined ? true : !['0', 'false'].includes(values.auto_edit_captions.toLowerCase()),
         sound_effects: values.auto_edit_sound_effects === undefined ? true : !['0', 'false'].includes(values.auto_edit_sound_effects.toLowerCase()),
         stickers: values.auto_edit_stickers === undefined ? true : !['0', 'false'].includes(values.auto_edit_stickers.toLowerCase()),
         blur_background: values.auto_edit_blur_background === undefined ? true : !['0', 'false'].includes(values.auto_edit_blur_background.toLowerCase()),
@@ -284,7 +221,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
   const loadProject = useCallback(async (id: string) => {
     try {
       const result = await api.project(id);
-      const loadedTimeline = result.project.timeline || emptyTimeline();
+      const loadedTimeline = normalizeTimeline(result.project.timeline);
       projectStateRef.current = { id, name: result.project.name };
       timelineStateRef.current = loadedTimeline;
       setProjectId(id);
@@ -314,41 +251,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     }).catch(() => undefined);
   }, [clipSelection, loadProject]);
 
-  useEffect(() => {
-    if (!jobId) return;
-    return pollJob(jobId, (job) => {
-      if (job.status === 'done') {
-        const result = job.result as {
-          segments?: TranscriptSegment[];
-          transcript?: TranscriptSegment[] | { segments?: TranscriptSegment[] };
-        } | undefined;
-        const rawTranscript = result?.segments || result?.transcript;
-        const segments = Array.isArray(rawTranscript) ? rawTranscript : (rawTranscript?.segments || []);
-        if (captionJobContext && segments.length) {
-          const added = installTranscriptCaptions(timelineStateRef.current, captionJobContext, segments);
-          if (added.added) {
-            timelineStateRef.current = added.timeline;
-            setTimeline(added.timeline);
-            setExportOutput('');
-            setSelected({ track: 'captions', index: added.firstIndex });
-            setPlayhead(added.timeline.tracks.captions[added.firstIndex]?.start || 0);
-            setInspectorTab('caption');
-            setTab('captions');
-            notify(`Added ${added.added} editable word captions to ${added.clips} timeline clip(s), using local Whisper.`);
-          } else notify('No speech was detected in this source clip.');
-        } else if (captionJobContext) notify('No speech was detected in this source clip.');
-        setCaptionJobContext(null);
-        setBusy(false);
-        setJobId(null);
-      }
-      if (job.status === 'error') {
-        notify(job.error || job.message); setBusy(false); setJobId(null); setCaptionJobContext(null);
-      }
-      if (job.status === 'cancelled') {
-        notify('Caption generation cancelled.'); setBusy(false); setJobId(null); setCaptionJobContext(null);
-      }
-    });
-  }, [jobId, captionJobContext, notify]);
 
   useEffect(() => {
     if (!exportJob) return;
@@ -381,7 +283,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
           : '';
         if (edits.length) {
           void applyAutoEditEdits(edits).then(() => {
-            notify(`Auto Edit applied to ${edits.length} clip(s): editable video, captions and audio are now on the timeline; ${outputs} MP4(s) rendered.${warningSummary}`);
+            notify(`Auto Edit applied to ${edits.length} clip(s): editable video, stickers and audio are now on the timeline; ${outputs} MP4(s) rendered.${warningSummary}`);
           }).catch((error) => notify(`MP4s rendered, but the editable timeline could not be saved: ${String(error)}${warningSummary}`))
             .finally(() => setAutoJob(null));
         } else {
@@ -421,35 +323,8 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
   const runAutoEdit = async () => {
     const ids = clips.map((clip) => clip.id || '').filter(Boolean);
     if (!ids.length) { notify('Generate clips with AI Clipper first.'); return; }
-    let reuseSettings: AutoEditReuseSettings | undefined;
-    if (timelineStateRef.current.tracks.video.length) {
-      const reuse = window.confirm(
-        'Reuse this edited short’s caption style, placement and size for Auto Edit? Its automatic captions will use those settings; Auto Edit will still add its non-conflicting music, stickers and sound effects.',
-      );
-      if (reuse) {
-        const current = timelineStateRef.current;
-        const caption_style = resolveCaptionStyle(current.caption_style);
-        if (selected?.track === 'captions') {
-          const selectedOverlay = current.tracks.captions[selected.index];
-          if (selectedOverlay) {
-            const selectedVideo = current.tracks.video.find((_item, index) => {
-              const start = current.tracks.video.slice(0, index).reduce((sum, part) => sum + part.duration, 0);
-              return selectedOverlay.start >= start && selectedOverlay.start < start + current.tracks.video[index].duration;
-            });
-            const defaultPosition = captionPosition(caption_style, selectedVideo);
-            caption_style.font_size = clamp(Math.round((caption_style.font_size || 70) * (selectedOverlay.scale ?? 1)), 12, 180);
-            if (selectedOverlay.x !== undefined || selectedOverlay.y !== undefined) {
-              caption_style.position = 'custom';
-              caption_style.x = selectedOverlay.x ?? defaultPosition.x;
-              caption_style.y = selectedOverlay.y ?? defaultPosition.y;
-            }
-          }
-        }
-        reuseSettings = { caption_style };
-      }
-    }
     try {
-      const result = await api.autoEdit(ids, autoEditOptions, reuseSettings);
+      const result = await api.autoEdit(ids, autoEditOptions);
       setAutoJob(result.job_id);
       notify(`Applying Auto Edit to ${ids.length} clip(s); finished videos will be added as editable timeline tracks.`);
     } catch (error) { notify(String(error)); }
@@ -481,10 +356,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     const item = (timelineStateRef.current.tracks[selected.track] as unknown as AnyItem[])[selected.index];
     if (selected.track === 'video') {
       const next = removeVideoAtIndex(timelineStateRef.current, selected.index).timeline;
-      const videoId = item?.id || item?.clip_id;
-      if (videoId) next.tracks.captions = next.tracks.captions.filter((caption) => caption.auto_caption_video_id !== videoId);
       if (item?.auto_edit && item.clip_id && !next.tracks.video.some((entry) => entry.clip_id === item.clip_id)) {
-        next.tracks.captions = next.tracks.captions.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
         next.tracks.stickers = next.tracks.stickers.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
         next.tracks.audio = next.tracks.audio.filter((entry) => entry.auto_edit_clip_id !== item.clip_id);
       }
@@ -524,15 +396,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       first.duration = firstDuration;
       first.sourceDuration = sourceOffset;
       draft.tracks.video.splice(selected.index + 1, 0, second);
-      const originalCaptionVideoId = first.id || first.clip_id;
-      const splitCaptionTime = itemStart + firstDuration;
-      if (originalCaptionVideoId) {
-        draft.tracks.captions.forEach((caption) => {
-          if (caption.auto_caption_video_id === originalCaptionVideoId && caption.start >= splitCaptionTime) {
-            caption.auto_caption_video_id = second.id;
-          }
-        });
-      }
     });
     notify('Clip split at playhead.');
   };
@@ -572,45 +435,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       const item = (draft.tracks[selected.track] as unknown as AnyItem[])[selected.index];
       if (item) Object.assign(item, patch);
     });
-  };
-
-  const updateCaptionStyle = (patch: Partial<CaptionStyleSettings>) => {
-    mutate((draft) => {
-      const current = draft.caption_style;
-      if (patch.preset && patch.preset !== current?.preset) {
-        const preserved = {
-          position: current?.position || 'auto', x: current?.x, y: current?.y,
-          background_color: current?.background_color || '#000000',
-          background_opacity: current?.background_opacity || 0,
-          uppercase: current?.uppercase || false,
-        };
-        draft.caption_style = {
-          ...DEFAULT_CAPTION_STYLE, ...(CAPTION_PRESET_DEFAULTS[patch.preset] || {}), ...preserved, ...patch,
-        };
-      } else {
-        draft.caption_style = { ...resolveCaptionStyle(current), ...patch };
-      }
-    });
-  };
-
-  const applyCaptionLook = (look: CaptionLook) => {
-    mutate((draft) => {
-      const current = resolveCaptionStyle(draft.caption_style);
-      draft.caption_style = { ...current, ...look.style, template_id: look.id };
-    });
-    setInspectorTab('caption');
-    notify(`Applied ${look.name}. Fine-tune its caption settings in the Caption tab.`);
-  };
-
-  const applyCaptionSettingsToAll = () => {
-    if (!selected || selected.track !== 'captions') return;
-    const chosen = timeline.tracks.captions[selected.index];
-    if (!chosen) return;
-    const { x, y, scale } = chosen;
-    mutate((draft) => {
-      draft.tracks.captions = draft.tracks.captions.map((caption) => ({ ...caption, x, y, scale }));
-    });
-    notify('Caption style and placement applied to all caption segments without adding duplicates.');
   };
 
   const beginLayoutResize = (target: LayoutResizeTarget, event: ReactPointerEvent<HTMLElement>) => {
@@ -662,29 +486,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     setZoom(DEFAULT_TIMELINE_ZOOM);
     notify('Editor panel sizes, Shorts player and timeline zoom reset to defaults.');
   };
-
-  const startCaptionDrag = (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    captionDragRef.current = { index, pointerId: event.pointerId };
-    event.currentTarget.setPointerCapture(event.pointerId);
-    setSelected({ track: 'captions', index });
-    setInspectorTab('caption');
-  };
-
-  const moveCaptionDrag = (index: number, event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = captionDragRef.current;
-    const rect = stageFrameRef.current?.getBoundingClientRect();
-    if (!drag || drag.index !== index || drag.pointerId !== event.pointerId || !rect) return;
-    const x = clamp((event.clientX - rect.left) / rect.width, 0.04, 0.96);
-    const y = clamp((event.clientY - rect.top) / rect.height, 0.04, 0.96);
-    mutate((draft) => {
-      const caption = draft.tracks.captions[index];
-      if (caption) { caption.x = x; caption.y = y; }
-    });
-  };
-
-  const endCaptionDrag = () => { captionDragRef.current = null; };
 
   const importLocalMedia = async () => {
     if (!window.desktop?.selectFiles) {
@@ -739,61 +540,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     } catch (error) { notify(String(error)); }
   };
 
-  const autoCaptionsForMedia = async (source: Media) => {
-    if (busy) return;
-    let current = timelineStateRef.current;
-    if (!current.tracks.video.some((video) => video.media_id === source.id || video.path === source.path)) {
-      const added = await addMediaToTimeline(source);
-      if (!added) return;
-      current = timelineStateRef.current;
-    }
-    if (!current.tracks.video.some((video) => video.media_id === source.id || video.path === source.path)) {
-      notify('Add this source to the timeline before captioning it.');
-      return;
-    }
-    setTab('captions');
-    setInspectorTab('caption');
-    setBusy(true);
-    try {
-      const cached = await api.transcript(source.id).catch(() => null);
-      const cachedSegments = cached?.transcript?.segments || [];
-      if (cachedSegments.length) {
-        const added = installTranscriptCaptions(timelineStateRef.current, source, cachedSegments);
-        if (added.added) {
-          timelineStateRef.current = added.timeline;
-          setTimeline(added.timeline);
-          setExportOutput('');
-          setSelected({ track: 'captions', index: added.firstIndex });
-          setPlayhead(added.timeline.tracks.captions[added.firstIndex]?.start || 0);
-          setCaptionJobContext(null);
-          setBusy(false);
-          notify(`Applied the saved local transcript as ${added.added} editable word captions across ${added.clips} clip(s).`);
-          return;
-        }
-      }
-      setCaptionJobContext({ id: source.id, path: source.path });
-      const result = await api.transcribe(source.id);
-      setJobId(result.job_id);
-      notify('Transcribing locally with Whisper. No video or transcript is sent to a cloud service.');
-    } catch (error) {
-      notify(String(error)); setBusy(false); setCaptionJobContext(null);
-    }
-  };
-
-  const autoCaptions = async () => {
-    const selectedVideo = selected?.track === 'video' ? timeline.tracks.video[selected.index] : null;
-    const target = selectedVideo || activeVideo;
-    const source = media.find((item) => item.id === target?.media_id || item.path === target?.path);
-    if (!source) { notify('Choose a video from the Media library first.'); setTab('media'); return; }
-    await autoCaptionsForMedia(source);
-  };
-
-  const autoCaptionsForClip = async (clip: Candidate, source: Media) => {
-    if (busy) return;
-    const added = await addClipToTimeline(clip);
-    if (added) await autoCaptionsForMedia(source);
-  };
-
   const addMediaToTimeline = async (item: Media, atTime = playhead): Promise<boolean> => {
     const video: VideoItem = {
       id: `media-${item.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -807,7 +553,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     if (!projectStateRef.current.id) {
       try {
         const created = await api.createProject({ name: item.title });
-        current = created.project.timeline || emptyTimeline();
+        current = normalizeTimeline(created.project.timeline);
         projectStateRef.current = { id: created.project.id, name: created.project.name };
         setProjectId(created.project.id);
         setProjectName(created.project.name);
@@ -862,7 +608,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     if (!projectStateRef.current.id) {
       try {
         const created = await api.createProject({ name: clip.title.slice(0, 60) });
-        current = created.project.timeline || emptyTimeline();
+        current = normalizeTimeline(created.project.timeline);
         projectStateRef.current = { id: created.project.id, name: created.project.name };
         setProjectId(created.project.id);
         setProjectName(created.project.name);
@@ -1060,27 +806,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
     };
   }, [activeVideo, timeline.aspect]);
 
-  const captionStyle = resolveCaptionStyle(timeline.caption_style);
-  const visibleCaptions = timeline.tracks.captions
-    .map((caption, index) => ({ caption, index }))
-    .filter(({ caption }) => playhead >= caption.start && playhead <= caption.end)
-    .filter(({ caption }) => captionStyle.preset !== 'none' || caption.kind === 'title');
   const visibleStickers = timeline.tracks.stickers.filter((sticker) => playhead >= sticker.start && playhead <= sticker.end);
-  const selectedCaption = selected?.track === 'captions' ? timeline.tracks.captions[selected.index] : null;
-  const selectedCaptionVideo = selectedCaption
-    ? timeline.tracks.video.find((_item, index) => {
-      const start = timeline.tracks.video.slice(0, index).reduce((sum, part) => sum + part.duration, 0);
-      return selectedCaption.start >= start && selectedCaption.start < start + timeline.tracks.video[index].duration;
-    }) || activeVideo
-    : activeVideo;
-  const selectedCaptionDefaultPosition = captionPosition(captionStyle, selectedCaptionVideo);
-  const filteredCaptionLooks = useMemo(() => {
-    const query = lookQuery.trim().toLowerCase();
-    return CAPTION_LOOKS.filter((look) =>
-      (lookCategory === 'All' || look.category === lookCategory)
-      && (!query || `${look.name} ${look.category} ${look.palette}`.toLowerCase().includes(query)),
-    );
-  }, [lookCategory, lookQuery]);
   const playerFrameSize = useMemo(() => {
     if (!stageAreaSize.width || !stageAreaSize.height) return undefined;
     const aspect = timeline.aspect === '9:16' ? 9 / 16 : timeline.aspect === '1:1' ? 1 : 16 / 9;
@@ -1120,8 +846,8 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
       <div className="editor-body">
         <aside className="asset-panel">
           <div className="asset-tabs">
-            {([['media', Film, 'Media'], ['clips', Clapperboard, 'Clips'], ['captions', Captions, 'Captions']] as const).map(([id, Icon, label]) => (
-              <button key={id} className={tab === id ? 'active' : ''} onClick={() => { setTab(id); if (id === 'captions') setInspectorTab('caption'); }}><Icon size={15} />{label}</button>
+            {([['media', Film, 'Media'], ['clips', Clapperboard, 'Clips']] as const).map(([id, Icon, label]) => (
+              <button key={id} className={tab === id ? 'active' : ''} onClick={() => setTab(id)}><Icon size={15} />{label}</button>
             ))}
           </div>
           <div className="asset-content">
@@ -1156,13 +882,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                         <span><strong>{item.title}</strong><small>{formatClock(item.duration)} · Add at playhead or drag to place</small></span>
                       </button>
                       <button
-                        className="icon-btn asset-caption-action"
-                        title="Generate offline captions for this video"
-                        aria-label={`Generate offline captions for ${item.title}`}
-                        disabled={busy}
-                        onClick={() => { setTab('captions'); setInspectorTab('caption'); void autoCaptionsForMedia(item); }}
-                      ><Captions size={14} /></button>
-                      <button
                         className="icon-btn asset-row-remove"
                         title="Remove from media library"
                         aria-label={`Remove ${item.title} from the media library`}
@@ -1196,42 +915,10 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                         {sourceMedia?.thumbnail ? <img src={mediaUrl(sourceMedia.thumbnail)} alt="" /> : <Clapperboard size={20} />}
                         <span><strong>{clip.title}</strong><small>{formatClock(clip.start)} → {formatClock(clip.end)} · {Math.round(clip.score)}/100</small><small>{clip.output ? 'Rendered MP4 · add at playhead or drag to place' : 'Add at playhead or drag to place'}</small></span>
                       </button>
-                      <button className="icon-btn asset-caption-action" title="Caption this AI clip offline" aria-label={`Generate offline captions for ${clip.title}`} disabled={!sourceMedia || !clip.id || busy} onClick={() => { setTab('captions'); setInspectorTab('caption'); if (sourceMedia) void autoCaptionsForClip(clip, sourceMedia); }}><Captions size={14} /></button>
                     </div>
                   );
                 })}
               </div>
-            )}
-            {tab === 'captions' && (
-              <>
-                <div className="caption-offline-card">
-                  <strong>Automatic captions · offline</strong>
-                  <p>Local Whisper creates word-level timings on this device. Install a Whisper model once from Models; no cloud transcription is used.</p>
-                  <button className="primary" disabled={!timeline.tracks.video.length || busy} onClick={() => void autoCaptions()}>
-                    {busy ? <LoaderCircle size={14} className="spin" /> : <Captions size={14} />}
-                    {busy ? 'Transcribing locally…' : 'Caption selected clip'}
-                  </button>
-                </div>
-                <div className="asset-list">
-                  {!media.length && <p className="hint">Import a local video or choose one from Media to create offline captions.</p>}
-                  {media.map((item) => {
-                    const linkedClips = timeline.tracks.video.filter((video) => video.media_id === item.id || video.path === item.path).length;
-                    return <div key={item.id} className="asset-row-group caption-source-row">
-                      <button
-                        className="asset-row" draggable
-                        onDragStart={(event) => startAssetDrag(event, { kind: 'media', id: item.id })}
-                        onDragEnd={endTimelineDrag}
-                        onClick={() => void addMediaToTimeline(item)}
-                        title="Click to add at the playhead, or drag onto the video track to choose a position"
-                      >
-                        {item.thumbnail ? <img src={mediaUrl(item.thumbnail)} alt="" /> : <Film size={19} />}
-                        <span><strong>{item.title}</strong><small>{linkedClips ? `${linkedClips} timeline clip${linkedClips === 1 ? '' : 's'} · local Whisper` : 'Not on timeline · click to add or drag to place'}</small></span>
-                      </button>
-                      <button className="icon-btn asset-caption-action" title="Generate or refresh offline captions" aria-label={`Generate offline captions for ${item.title}`} disabled={busy} onClick={() => void autoCaptionsForMedia(item)}><Captions size={14} /></button>
-                    </div>;
-                  })}
-                </div>
-              </>
             )}
           </div>
         </aside>
@@ -1302,45 +989,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                 }}
               />
             ) : <div className="stage-empty"><Film size={38} /><p>Add a video from the media panel to start editing</p></div>}
-            {visibleCaptions.map(({ caption, index: captionIndex }) => {
-              const previewPosition = captionPreviewPosition(caption, captionStyle, activeVideo);
-              const x = previewPosition.x;
-              const y = previewPosition.y;
-              const scale = clamp(caption.scale ?? 1, 0.4, 2.5);
-              const color = normalizedHexColor(captionStyle.primary_color, '#ffffff');
-              const outlineColor = normalizedHexColor(captionStyle.outline_color, '#000000');
-              const fontSize = clamp(Number(captionStyle.font_size || 70) / 10.5, 1.8, 12);
-              const selectedOverlay = selected?.track === 'captions' && selected.index === captionIndex;
-              const outline = Math.max(0, Number(captionStyle.outline ?? 4));
-              const shadow = Math.max(0, Number(captionStyle.shadow ?? 0));
-              const opacity = clamp(Number(captionStyle.background_opacity || 0), 0, 1);
-              const background = opacity > 0
-                ? `color-mix(in srgb, ${normalizedHexColor(captionStyle.background_color, '#000000')} ${opacity * 100}%, transparent)`
-                : 'transparent';
-              return (
-                <div
-                  className={`${caption.kind === 'title' ? 'stage-title-preview' : 'stage-caption'} ${selectedOverlay ? 'caption-overlay-selected' : ''}`}
-                  key={captionIndex}
-                  style={{
-                    left: `${x * 100}%`, top: `${y * 100}%`, right: 'auto', bottom: 'auto',
-                    maxWidth: '90%', width: 'max-content', transform: `translate(-50%, -50%) scale(${scale})`,
-                    fontSize: `clamp(12px, ${fontSize}cqw, 84px)`,
-                    fontFamily: `${captionStyle.font_family || 'Arial Black'}, sans-serif`,
-                    fontWeight: captionStyle.bold === false ? 500 : 800,
-                    fontStyle: captionStyle.italic ? 'italic' : 'normal',
-                    letterSpacing: `${captionStyle.spacing ?? 0}px`,
-                    textTransform: captionStyle.uppercase ? 'uppercase' : 'none',
-                    color, backgroundColor: background, borderRadius: opacity > 0 ? '5px' : undefined,
-                    WebkitTextStroke: outline > 0 ? `${outline}px ${outlineColor}` : undefined,
-                    paintOrder: 'stroke fill',
-                    textShadow: shadow > 0 ? `0 ${shadow}px ${shadow * 3}px rgba(0,0,0,.9)` : '0 2px 8px rgba(0,0,0,.9)',
-                  }}
-                  onPointerDown={(event) => startCaptionDrag(captionIndex, event)}
-                  onPointerMove={(event) => moveCaptionDrag(captionIndex, event)}
-                  onPointerUp={endCaptionDrag} onPointerCancel={endCaptionDrag}
-                >{caption.text}</div>
-              );
-            })}
             {visibleStickers.map((sticker, index) => sticker.path && (
               <img
                 className="stage-sticker"
@@ -1394,131 +1042,19 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
 
         <aside className="inspector">
           <h3><Layers3 size={16} /> Inspector</h3>
-          <div className="inspector-tabs" role="tablist" aria-label="Inspector panels">
-            <button className={inspectorTab === 'edit' ? 'active' : ''} role="tab" aria-selected={inspectorTab === 'edit'} onClick={() => setInspectorTab('edit')}>Edit</button>
-            <button className={inspectorTab === 'caption' ? 'active' : ''} role="tab" aria-selected={inspectorTab === 'caption'} onClick={() => setInspectorTab('caption')}><Captions size={13} /> Caption</button>
-            <button className={inspectorTab === 'templates' ? 'active' : ''} role="tab" aria-selected={inspectorTab === 'templates'} onClick={() => setInspectorTab('templates')}>Templates <span>136</span></button>
-          </div>
-          {inspectorTab === 'caption' && <section className="inspector-caption-tools">
-            <div className="caption-panel-heading">
-              <div><h4><Captions size={14} /> Caption style</h4><small>{captionStyle.template_id ? 'Template applied' : 'Custom style'} · fully local preview</small></div>
-              <button className="ghost-btn caption-browse-button" onClick={() => setInspectorTab('templates')}>Browse 136 looks</button>
-            </div>
-            <label className="field"><span>Base style</span>
-              <select value={captionStyle.preset} onChange={(event) => updateCaptionStyle({ preset: event.target.value })}>
-                <option value="hype">Hype</option><option value="karaoke">Karaoke</option><option value="minimal">Minimal</option><option value="premium">Premium</option><option value="none">Hidden</option>
-              </select>
-            </label>
-            <label className="field"><span>Placement</span>
-              <select value={captionStyle.position || 'auto'} onChange={(event) => updateCaptionStyle({ position: event.target.value as CaptionPosition })}>
-                <option value="auto">Auto · seam-aware</option><option value="bottom">Bottom</option><option value="top">Top</option><option value="center">Center</option><option value="split">Split seam</option><option value="custom">Custom</option>
-              </select>
-            </label>
-            <label className="field"><span>Font size · {captionStyle.font_size ?? 70}</span>
-              <input type="range" min="28" max="110" step="1" value={captionStyle.font_size ?? 70} onChange={(event) => updateCaptionStyle({ font_size: Number(event.target.value) })} />
-            </label>
-            <label className="field"><span>Font · {CAPTION_FONT_FAMILIES.length} families</span>
-              <select value={captionStyle.font_family || 'Arial Black'} onChange={(event) => updateCaptionStyle({ font_family: event.target.value })}>
-                {CAPTION_FONT_FAMILIES.map((family) => <option key={family} value={family}>{family}</option>)}
-              </select>
-            </label>
-            <div className="caption-color-row">
-              <label className="field"><span>Text color</span><input type="color" value={normalizedHexColor(captionStyle.primary_color, '#ffffff')} onChange={(event) => updateCaptionStyle({ primary_color: event.target.value })} /></label>
-              <label className="field"><span>Outline color</span><input type="color" value={normalizedHexColor(captionStyle.outline_color, '#000000')} onChange={(event) => updateCaptionStyle({ outline_color: event.target.value })} /></label>
-            </div>
-            <div className="caption-color-row">
-              <label className="field"><span>Background color</span><input type="color" value={normalizedHexColor(captionStyle.background_color, '#000000')} onChange={(event) => updateCaptionStyle({ background_color: event.target.value })} /></label>
-              <label className="field"><span>Background · {Math.round((captionStyle.background_opacity || 0) * 100)}%</span>
-                <input type="range" min="0" max="0.8" step="0.05" value={captionStyle.background_opacity || 0} onChange={(event) => updateCaptionStyle({ background_opacity: Number(event.target.value) })} />
-              </label>
-            </div>
-            <div className="caption-range-row">
-              <label className="field"><span>Outline · {captionStyle.outline ?? 4}</span><input type="range" min="0" max="12" step="0.5" value={captionStyle.outline ?? 4} onChange={(event) => updateCaptionStyle({ outline: Number(event.target.value) })} /></label>
-              <label className="field"><span>Shadow · {captionStyle.shadow ?? 0}</span><input type="range" min="0" max="12" step="0.5" value={captionStyle.shadow ?? 0} onChange={(event) => updateCaptionStyle({ shadow: Number(event.target.value) })} /></label>
-            </div>
-            <label className="field"><span>Letter spacing · {captionStyle.spacing ?? 0}</span><input type="range" min="0" max="8" step="0.25" value={captionStyle.spacing ?? 0} onChange={(event) => updateCaptionStyle({ spacing: Number(event.target.value) })} /></label>
-            <div className="caption-toggle-row">
-              <label><input type="checkbox" checked={captionStyle.bold !== false} onChange={(event) => updateCaptionStyle({ bold: event.target.checked })} /> Bold</label>
-              <label><input type="checkbox" checked={Boolean(captionStyle.italic)} onChange={(event) => updateCaptionStyle({ italic: event.target.checked })} /> Italic</label>
-              <label><input type="checkbox" checked={Boolean(captionStyle.uppercase)} onChange={(event) => updateCaptionStyle({ uppercase: event.target.checked })} /> Uppercase</label>
-            </div>
-            {selectedCaption && <div className="caption-word-editor">
-              <div className="caption-word-heading"><strong>Edit selected word</strong><Pill tone="muted">{selectedCaption.timing_source === 'estimated' ? 'Estimated timing' : selectedCaption.timing_source === 'whisper' ? 'Whisper timing' : 'Editable timing'}</Pill></div>
-              <label className="field"><span>Word text</span><input value={selectedCaption.text} onChange={(event) => updateSelected({ text: event.target.value })} /></label>
-              <div className="caption-word-timing">
-                <label className="field"><span>Start · seconds</span><input type="number" min="0" step="0.01" value={selectedCaption.start} onChange={(event) => updateSelected({ start: Number(event.target.value) })} /></label>
-                <label className="field"><span>End · seconds</span><input type="number" min="0" step="0.01" value={selectedCaption.end} onChange={(event) => updateSelected({ end: Number(event.target.value) })} /></label>
-              </div>
-              <label className="field"><span>Overlay X · {Math.round((selectedCaption.x ?? selectedCaptionDefaultPosition.x) * 100)}%</span>
-                <input type="range" min="0.04" max="0.96" step="0.01" value={selectedCaption.x ?? selectedCaptionDefaultPosition.x} onChange={(event) => updateSelected({ x: Number(event.target.value) })} />
-              </label>
-              <label className="field"><span>Overlay Y · {Math.round((selectedCaption.y ?? selectedCaptionDefaultPosition.y) * 100)}%</span>
-                <input type="range" min="0.04" max="0.96" step="0.01" value={selectedCaption.y ?? selectedCaptionDefaultPosition.y} onChange={(event) => updateSelected({ y: Number(event.target.value) })} />
-              </label>
-              <label className="field"><span>Word size · {Math.round((selectedCaption.scale ?? 1) * 100)}%</span>
-                <input type="range" min="0.4" max="2.5" step="0.05" value={selectedCaption.scale ?? 1} onChange={(event) => updateSelected({ scale: Number(event.target.value) })} />
-              </label>
-              <button className="ghost-btn apply-captions-button" onClick={applyCaptionSettingsToAll}><Captions size={14} /> Apply position &amp; size to all words</button>
-            </div>}
-          </section>}
-          {inspectorTab === 'templates' && <section className="caption-template-panel">
-            <div className="caption-template-heading"><div><h4>Caption Looks</h4><small>136 looks · 44 font families</small></div><span className="template-offline-pill">Offline</span></div>
-            <label className="template-placement"><span>Placement</span>
-              <select aria-label="Caption placement in templates" value={captionStyle.position || 'auto'} onChange={(event) => updateCaptionStyle({ position: event.target.value as CaptionPosition })}>
-                <option value="auto">Auto · seam</option><option value="bottom">Bottom</option><option value="top">Top</option><option value="center">Center</option><option value="split">Split seam</option><option value="custom">Custom</option>
-              </select>
-            </label>
-            <input className="caption-template-search" type="search" placeholder="Search 136 looks…" value={lookQuery} onChange={(event) => setLookQuery(event.target.value)} aria-label="Search caption templates" />
-            <select className="caption-template-category" value={lookCategory} onChange={(event) => setLookCategory(event.target.value)} aria-label="Filter caption templates">
-              {CAPTION_LOOK_CATEGORIES.map((category) => <option key={category} value={category}>{category}</option>)}
-            </select>
-            <div className="caption-template-count">Showing {filteredCaptionLooks.length} of {CAPTION_LOOKS.length} looks</div>
-            <div className="caption-look-grid">
-              {filteredCaptionLooks.map((look) => {
-                const lookStyle = look.style;
-                const backgroundOpacity = Number(lookStyle.background_opacity || 0);
-                const backgroundColor = backgroundOpacity > 0
-                  ? `color-mix(in srgb, ${normalizedHexColor(lookStyle.background_color, '#000000')} ${backgroundOpacity * 100}%, transparent)`
-                  : 'transparent';
-                return <button
-                  key={look.id}
-                  className={`caption-look-card ${captionStyle.template_id === look.id ? 'selected' : ''}`}
-                  aria-pressed={captionStyle.template_id === look.id}
-                  onClick={() => applyCaptionLook(look)}
-                >
-                  <span className="caption-look-preview" style={{
-                    color: normalizedHexColor(lookStyle.primary_color, '#ffffff'),
-                    backgroundColor,
-                    fontFamily: `${lookStyle.font_family || 'Arial'}, sans-serif`,
-                    fontWeight: lookStyle.bold === false ? 500 : 800,
-                    fontStyle: lookStyle.italic ? 'italic' : 'normal',
-                    textTransform: lookStyle.uppercase ? 'uppercase' : 'none',
-                    letterSpacing: `${lookStyle.spacing || 0}px`,
-                    WebkitTextStroke: Number(lookStyle.outline || 0) > 0 ? `${Math.min(2, Number(lookStyle.outline) / 2)}px ${normalizedHexColor(lookStyle.outline_color, '#000000')}` : undefined,
-                    paintOrder: 'stroke fill',
-                    textShadow: Number(lookStyle.shadow || 0) > 0 ? `0 2px ${Math.min(8, Number(lookStyle.shadow) * 2)}px rgba(0,0,0,.9)` : undefined,
-                  }}>Your words</span>
-                  <strong>{look.name}</strong>
-                  <small>{look.category} · {look.palette}</small>
-                </button>;
-              })}
-            </div>
-            <p className="caption-template-note">Templates work offline. Font rendering uses the selected family when installed on this device and falls back locally when it is not.</p>
-          </section>}
-          {inspectorTab === 'edit' && (!selectedItem ? <p className="hint">Select a block on the timeline to edit its properties.</p> : (
+          {!selectedItem ? <p className="hint">Select a block on the timeline to edit its properties.</p> : (
             <div className="inspector-fields">
               <Pill>{selected?.track}</Pill>
-              {'text' in selectedItem && <label className="field"><span>{selected?.track === 'captions' ? 'Caption word' : 'Caption text'}</span><textarea rows={3} value={selectedItem.text || ''} onChange={(event) => updateSelected({ text: event.target.value })} /></label>}
               {'path' in selectedItem && <label className="field"><span>Source</span><input readOnly value={selectedItem.path || ''} /></label>}
               {'sourceStart' in selectedItem && <label className="field"><span>Source in (s)</span><input type="number" step="0.1" value={selectedItem.sourceStart || 0} onChange={(event) => updateSelected({ sourceStart: Number(event.target.value) })} /></label>}
               {'duration' in selectedItem && <label className="field"><span>Duration (s)</span><input type="number" step="0.1" value={selectedItem.duration || 0} onChange={(event) => updateSelected({ duration: Number(event.target.value) })} /></label>}
-              {'start' in selectedItem && <label className="field"><span>{selected?.track === 'captions' ? 'Word start (s)' : 'Start (s)'}</span><input type="number" step={selected?.track === 'captions' ? '0.01' : '0.1'} value={selectedItem.start || 0} onChange={(event) => updateSelected({ start: Number(event.target.value) })} /></label>}
-              {'end' in selectedItem && <label className="field"><span>{selected?.track === 'captions' ? 'Word end (s)' : 'End (s)'}</span><input type="number" step={selected?.track === 'captions' ? '0.01' : '0.1'} value={selectedItem.end || 0} onChange={(event) => updateSelected({ end: Number(event.target.value) })} /></label>}
+              {'start' in selectedItem && <label className="field"><span>Start (s)</span><input type="number" step="0.1" value={selectedItem.start || 0} onChange={(event) => updateSelected({ start: Number(event.target.value) })} /></label>}
+              {'end' in selectedItem && <label className="field"><span>End (s)</span><input type="number" step="0.1" value={selectedItem.end || 0} onChange={(event) => updateSelected({ end: Number(event.target.value) })} /></label>}
               {'volume' in selectedItem && <label className="field"><span>Volume</span><input type="range" min="0" max="1" step="0.05" value={selectedItem.volume ?? 0.5} onChange={(event) => updateSelected({ volume: Number(event.target.value) })} /></label>}
               {'x' in selectedItem && <><label className="field"><span>Position X</span><input type="range" min="0" max="1" step="0.01" value={selectedItem.x ?? 0.7} onChange={(event) => updateSelected({ x: Number(event.target.value) })} /></label><label className="field"><span>Position Y</span><input type="range" min="0" max="1" step="0.01" value={selectedItem.y ?? 0.15} onChange={(event) => updateSelected({ y: Number(event.target.value) })} /></label></>}
               <button className="ghost-btn" onClick={removeSelected}><Trash2 size={15} /> Remove item</button>
             </div>
-          ))}
+          )}
           {exportOutput && <a className="primary block" href={mediaUrl('/media/file?path=' + encodeURIComponent(exportOutput) + '&download=true')} download><Download size={16} /> Download exported MP4</a>}
           {exportJob && <JobTracker jobId={exportJob} label="Rendering project" />}
         </aside>
@@ -1565,7 +1101,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
           <div className="timeline-title"><strong>Timeline</strong> <Pill tone="muted">{formatClock(total)}</Pill><small>Move the playhead, click an asset to insert, or drag clips and overlays to position them.</small></div>
           <div className="timeline-actions">
             <div className="timeline-tools">
-              <button className="icon-btn" title="Auto captions with offline Whisper" aria-label="Auto captions" disabled={busy} onClick={() => void autoCaptions()}><Captions size={15} /></button>
               <button className="icon-btn" title="Split clip at playhead" aria-label="Split clip" onClick={splitSelected}><Split size={15} /></button>
               <button className="icon-btn" title="Delete selected item" aria-label="Delete selected item" onClick={removeSelected}><Trash2 size={15} /></button>
             </div>
@@ -1575,9 +1110,9 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
         <div className="timeline-body">
           <div className="track-labels">
             <div className="ruler-spacer" />
-            {(['video', 'captions', 'stickers', 'audio'] as TrackKey[]).map((track) => (
+            {(['video', 'stickers', 'audio'] as TrackKey[]).map((track) => (
               <div className="track-label" key={track}>
-                {track === 'video' ? <Film size={14} /> : track === 'captions' ? <Captions size={14} /> : track === 'stickers' ? <ImagePlus size={14} /> : <Mic2 size={14} />}
+                {track === 'video' ? <Film size={14} /> : track === 'stickers' ? <ImagePlus size={14} /> : <Mic2 size={14} />}
                 <span>{track}</span>
               </div>
             ))}
@@ -1596,7 +1131,7 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                   <span key={index} style={{ left: index * 5 * zoom }}>{formatClock(index * 5)}</span>
                 ))}
               </div>
-              {(['video', 'captions', 'stickers', 'audio'] as TrackKey[]).map((track) => (
+              {(['video', 'stickers', 'audio'] as TrackKey[]).map((track) => (
                 <div className="track" key={track}>
                   <div
                     className="track-lane"
@@ -1620,11 +1155,10 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
                           onClick={() => {
                             setSelected({ track, index });
                             setPlayhead(start + 0.05);
-                            setInspectorTab(track === 'captions' ? 'caption' : 'edit');
                           }}
-                          title={`${item.label || item.text || item.path || 'Timeline item'} · drag to reposition`}
+                          title={`${item.label || item.path || 'Timeline item'} · drag to reposition`}
                         >
-                          {item.text || item.label || (item.path || 'clip').split(/[\\/]/).pop()}
+                          {item.label || (item.path || 'clip').split(/[\\/]/).pop()}
                         </button>
                       );
                     })}
@@ -1637,7 +1171,6 @@ export default function Editor({ notify, clipSelection, setMediaSelection }: Pag
           </div>
         </div>
       </div>
-      {busy && <div className="busy-badge"><LoaderCircle size={15} className="spin" /> Working…</div>}
     </div>
   );
 }

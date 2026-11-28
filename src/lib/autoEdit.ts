@@ -1,4 +1,4 @@
-import type { AutoEditTimelineEdit, CaptionStyleSettings, Timeline, VideoItem } from '../types';
+import type { AutoEditTimelineEdit, Timeline, VideoItem } from '../types';
 
 function numberOr(value: unknown, fallback: number): number {
   const parsed = Number(value);
@@ -14,7 +14,6 @@ export function appendAutoEditTimeline(
   const next = structuredClone(current);
   const editIds = new Set(edits.map((edit) => edit.clip_id));
   next.tracks.video = next.tracks.video.filter((item) => !item.clip_id || !editIds.has(item.clip_id));
-  next.tracks.captions = next.tracks.captions.filter((item) => !item.auto_edit_clip_id || !editIds.has(item.auto_edit_clip_id));
   next.tracks.stickers = next.tracks.stickers.filter((item) => !item.auto_edit_clip_id || !editIds.has(item.auto_edit_clip_id));
   next.tracks.audio = next.tracks.audio.filter((item) => !item.auto_edit_clip_id || !editIds.has(item.auto_edit_clip_id));
 
@@ -47,23 +46,6 @@ export function appendAutoEditTimeline(
     };
     next.tracks.video.push(video);
 
-    for (const caption of edit.captions || []) {
-      const text = String(caption.text ?? caption.word ?? '').trim();
-      const start = Math.max(sourceStart, numberOr(caption.start, sourceStart));
-      const end = Math.min(sourceStart + sourceDuration, numberOr(caption.end, start));
-      if (!text || end <= start) continue;
-      next.tracks.captions.push({
-        text,
-        start: cursor + (start - sourceStart) / speed,
-        end: cursor + (end - sourceStart) / speed,
-        kind: caption.kind || 'caption',
-        x: caption.x,
-        y: caption.y,
-        scale: caption.scale,
-        auto_edit_clip_id: edit.clip_id,
-      });
-    }
-
     for (const audio of edit.audio || []) {
       const start = Math.max(0, numberOr(audio.start, 0));
       const end = Math.max(start + 0.05, numberOr(audio.end, start + 0.5));
@@ -88,8 +70,6 @@ export function appendAutoEditTimeline(
 
     next.aspect = edit.aspect;
     next.resolution = edit.resolution;
-    const editCaptionStyle = effects.caption_style as CaptionStyleSettings | undefined;
-    if (editCaptionStyle) next.caption_style = { ...editCaptionStyle };
     cursor += duration;
   }
   return { timeline: next, start: firstStart };

@@ -1,8 +1,7 @@
 import asyncio
 
-from app.main import _caption_words_in_window
 from app.services.scoring import (
-    Candidate, RerankResult, Suggestion, build_features, make_caption, make_title,
+    Candidate, RerankResult, Suggestion, build_features, make_title,
     propose, refine_with_llm, window_score,
 )
 
@@ -45,52 +44,35 @@ def test_propose_returns_non_overlapping_windows():
     assert all(c.media_id == "m1" for c in candidates)
     assert all(c.end > c.start for c in candidates)
     assert len(candidates) <= 3
-    assert all("#Shorts" in c.title for c in candidates)
+    assert all("#" not in c.title for c in candidates)
 
 
-def test_make_title_fallback():
-    title, hook = make_title("", "shorts", "Epic finish")
-    assert "Epic finish" in title
-    assert hook == ""
+def test_make_title_uses_plain_factual_text_or_source_fallback():
+    assert make_title("A clear goal. Then the players celebrate.", "Match highlights") == "A clear goal."
+    assert make_title("goal", "Match highlights") == "goal"
+    assert make_title("", "Match highlights") == "Match highlights"
+    assert make_title("") == "Video moment"
+    assert "#" not in make_title("A clear goal.")
+    assert "you need to see this" not in make_title("goal")
 
 
-def test_make_caption_cleans_and_limits_transcript_copy():
-    caption = make_caption("  That was incredible .\nThe team made a smart comeback! A third sentence.")
-    assert caption == "That was incredible. The team made a smart comeback!"
-    assert make_caption("", "Epic finish #Shorts") == "Epic finish."
-    assert len(make_caption("word " * 200)) <= 240
-
-
-def test_caption_window_uses_word_timing_or_segment_fallback():
-    analysis = {"segments": [
-        {"start": 0, "end": 2, "text": "hello there", "words": [
-            {"word": " hello", "start": 0.2, "end": 0.6},
-            {"word": " there", "start": 0.8, "end": 1.2},
-        ]},
-        {"start": 2, "end": 4, "text": "a segment without aligned words", "words": []},
-        {"start": 5, "end": 7, "text": "outside", "words": []},
-    ]}
-    captions = _caption_words_in_window(analysis, 1, 3)
-    assert [item["word"] for item in captions[:1]] == [" there"]
-    assert captions[1] == {"text": "a segment without aligned words", "start": 2, "end": 3}
-
-
-def test_llm_caption_refinement_preserves_clip_timing():
+def test_llm_prompt_keeps_titles_platform_neutral_and_factual():
     candidate = Candidate(
-        media_id="m1", start=12.5, end=24.0, score=61,
-        title="Old hook", transcript="The last-second finish changed the whole match.",
+        media_id="media-1", start=1, end=15, score=50, title="Goal moment",
+        transcript="A player scores a goal.",
     )
+    captured = {}
 
     async def fake_llm(prompt, schema, **kwargs):
-        assert "preserve the transcript's language" in prompt
-        assert kwargs["temperature"] == 0.15
+        captured["prompt"] = prompt
         return RerankResult(suggestions=[Suggestion(
-            index=0, score=88, title="A last-second finish!", reason="Clear payoff",
-            caption="The match turned on one final play.",
+            index=0, score=90, title="Player scores a goal", reason="Clear action",
         )])
 
-    result = asyncio.run(refine_with_llm([candidate], fake_llm, platform="reels"))
-    assert result[0].start == 12.5 and result[0].end == 24.0
-    assert result[0].title == "A last-second finish!"
-    assert result[0].caption == "The match turned on one final play."
-    assert result[0].score == 74.5
+    result = asyncio.run(refine_with_llm([candidate], fake_llm))
+    assert result[0].title == "Player scores a goal"
+    assert "plain factual title" in captured["prompt"]
+    assert "platform names" in captured["prompt"]
+    assert "hashtags" in captured["prompt"]
+    assert "YouTube" not in captured["prompt"]
+    assert "TikTok" not in captured["prompt"]

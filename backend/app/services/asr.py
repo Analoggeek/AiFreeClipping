@@ -1,4 +1,4 @@
-"""Local speech-to-text with faster-whisper (word-level timestamps for karaoke captions)."""
+"""Local speech-to-text with faster-whisper for transcript-aware clip scoring."""
 from __future__ import annotations
 
 import asyncio
@@ -12,7 +12,7 @@ _MODELS: dict[tuple, Any] = {}
 
 
 def _resolve_whisper_model(model: str | None = None) -> str:
-    """Resolve installed local weights only; caption inference must not fetch a model."""
+    """Resolve installed local weights only; inference must not fetch a model."""
     from ..db import db
 
     selected_setting = model or env("WHISPER_MODEL") or db.get_setting("whisper_model", "")
@@ -45,7 +45,7 @@ def _resolve_whisper_model(model: str | None = None) -> str:
             return str(configured_path)
     raise RuntimeError(
         f"Whisper {selected} is not installed locally. Install a Whisper model from the Models page; "
-        "caption transcription runs on-device and does not download models while working."
+        "speech transcription runs on-device and does not download models while working."
     )
 
 

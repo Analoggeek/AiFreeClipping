@@ -31,10 +31,7 @@ export type Candidate = {
   score: number;
   reasons: string[];
   title: string;
-  hook: string;
-  hashtags: string[];
   transcript: string;
-  caption?: string;
   region?: { x: number; y: number; w: number; h: number } | null;
   regions?: Array<{ x: number; y: number; w: number; h: number }>;
   region_layout?: string | null;
@@ -101,22 +98,6 @@ export type VideoItem = {
   outline_style?: 'none' | 'clean' | 'neon' | 'double'; crop_path?: Array<[number, number]>;
   effects?: Record<string, unknown>; auto_edit?: boolean;
 };
-export type CaptionPosition = 'auto' | 'bottom' | 'center' | 'top' | 'split' | 'custom';
-export type CaptionStyleSettings = {
-  preset: string;
-  template_id?: string;
-  position?: CaptionPosition;
-  x?: number; y?: number;
-  font_family?: string; font_size?: number;
-  primary_color?: string; outline_color?: string;
-  background_color?: string; background_opacity?: number;
-  bold?: boolean; italic?: boolean; uppercase?: boolean; outline?: number; shadow?: number; spacing?: number;
-};
-export type CaptionItem = {
-  text: string; start: number; end: number; kind?: 'title' | 'caption';
-  x?: number; y?: number; scale?: number; auto_edit_clip_id?: string;
-  auto_caption_video_id?: string; timing_source?: 'whisper' | 'estimated' | 'manual';
-};
 export type StickerItem = {
   path: string; start: number; end: number; x: number; y: number; scale?: number; label?: string; auto_edit_clip_id?: string;
 };
@@ -129,7 +110,6 @@ export type AutoEditOptions = {
   style: 'hype' | 'minimal' | 'premium';
   aspect: '9:16' | '1:1' | '16:9';
   resolution: 'source' | '720p' | '1080p';
-  captions: boolean;
   sound_effects: boolean;
   stickers: boolean;
   blur_background: boolean;
@@ -153,7 +133,6 @@ export type AutoEditTimelineEdit = {
   split_ratio?: number | null;
   outline_style?: VideoItem['outline_style'];
   crop_path?: VideoItem['crop_path'];
-  captions: Array<{ text?: string; word?: string; start: number; end: number; kind?: 'title' | 'caption'; x?: number; y?: number; scale?: number }>;
   audio: AudioItem[];
   stickers: StickerItem[];
   effects: Record<string, unknown>;
@@ -162,16 +141,11 @@ export type AutoEditTimelineEdit = {
 export type Timeline = {
   tracks: {
     video: VideoItem[];
-    captions: CaptionItem[];
     stickers: StickerItem[];
     audio: AudioItem[];
   };
   aspect: '9:16' | '1:1' | '16:9';
   resolution: 'source' | '720p' | '1080p';
-  caption_style?: CaptionStyleSettings;
-};
-export type AutoEditReuseSettings = {
-  caption_style: CaptionStyleSettings;
 };
 
 export type Project = { id: string; name: string; timeline: Timeline; updated_at?: string };

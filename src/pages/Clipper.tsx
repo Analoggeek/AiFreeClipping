@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   ArrowLeft, ArrowRight, BoxSelect, Check, Clapperboard, Copy, Cpu, Download, Film, ImagePlus,
-  LoaderCircle, WandSparkles, Pause, Play, Plus, Scissors, Send, Sparkles, Volume2,
+  LoaderCircle, WandSparkles, Pause, Play, Plus, Scissors, Volume2,
 } from 'lucide-react';
 import { api, mediaUrl, pollJob } from '../api';
 import { EmptyState, formatClock, JobTracker, Panel, Pill } from '../components/common';
@@ -10,7 +10,6 @@ import { drawVideoComposition, type CropOutlineStyle } from '../lib/composition'
 import type { PageProps } from '../App';
 
 type Box = { x: number; y: number; w: number; h: number };
-type CaptionPreset = 'hype' | 'karaoke' | 'minimal' | 'premium';
 type RegionItem = { id: string; label: string; box: Box; color: string };
 type RegionLayout = { preset: string; boxes: RegionItem[]; splitRatio: number; outlineStyle: CropOutlineStyle };
 type Props = PageProps & {
@@ -56,14 +55,14 @@ const REGION_PRESETS: Array<{ id: string; label: string; icon: string; splitRati
 const COLORS = ['#22d3ee', '#a78bfa', '#34d399', '#fbbf24'];
 const DEFAULT_REGION_LAYOUT: RegionLayout = { preset: 'full', boxes: [], splitRatio: 0.58, outlineStyle: 'clean' };
 
-export default function Clipper({ notify, openEditor, openPublish, mediaSelection, setMediaSelection }: Props) {
+export default function Clipper({ notify, openEditor, openExport, mediaSelection, setMediaSelection }: Props) {
   const [media, setMedia] = useState<Media[]>([]);
   const [step, setStep] = useState(0);
   const [regions, setRegions] = useState<Record<string, RegionLayout>>({});
   const [activeRegionId, setActiveRegionId] = useState('gameplay');
   const [settings, setSettings] = useState({
-    count: 5, min_duration: 15, max_duration: 60, platform: 'shorts', style: 'hype', caption_style: 'hype' as CaptionPreset,
-    captions: true, sound_effects: true, stickers: true, use_llm: true, music: '', resolution: 'source' as 'source' | '1080p' | '720p',
+    count: 5, min_duration: 15, max_duration: 60, platform: 'shorts', style: 'hype',
+    sound_effects: true, stickers: true, use_llm: true, music: '', resolution: 'source' as 'source' | '1080p' | '720p',
   });
   const [jobId, setJobId] = useState<string | null>(null);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -258,7 +257,6 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
         notify(`${missingCount} unavailable selection(s) skipped; analyzing ${validIds.length} available video(s).`);
       }
       const proposalSettings: Record<string, unknown> = { ...settings };
-      delete proposalSettings.caption_style;
       const result = await api.propose({
         media_ids: validIds,
         regions: validIds.map((id) => {
@@ -307,7 +305,6 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
     return {
       aspect: settings.platform === 'landscape' ? '16:9' : '9:16',
       resolution: settings.resolution,
-      caption_style: { preset: settings.captions ? settings.caption_style : 'none', position: 'bottom' },
       sfx: settings.sound_effects ? ['whoosh', 'pop'] : [],
       music: settings.music.trim() || null, music_volume: 0.18,
       ...look,
@@ -319,7 +316,6 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
       region_layout: clip ? clip.region_layout || null : null,
       split_ratio: clip?.split_ratio ?? null,
       outline_style: clip?.outline_style ?? null,
-      title: clip?.title,
     };
   };
 
@@ -332,19 +328,19 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
           .map((clip) => [clip.id as string, effectPayload(clip)]),
       );
       const result = await api.applyEffects(ids, {}, effectsByClip);
-      notify(`Applied the current look and caption settings to ${result.changed} clip(s).`);
+      notify(`Applied the current export settings to ${result.changed} clip(s).`);
     } catch (error) { notify(String(error)); }
   };
 
   const saveCandidateText = async (
     clipId: string,
-    patch: Partial<Pick<Candidate, 'title' | 'caption'>>,
+    patch: Partial<Pick<Candidate, 'title'>>,
   ) => {
     if (!clipId) return;
     try {
       const result = await api.patchClip(clipId, patch);
       setCandidates((current) => current.map((item) => item.id === clipId ? { ...item, ...result.clip } : item));
-    } catch (error) { notify(`Could not save caption text: ${String(error)}`); }
+    } catch (error) { notify(`Could not save clip title: ${String(error)}`); }
   };
 
   const renderOne = async (clip: Candidate) => {
@@ -509,17 +505,12 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
             <label className="field"><span>Maximum seconds</span><input type="number" min={10} max={180} value={settings.max_duration} onChange={(event) => setSettings({ ...settings, max_duration: Number(event.target.value) })} /></label>
             <label className="field"><span>Platform</span>
               <select value={settings.platform} onChange={(event) => setSettings({ ...settings, platform: event.target.value })}>
-                <option value="shorts">YouTube Shorts</option><option value="reels">Instagram Reels</option><option value="tiktok">TikTok</option><option value="landscape">Landscape video</option>
+                <option value="shorts">Portrait short · 9:16</option><option value="reels">Instagram Reels</option><option value="tiktok">TikTok</option><option value="landscape">Landscape video</option>
               </select>
             </label>
             <label className="field"><span>Editing style</span>
               <select value={settings.style} onChange={(event) => setSettings({ ...settings, style: event.target.value })}>
                 <option value="hype">High energy</option><option value="story">Storytelling</option><option value="clean">Clean / minimal</option><option value="cinematic">Cinematic</option>
-              </select>
-            </label>
-            <label className="field"><span>On-video caption style</span>
-              <select value={settings.caption_style} onChange={(event) => setSettings({ ...settings, caption_style: event.target.value as CaptionPreset })}>
-                <option value="hype">Bold · Hype</option><option value="karaoke">Karaoke highlight</option><option value="minimal">Minimal</option><option value="premium">Premium</option>
               </select>
             </label>
             <label className="field"><span>Background music path (optional)</span><input value={settings.music} onChange={(event) => setSettings({ ...settings, music: event.target.value })} placeholder="~/.AiFreeClipping/assets/music/track.mp3" /></label>
@@ -531,7 +522,6 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
           </div>
           <div className="toggle-grid">
             {([
-              ['captions', 'Auto captions', <Sparkles size={16} />],
               ['sound_effects', 'Sound effects', <Volume2 size={16} />],
               ['stickers', 'AI stickers / images', <ImagePlus size={16} />],
               ['use_llm', 'Gemma title & rerank', <WandSparkles size={16} />],
@@ -542,7 +532,6 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
               </label>
             ))}
           </div>
-          <p className="hint caption-writing-hint">The AI drafts a concise, transcript-grounded social caption. You can refine that text on each result; the style selector controls burned-in word captions.</p>
           <div className="panel-actions">
             <button className="ghost-btn" onClick={() => setStep(1)}><ArrowLeft size={15} /> Back</button>
             <button className="primary" disabled={busy || !mediaSelection.length} onClick={findMoments}>
@@ -576,7 +565,7 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                         <div className="candidate-head">
                           <input type="checkbox" checked={checked.includes(clipId)} onChange={() => setChecked((current) => current.includes(clipId) ? current.filter((id) => id !== clipId) : [...current, clipId])} />
                           <label className="candidate-title-field">
-                            <span>Clip title · export hook</span>
+                            <span>Clip title</span>
                             <input
                               value={clip.title}
                               onChange={(event) => setCandidates((current) => current.map((item) => item.id === clipId ? { ...item, title: event.target.value } : item))}
@@ -591,33 +580,17 @@ export default function Clipper({ notify, openEditor, openPublish, mediaSelectio
                           <span>{Math.round(clip.end - clip.start)}s</span>
                           <span>{source?.title || clip.media_id}</span>
                         </div>
-                        <div className="candidate-caption-editor">
-                          <label className="field">
-                            <span>Social caption · editable</span>
-                            <textarea
-                              rows={2}
-                              value={clip.caption ?? clip.transcript ?? ''}
-                              onChange={(event) => setCandidates((current) => current.map((item) => item.id === clipId ? { ...item, caption: event.target.value } : item))}
-                              onBlur={(event) => void saveCandidateText(clipId, { caption: event.currentTarget.value })}
-                              aria-label={`Edit social caption for clip ${index + 1}`}
-                            />
-                          </label>
-                          <button className="chip-btn" title="Copy social caption" onClick={() => {
-                            const text = clip.caption || clip.transcript || '';
-                            if (text) void navigator.clipboard?.writeText(text).then(() => notify('Caption copied to clipboard.'));
-                          }}><Copy size={13} /> Copy caption</button>
-                        </div>
                         <div className="reasons">{clip.reasons.map((reason) => <Pill key={reason} tone="violet">{reason}</Pill>)}</div>
                         {clip.transcript && <p className="transcript">Source transcript: “{clip.transcript.slice(0, 180)}…”</p>}
                         <div className="candidate-actions">
                           <button className="chip-btn" onClick={() => openEditor(clipId)}><Scissors size={14} /> Edit</button>
                           <button className="chip-btn" onClick={() => renderOne(clip)}><Download size={14} /> Render</button>
-                          <button className="chip-btn" onClick={() => openPublish([clipId])}><Send size={14} /> Publish</button>
+                          <button className="chip-btn" onClick={() => openExport([clipId])}><Download size={14} /> Export</button>
                           {clip.output && <a className="chip-btn" href={mediaUrl('/media/file?path=' + encodeURIComponent(clip.output) + '&download=true')} download><Check size={14} /> Download MP4</a>}
                         </div>
                         {renderJobs[clipId] && <JobTracker jobId={renderJobs[clipId]} label="Rendering clip" onDone={(job) => {
                           if (job.status === 'done') {
-                            notify('Clip rendered — find it in Publish.');
+                            notify('Clip rendered — find it in Export.');
                             if (job.result?.hardware) setHardwareByClip((current) => ({ ...current, [clipId]: job.result!.hardware as Record<string, unknown> }));
                             refresh();
                           }

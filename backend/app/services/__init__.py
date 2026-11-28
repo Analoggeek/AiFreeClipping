@@ -1,1 +1,1 @@
-"""Service layer: downloads, analysis, rendering, publishing, local models."""
+"""Service layer: downloads, analysis, rendering, exporting and local models."""

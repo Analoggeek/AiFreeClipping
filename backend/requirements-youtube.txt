@@ -1,4 +1,0 @@
-# Optional: only needed for one-click YouTube publishing with your own OAuth app
-google-api-python-client>=2.14,<3.0
-google-auth-oauthlib>=1.2,<2.0
-google-auth-httplib2>=0.2,<1.0
