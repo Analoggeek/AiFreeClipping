@@ -157,6 +157,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          STAGE="locating the macOS DMG and ZIP"
           DMG="$(find release -maxdepth 1 -type f -name '*.dmg' -print -quit)"
           ZIP="$(find release -maxdepth 1 -type f -name '*.zip' -print -quit)"
           test -s "$DMG"
@@ -176,7 +177,18 @@ jobs:
             hdiutil detach "$MOUNT" -force >/dev/null 2>&1 || true
             rm -rf "$MOUNT" "$COPY" "$ZIP_COPY"
           }
-          trap cleanup EXIT
+          report_failure() {
+            local status="$?"
+            if [ "$status" -ne 0 ]; then
+              echo "::error title=macOS artifact verification failed::$STAGE (exit $status)"
+              if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+                printf '## macOS artifact verification failed\n\nStage: `%s` (exit %s)\n' "$STAGE" "$status" >> "$GITHUB_STEP_SUMMARY"
+              fi
+            fi
+            cleanup
+            return "$status"
+          }
+          trap report_failure EXIT
           EXPECTED_ARCH="${{ matrix.arch }}"
           if [ "$EXPECTED_ARCH" = "x64" ]; then EXPECTED_ARCH="x86_64"; fi
           verify_electron_framework() {
@@ -194,32 +206,39 @@ jobs:
             fi
             lipo -verify_arch "$EXPECTED_ARCH" "$framework"
             lipo -verify_arch "$EXPECTED_ARCH" "$executable"
-            if ! otool -L "$executable" | grep -F '@rpath/Electron Framework.framework/Electron Framework' >/dev/null; then
+            if ! otool -L "$executable" | grep -E '@rpath/Electron Framework\.framework(/Versions/[^[:space:]/]+)?/Electron Framework([[:space:]]|$)' >/dev/null; then
               echo "App executable does not declare the expected Electron Framework load dependency" >&2
               exit 1
             fi
           }
+          STAGE="mounting the DMG and locating the app bundle"
           hdiutil attach "$DMG" -nobrowse -readonly -mountpoint "$MOUNT"
           APP="$(find "$MOUNT" -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "$APP"
+          STAGE="checking the DMG app's Electron Framework, load reference, and architecture"
           verify_electron_framework "$APP"
           # A failing ditto here is the exact failure that produces Finder error -36.
+          STAGE="copying the DMG app bundle to local storage"
           ditto "$APP" "$COPY/$(basename "$APP")"
           COPY_APP="$COPY/$(basename "$APP")"
+          STAGE="checking the copied DMG app's Electron Framework, load reference, and architecture"
           verify_electron_framework "$COPY_APP"
           test -n "$(find "$COPY_APP/Contents/MacOS" -type f -perm -u+x -print -quit)"
           if find "$COPY_APP" -name '._*' -o -name '.DS_Store' | grep -q .; then
             echo "Unexpected AppleDouble metadata inside verified copy" >&2
             exit 1
           fi
+          STAGE="checking ZIP integrity and app executable path"
           unzip -tq "$ZIP"
           if ! unzip -Z1 "$ZIP" | grep -E 'app/Contents/MacOS/[^/]+$' >/dev/null; then
             echo "ZIP archive is missing its executable app bundle" >&2
             exit 1
           fi
+          STAGE="extracting the ZIP app bundle"
           ditto -x -k "$ZIP" "$ZIP_COPY"
           ZIP_APP="$(find "$ZIP_COPY" -maxdepth 2 -type d -name '*.app' -print -quit)"
           test -n "$ZIP_APP"
+          STAGE="checking the ZIP app's Electron Framework, load reference, and architecture"
           verify_electron_framework "$ZIP_APP"
           test -n "$(find "$ZIP_APP/Contents/MacOS" -type f -perm -u+x -print -quit)"
           echo "macOS artifacts verified: UDRO DMG and ZIP contain a runnable app bundle with the correct Electron Framework."
